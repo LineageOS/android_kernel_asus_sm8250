@@ -1,0 +1,29 @@
+# Asus configuration options
+
+config MACH_ASUS
+	bool "Asus device"
+	help
+	  Support for Asus products
+
+config MACH_ASUS_KONA
+	bool "Asus KONA"
+	depends on ARCH_KONA
+	select MACH_ASUS
+	help
+	  Support for KONA Asus variants
+
+menu "Asus board selection"
+
+config MACH_ASUS_ZS670KS
+	bool "ZS670KS board"
+	select MACH_ASUS_KONA
+	help
+	  Support for Zenfone 7 (tequila)
+
+config MACH_ASUS_ZS661KS
+	bool "ZS661KS board"
+	select MACH_ASUS_KONA
+	help
+	  Support for Rog 3 (obiwan)
+
+endmenu
