@@ -393,6 +393,15 @@
 			no-map;
 		};
 
+		ramoops: ramoops@80880000 {
+			compatible = "removed-dma-pool", "ramoops";
+			reg = <0 0x80880000 0 0x00080000>;
+			record-size = <0x10000>;
+			console-size = <0x60000>;
+			pmsg-size = <0x10000>;
+			no-map;
+		};
+
 		smem_mem: smem_region@80900000 {
 			no-map;
 			reg = <0x0 0x80900000 0x0 0x200000>;
