@@ -1,0 +1,6 @@
+config DT_POWER
+	tristate "dt_power"
+    bool "dt_power"
+    default m
+	help
+		Enable aura_sync_inbox kernel module

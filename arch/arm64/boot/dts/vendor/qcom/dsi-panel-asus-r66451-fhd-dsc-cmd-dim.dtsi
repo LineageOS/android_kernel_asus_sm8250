@@ -1,0 +1,401 @@
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_r66451_fhd_dsc_cmd_dim: qcom,mdss_dsi_r66451_fhd_dsc_cmd_dim {
+		qcom,mdss-dsi-panel-name = "ASUS r64451 cmd mode dsc fhd panel dimming";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+
+		qcom,mdss-dsi-panel-physical-type = "oled";
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 1>, <0 5>, <1 10>;
+		qcom,mdss-pan-physical-width-dimension = <70>;
+		qcom,mdss-pan-physical-height-dimension = <152>;
+
+		qcom,adjust-timer-wakeup-ms = <1>;
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
+			17000 15500 30000 8000 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <4200000>;
+		qcom,mdss-dsi-panel-blackness-level = <3230>;
+
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+
+		qcom,dsi-supported-dfps-list = <160 144 120 90 60>;
+		qcom,mdss-dsi-pan-enable-dynamic-fps;
+		qcom,mdss-dsi-pan-fps-update =
+			"dfps_immediate_porch_mode_vfp";
+
+		qcom,mdss-dsi-t-clk-pre = <0x12>;
+		qcom,mdss-dsi-t-clk-post = <0x0B>;
+
+		qcom,esd-check-enabled;
+		qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+		qcom,mdss-dsi-panel-status-command = [06 01 00 00 01 00 01 0A];
+		qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-panel-status-value = <0x1c>;
+		qcom,mdss-dsi-panel-on-check-value = <0x1c>;
+		qcom,mdss-dsi-panel-status-read-length = <1>; 
+
+		qcom,mdss-dsi-display-timings {
+			timing@0{
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2340>;
+				qcom,mdss-dsi-h-front-porch = <24>;
+				qcom,mdss-dsi-h-back-porch = <10>;
+				qcom,mdss-dsi-h-pulse-width = <4>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-v-back-porch = <4>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <1>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-panel-jitter = <0x5 0xa>;
+
+				qcom,mdss-dsi-panel-framerate = <160>;
+				qcom,mdss-dsi-panel-clockrate = <830000000>;
+
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-slice-height = <20>;
+				qcom,mdss-dsc-slice-width = <540>;
+				qcom,mdss-dsc-slice-per-pkt = <2>;
+				qcom,mdss-dsc-bit-per-component = <10>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+
+				qcom,mdss-dsi-panel-phy-timings = [00 18 06 06 21 20 06
+					06 04 02 04 00 15 16];
+				qcom,display-topology = <1 1 1>;
+				qcom,default-topology-index = <0>;
+
+				// after modified any panel code, update version here
+				asus,mdss-dsi-command-version = "2020-04-09";
+				asus,mdss-dsi-command-description = "[r4] update lp1 for pre-er1";
+
+				qcom,mdss-dsi-on-command = [
+					15 01 00 00 00 00 02 B0 04
+					15 01 00 00 00 00 02 B3 00
+
+					15 01 00 00 00 00 02 F1 2A
+					15 01 00 00 00 00 02 C1 0C
+
+					39 01 00 00 00 00 2C C1 94 42 00 16 05 00 00 00 10 00 10 00 AA 8A 02 10 00 10 00 00 3F 3F 03 FF 03 FF 23 FF 03 FF 23 FF 03 FF 00 40 40 00 00 10 01 00 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 0E
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 2F 00 01
+					39 01 00 00 00 00 86 CF 64 0B 00 C0 02 A6 04 7F 0B 77 0B 8B 04 04 04 04 04 04 04 04 04 05 05 05 00 21 01 68 01 68 01 68 01 68 01 68 01 69 03 98 03 70 03 70 03 70 03 70 00 21 01 68 01 68 01 68 01 68 01 68 01 68 03 98 03 70 03 70 03 70 03 70 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 01 9A 01 9A 01 9A 05 AE 05 AE 09 A4 09 A4 09 A4 09 A4 09 A4 09 A4 0F C3 19
+					39 01 00 00 00 00 1A D7 00 A9 34 00 20 02 00 00 30 00 40 00 00 00 00 00 00 10 02 00 40 09 00 00 30
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 30 00 30 00 30 00 30 00 30 05 00 00 00 00 00 00 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 00 0F 00 2F 00 00 00 0E 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 02 02 00 04 69 5A 00 0A B0 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 0A
+
+					/* 3+3 frame to improve 11 29 sleep time */
+					/* remove E4 for abnormal screen */
+					//15 01 00 00 00 00 02 B0 84
+					//39 01 00 00 00 00 0A E4 33 B4 00 00 00 39 04 0C BC
+
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 D4 93
+					15 01 00 00 00 00 02 DE 30
+
+					/* Flash QE setting +++ */
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 03 DF 50 40
+					39 01 00 00 00 00 06 F3 50 00 00 00 00
+					15 01 00 00 01 00 02 F2 11
+					39 01 00 00 00 00 06 F3 01 00 00 00 01
+					39 01 00 00 00 00 03 F4 00 02
+					15 01 00 00 01 00 02 F2 19
+					39 01 00 00 00 00 03 DF 50 42
+					/* Flash QE setting --- */
+
+					15 01 00 00 00 00 02 53 24
+					15 01 00 00 00 00 02 35 00
+					39 01 00 00 00 00 05 2a 00 00 04 37
+					39 01 00 00 00 00 05 2b 00 00 09 23
+
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 E6 01
+					05 01 00 00 00 00 02 29 00
+					05 01 00 00 64 00 02 11 00
+					];
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 00 00 02 28 00
+					05 01 00 00 78 00 02 10 00];
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+
+				/* dynamic fps switch code */
+				//160hz
+				qcom,mdss-dsi-switch-160fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					15 01 00 00 00 00 02 F1 2A
+					15 01 00 00 00 00 02 C1 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 0E
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 2B 00 01
+					39 01 00 00 00 00 1A D7 00 A9 34 00 20 02 00 00 2B 00 40 00 00 00 00 00 00 10 02 00 40 09 00 00 2B
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 2B 00 2B 00 2B 00 2B 00 2B 05 00 00 00 00 00 00 00 00 00 00 00 2B 00 00 00 00 00 00 00 00 00 00 00 00 00 0B 00 26 00 00 00 09 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 04 04 04 04 04 04 04 04 04 05 05 05 00 22 00 22 00 22 00 B7 00 B7 00 B7 00 B7 02 DA 02 DA 02 DA 02 DA 02 DA 00 22 00 22 00 22 00 B7 00 B7 00 B7 00 B7 02 DA 02 DA 02 DA 02 DA 02 DA 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 01 9A 02 67 02 67 02 67 02 67 09 a4 09 a4 09 a4 09 a4 09 a4 09 a4 0F C3 19
+					15 01 00 00 00 00 02 F1 0B
+					15 01 00 00 00 00 02 D0 03
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 02 02 00 04 69 5A 00 0B 76 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 09
+					15 01 00 00 00 00 02 B0 84
+					15 01 00 00 00 00 02 DE 30
+					39 01 00 00 00 00 0A E4 33 B4 00 00 00 2B 04 0F 52
+					15 01 00 00 00 00 02 E6 01
+					];
+
+				//144hz 2019-12-25 Jason approval
+				qcom,mdss-dsi-switch-144fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 2C C1 94 42 00 16 05 00 00 00 10 00 10 00 AA 8A 02 10 00 10 00 00 3F 3F 03 FF 03 FF 23 FF 03 FF 23 FF 03 FF 00 40 40 00 00 10 01 00 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 0E
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 2F 00 01
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 04 04 04 04 04 04 04 04 04 05 05 05 00 67 00 AC 00 AC 00 AC 00 AC 00 D6 00 D6 03 59 03 70 03 70 03 70 03 70 00 67 00 AC 00 AC 00 AC 00 AC 00 D6 00 D6 03 59 03 70 03 70 03 70 03 70 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 B1 00 B1 09 A6 09 A6 09 A4 09 A4 09 A4 09 A4 09 A4 09 A4 0F 88 19
+					39 01 00 00 00 00 1A D7 00 A9 34 00 20 02 00 00 30 00 40 00 00 00 00 00 00 10 02 00 40 09 00 00 30
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 30 00 30 00 30 00 30 00 30 05 00 00 00 00 00 00 00 00 00 00 00 30 00 00 00 00 00 00 00 00 00 00 00 00 00 0B 00 2B 00 00 00 0E 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 2B DF 50 42 58 81 2D 00 00 00 00 00 00 6B 00 00 00 00 00 00 00 00 BC 1D FF D4 0E 00 00 00 00 00 0F 00 53 18 BB 1D 00 00 00 00 00 00
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 04 04 42 04 69 5A 00 0B 76 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 09
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 0A E4 33 B4 00 00 00 39 04 0C BC
+					15 01 00 00 00 00 02 E6 01
+					];
+
+				//120hz 2020-01-30 Obiwan ER version
+				//      2020-02-10 remove typo DE 30
+				//      2020-03-11 reduce dimming mura
+				qcom,mdss-dsi-switch-120fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 2C C1 94 42 00 16 05 00 00 00 10 00 10 00 AA 8A 02 10 00 10 00 00 3F 3F 03 FF 03 FF 23 FF 03 FF 23 FF 03 FF 00 40 40 00 00 10 01 00 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 02
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 35 00 01
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 04 04 04 04 04 04 04 04 04 05 05 05 00 7B 00 CD 00 CD 00 CD 00 CD 01 00 01 00 03 98 03 98 03 98 03 98 03 98 00 7B 00 CD 00 CD 00 CD 00 CD 01 00 01 00 03 98 03 98 03 98 03 98 03 98 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 B1 00 B1 09 A6 09 A6 09 A4 09 A4 09 A4 09 A4 09 A4 09 A4 0F C3 19
+					39 01 00 00 00 00 0A D7 00 69 34 00 A0 0A 00 00 39
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 3A 00 3A 00 3A 00 3A 00 3A 05 00 00 00 00 00 00 00 00 00 00 20 40 00 00 00 00 00 00 00 00 00 00 00 00 00 0F 00 32 00 00 00 17 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 02 02 00 04 69 5A 00 0B 76 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 0A
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 0A E4 33 B4 00 00 00 39 04 09 34
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 E6 01
+					];
+
+				//90hz 2020-01-30 Obiwan ER version
+				//     2020-03-11 reduce dimming mura
+				qcom,mdss-dsi-switch-90fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 2C C1 94 42 00 16 05 00 00 00 10 00 10 00 AA 8A 02 10 00 10 00 00 3F 3F 03 FF 03 FF 23 FF 03 FF 23 FF 03 FF 00 40 40 00 00 10 01 00 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 02
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 48 00 01
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 02 02 02 02 02 02 02 02 02 03 03 03 00 7B 00 C3 00 C3 00 C3 00 BF 00 F3 00 F3 03 CC 03 CC 03 CC 03 CC 03 CC 00 7B 00 C3 00 C3 00 C3 00 BF 00 F3 00 F3 03 CC 03 CC 03 CC 03 CC 03 CC 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 A8 00 A8 09 A6 09 A6 09 A4 09 A4 09 A4 09 A4 09 A4 09 A4 0F C3 19
+					39 01 00 00 00 00 0A D7 00 69 34 00 a0 0a 00 00 4E
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 4D 00 4D 00 4D 00 4D 00 4D 05 00 00 00 00 00 00 00 00 00 00 00 4E 00 00 00 00 00 00 00 00 00 00 00 00 00 16 00 44 00 00 00 1F 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 02 02 00 04 69 5A 00 0B 76 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 0A
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 07 E4 33 B4 00 00 00 4E
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 E6 01
+					];
+
+				//60hz 2020-01-30 Obiwan ER version
+				//     2020-03-11 reduce dimming mura
+				qcom,mdss-dsi-switch-60fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 2C C1 94 42 00 16 05 00 00 00 10 00 10 00 AA 8A 02 10 00 10 00 00 3F 3F 03 FF 03 FF 23 FF 03 FF 23 FF 03 FF 00 40 40 00 00 10 01 00 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 02
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 68 00 01
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 00 00 00 00 00 00 00 00 00 01 01 01 00 7B 00 C0 00 C0 00 BF 00 BF 00 EF 00 EF 03 BD 03 BD 03 BD 03 BD 03 BD 00 7B 00 C0 00 C0 00 BF 00 BF 00 EF 00 EF 03 BD 03 BD 03 BD 03 BD 03 BA 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 A8 00 A8 09 A6 09 A6 09 A4 09 A4 09 A4 09 A4 09 A4 09 A4 0F C3 19
+					39 01 00 00 00 00 0A D7 00 69 34 00 a0 0a 00 00 75
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 74 00 74 00 74 00 74 00 74 05 00 00 00 00 00 00 00 00 00 00 00 75 00 00 00 00 00 00 00 00 00 00 00 00 00 22 00 65 00 00 00 2F 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 01 01 00 04 69 5A 00 0B 76 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 0A
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 07 E4 33 B4 00 00 00 75
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 E6 01
+					];
+
+				/* osc oscillator frequency change command */
+				qcom,mdss-dsi-osc-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 0A
+					];
+
+				/* idle low power mode command */
+				qcom,mdss-dsi-lp1-command = [
+					/* back to 60 hz */
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 2C C1 94 42 00 16 05 00 00 00 10 00 10 00 AA 8A 02 10 00 10 00 00 3F 3F 03 FF 03 FF 23 FF 03 FF 23 FF 03 FF 00 40 40 00 00 10 01 00 0C
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 02
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 68 00 01
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 00 00 00 00 00 00 00 00 00 01 01 01 00 7B 00 C0 00 C0 00 BF 00 BF 00 EF 00 EF 03 BD 03 BD 03 BD 03 BD 03 BD 00 7B 00 C0 00 C0 00 BF 00 BF 00 EF 00 EF 03 BD 03 BD 03 BD 03 BD 03 BA 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 A8 00 A8 09 A6 09 A6 09 A4 09 A4 09 A4 09 A4 09 A4 09 A4 0F C3 19
+					39 01 00 00 00 00 0A D7 00 69 34 00 a0 0a 00 00 75
+					39 01 00 00 00 00 3C D8 00 00 00 00 00 00 00 00 00 74 00 74 00 74 00 74 00 74 05 00 00 00 00 00 00 00 00 00 00 00 75 00 00 00 00 00 00 00 00 00 00 00 00 00 22 00 65 00 00 00 2F 00 00 00 00 00 00 00 00
+					39 01 00 00 00 00 32 BB 59 C8 C8 C8 C8 C8 C8 C8 C8 C8 4A 48 46 44 42 40 3E 3C 3A 00 FF FF FF FF FF FF FF FF FF 04 00 01 01 00 04 69 5A 00 0B 76 0F FF 0F FF 0F FF 14 81 F4
+					39 01 00 00 00 00 03 E8 00 02
+					39 01 00 00 00 00 03 E4 00 0A
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 07 E4 33 B4 00 00 00 75
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 E6 01
+					/* AOD */
+					15 01 00 00 50 00 02 39 01
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 06 C1 D4 42 00 3F 05
+					15 01 00 00 00 00 02 F1 1D
+					39 01 00 00 00 00 18 D3 01 11 01 11 33 33 83 04 00 00 00 00 00 00 00 3C 00 7E 7E 7E 03 42 01
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 75 D2 19 00 00 00 00 00 A1 01 00 86 61 18 86 61 18 86 61 18 2C 16 8B C5 62 B1 58 2C 16 8B 05 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 10 10 00 00 03 0C 10 00 01 01 00 30 C0 00 02 10 00 00 00 04 08 00 02 10 00 00 00 04 08 20 00 01 00 00 40 80 00 01 10 10 00 00 03 0C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 32 C4 00 00 13 13 00 13 13 00 13 13 00 02 00 00 00 50 00 01 00 00 00 00 00 00 00 00 00 00 00 22 00 00 00 00 11 00 00 FF FF FF FF FF FF 00 00 00 00 00 00
+					15 01 00 00 00 00 02 B0 84
+					15 01 00 00 00 00 02 D1 00
+					15 01 00 00 00 00 02 D4 90
+					];
+
+				qcom,mdss-dsi-nolp-command = [
+					/* Exit AOD */
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 06 C1 94 42 00 16 05
+					39 01 00 00 00 00 07 C2 09 24 0E 00 00 0E
+					39 01 00 00 00 00 13 C4 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 68 00 01
+					15 01 00 00 00 00 02 F1 1D
+					39 01 00 00 00 00 18 D3 04 44 04 44 33 33 83 04 00 00 00 00 00 00 00 3C 00 7E 7E 7E 00 42 01
+					15 01 00 00 00 00 02 B0 84
+					39 01 00 00 00 00 75 D2 1D 79 1E 0F 00 00 AD C1 3F 3C CF F3 3C CF F3 3C CF F3 2C 16 8B C5 62 B1 58 2C 16 8B 65 27 FF 0F 20 25 90 00 48 09 24 00 08 01 04 00 42 00 01 84 58 4B 08 00 EF BD 47 88 B5 84 00 F0 DE 7B 29 D5 0A 00 00 B5 A6 04 29 D5 0A 00 00 B5 A6 94 52 AD 00 00 50 6B 4A 84 58 4B 08 00 EF BD 07 60 81 09 00 98 60 01 60 80 04 06 00 F0 C0 03 0B 4C 00 00 00 13 2C 00
+					15 01 00 00 00 00 02 D1 03
+					15 01 00 00 00 00 02 D4 93
+					15 01 00 00 14 00 02 13 00
+					15 01 00 00 14 00 02 38 00
+					];
+
+				qcom,mdss-dsi-lp1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-switch-fps-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-osc-command-state = "dsi_hs_mode";
+
+				// Normal HBM
+				qcom,mdss-dsi-hbm-on-command = [
+					15 01 00 00 00 00 02 B0 00
+					15 01 00 00 00 00 02 F1 82
+					39 01 00 00 00 00 03 CF 09 A4
+					15 01 00 00 00 00 02 53 E4
+					];
+
+				// 2020-03-11 return CF original value
+				qcom,mdss-dsi-hbm-off-command = [
+					15 01 00 00 00 00 02 B0 00
+					15 01 00 00 28 00 02 53 24
+					15 01 00 00 00 00 02 F1 82
+					39 01 00 00 00 00 03 CF 0F C3
+					15 01 00 00 00 00 02 53 2C
+					];
+
+				qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
+
+				// GHBM for FOD
+				// 2020-03-11: boost LHBM duty 97% -> 98.53%
+				qcom,mdss-dsi-global-hbm-on-command = [
+					15 01 00 00 00 00 02 B0 04
+					15 01 00 00 00 00 02 F1 82
+					39 01 00 00 00 00 03 CF 0F C3
+					15 01 00 00 00 00 02 B0 84
+					15 01 00 00 00 00 02 DE 10
+					15 01 00 00 00 00 02 53 E4
+					15 01 00 00 00 00 02 29 00
+					];
+
+				// 2020-03-11: restore DE backing 4 pulses
+				qcom,mdss-dsi-global-hbm-off-command = [
+					15 01 00 00 00 00 02 53 24
+					15 01 00 00 00 00 02 B0 04
+					15 01 00 00 00 00 02 F1 82
+					39 01 00 00 00 00 03 CF 09 A4
+					15 01 00 00 00 00 02 B0 84
+					15 01 00 00 00 00 02 DE 30
+					15 01 00 00 00 00 02 29 00
+					];
+
+				// Local HBM for HW FOD
+				qcom,mdss-dsi-local-hbm-on-command = [
+					15 01 00 00 00 00 02 B0 84
+					15 01 00 00 00 00 02 DE 10
+					];
+
+				// 2020-03-11: restore DE backing 4 pulses
+				qcom,mdss-dsi-local-hbm-off-command = [
+					15 01 00 00 00 00 02 B0 84
+					15 01 00 00 00 00 02 DE 30
+					];
+
+				qcom,mdss-dsi-global-hbm-on-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-global-hbm-off-command-state = "dsi_hs_mode";
+
+				// 2020-04-22: bus dim mode
+				asus,bus-qrcode-dim-mode-144fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 86 CF 64 0B 00 C0 02 A6 04 7F 0B 77 0B 8B 04 04 04 04 04 04 04 04 04 05 05 05 00 21 01 68 01 68 01 68 01 68 01 68 01 69 02 AF 03 70 03 70 03 70 03 70 00 21 01 68 01 68 01 68 01 68 01 68 01 68 02 AF 03 70 03 70 03 70 03 70 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 01 9A 01 9A 01 9A 05 AE 05 AE 09 A4 09 A4 0F 85 0F 85 09 A4 09 A4 0F C3 19
+				];
+				asus,bus-qrcode-dim-mode-120fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 04 04 04 04 04 04 04 04 04 05 05 05 00 7B 00 CD 00 CD 00 CD 00 CD 01 00 01 00 02 B2 03 98 03 98 03 98 03 98 00 7B 00 CD 00 CD 00 CD 00 CD 01 00 01 00 02 B2 03 98 03 98 03 98 03 98 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 B1 00 B1 09 A6 09 A6 09 A4 09 A4 0F 85 0F 85 09 A4 09 A4 0F C3 19
+				];
+				asus,bus-qrcode-dim-mode-90fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4B 02 DE 0B 77 0B 8B 02 02 02 02 02 02 02 02 02 03 03 03 00 3D 00 C1 00 C1 00 C1 00 C1 00 F2 00 F2 02 D7 02 D7 02 D7 02 D7 02 D7 00 3D 00 C1 00 C1 00 C1 00 C2 00 F2 00 F2 02 D7 02 D7 02 D7 02 D7 02 D7 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 A0 00 A0 09 A6 09 A6 09 A4 09 A4 0F 85 0F 85 09 A4 09 A4 0F C3 19
+				];
+				asus,bus-qrcode-dim-mode-60fps-command = [
+					15 01 00 00 00 00 02 B0 04
+					39 01 00 00 00 00 86 CF 64 0B 00 28 02 4E 02 DE 0B 77 0B 8B 00 00 00 00 00 00 00 00 00 01 01 01 00 3D 00 C0 00 C0 00 C0 00 C0 00 EF 00 EF 02 C8 02 C8 02 C8 02 C8 02 C8 00 3D 00 C0 00 C0 00 C0 00 C0 00 EF 00 EF 02 C8 02 C8 02 C8 02 C8 02 C8 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 01 42 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 1C 00 88 00 A4 00 A4 09 A6 09 A6 09 A6 09 A6 0F 85 0F 85 09 A4 09 A4 0F C3 19
+				];
+				asus,bus-qrcode-dim-mode-command-state = "dsi_hs_mode";
+			};
+		};
+	};
+};

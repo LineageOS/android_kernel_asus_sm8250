@@ -1,0 +1,7 @@
+menu "TouchSense driver support"
+
+config TSPDRV_AW8697
+	tristate "TouchSense driver support"
+	default n
+
+endmenu
