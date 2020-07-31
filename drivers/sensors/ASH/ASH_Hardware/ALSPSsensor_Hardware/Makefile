@@ -1,5 +1,5 @@
 obj-y 	+= ALSPSsensor_Hardware.o
-ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+ifdef CONFIG_MACH_ASUS_ZS670KS
 obj-y	+= ALSPSsensor_Hardware_2nd.o
 endif
 obj-n	+= cm36686/

@@ -64,7 +64,7 @@ obj-$(CONFIG_IOMMU_SUPPORT)	+= iommu/
 obj-y				+= gpu/
 
 #Zen7 camera moto driver.
-ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+ifdef CONFIG_MACH_ASUS_ZS670KS
 obj-y				+= msp/
 endif
 
@@ -205,17 +205,17 @@ obj-$(CONFIG_TSPDRV) += motor/tspdrv/
 #ASUS_BSP Vibrator ---
 
 # ASUS_BSP: AURA SYNC driver
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+ifdef CONFIG_MACH_ASUS_ZS661KS
 obj-y				+= aura_sync/
 endif
 
 # ASUS_BSP: GamePad AuraLight driver
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+ifdef CONFIG_MACH_ASUS_ZS661KS
 obj-y				+= gamepad_hid_driver/
 endif
 
 # ASUS_BSP Deeo : For ROG ACCY Driver
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+ifdef CONFIG_MACH_ASUS_ZS661KS
 obj-y				+= ec_hid_driver/
 obj-y				+= dt_power/
 obj-y				+= fan/
