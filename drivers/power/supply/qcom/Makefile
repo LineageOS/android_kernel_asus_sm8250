@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+ifdef CONFIG_MACH_ASUS_ZS661KS
 obj-$(CONFIG_QPNP_SMB5)			+= step-chg-jeita.o battery.o qpnp-smb5_zs661ks.o smb5-lib_zs661ks.o pmic-voter.o storm-watch.o schgm-flash.o
 obj-$(CONFIG_SMB1390_CHARGE_PUMP_PSY)	+= smb1390-charger-psy.o pmic-voter.o
 obj-$(CONFIG_SMB1355_SLAVE_CHARGER)	+= smb1355-charger.o pmic-voter.o

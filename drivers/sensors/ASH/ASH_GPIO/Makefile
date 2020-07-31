@@ -3,7 +3,7 @@ obj-y += psensor_GPIO.o
 obj-y += lsensor_GPIO.o
 obj-y += HALLsensor_GPIO.o
 obj-y += SARsensor_GPIO.o
-ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+ifdef CONFIG_MACH_ASUS_ZS670KS
 obj-y += ALSPSsensor_GPIO_2nd.o
 endif
 
