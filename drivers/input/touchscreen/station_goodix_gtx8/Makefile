@@ -2,7 +2,7 @@
 # This Makefile is only for tempory compiling use
 # Use xxxproject/Makefile-release when release driver
 #
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+ifdef CONFIG_MACH_ASUS_ZS661KS
 obj-m += station_goodix_touch.o
 station_goodix_touch-objs += goodix_ts_i2c.o
 station_goodix_touch-objs += goodix_ts_core.o
