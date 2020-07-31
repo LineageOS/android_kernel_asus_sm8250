@@ -1,0 +1,29 @@
+/dts-v1/;
+/plugin/;
+
+#include "ZS661KS-SR-overlay.dts"
+
+#include "camera/zs661ks-sr_dxo-camera-sensor-mtp.dtsi"
+
+/ {
+	model = "OBIWAN SR DXO";
+	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
+	qcom,board-id = <20 0>;
+};
+//ASUS_BSP imx686 vcm L11C need RPMH_REGULATOR_MODE_HPM
+&apps_rsc {
+        rpmh-regulator-ldoc11 {
+                L11C: pm8150a_l11: regulator-pm8150a-l11 {
+
+                        qcom,init-mode = <4>;
+                };
+        };
+};
+//ASUS_BSP 
+&soc {
+	//ASUS_BSP Peter_Yeh fingerprint sensor +++
+	goodix_fp {
+		status = "disable";
+	};
+	//ASUS_BSP Peter_Yeh fingerprint sensor ---
+};

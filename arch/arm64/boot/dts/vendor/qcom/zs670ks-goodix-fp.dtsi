@@ -1,0 +1,44 @@
+//for fingerprint;asus_bsp++;
+
+&soc{
+
+   qcom,qbt_handler {
+       status = "disabled";
+   };
+
+   goodix_gf3626@0{
+		compatible = "goodix,fingerprint";
+		reg = <0x0>;
+        spi-max-frequency = <50000000>;
+        input-device-name = "gf3626";
+        interrupt-parent = <&tlmm>;
+		interrupts = <23 0>;
+		spi-qup-id = <14>;
+
+        
+		goodix,gpio_irq = <&tlmm 23 0x00>;
+		goodix,gpio_reset = <&pm8150b_gpios 1 0x0>;
+                 goodix,gpio_vendor_id = <&pm8150b_gpios 2 0x0>;
+		goodix,gpio_ldo = <&tlmm 50 0x00>; 
+	};
+};
+
+
+&tlmm {
+		/*add pin configuration for fingerprint*/
+
+		 goodix_ldo: goodix_ldo {
+		      mux {
+				pins = "gpio50";
+				function = "gpio";
+			  };
+			   config {
+				   pins = "gpio50";
+				   drive-strength = <2>;
+			       output-low;
+				   bias-disable;
+		       };
+		 };
+
+	 /*add pin configuration for fingerprint*/
+};
