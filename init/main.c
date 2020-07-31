@@ -184,23 +184,6 @@ static int set_user_dbg_mode(char *str)
 __setup("dbg=", set_user_dbg_mode);
 // ASUS_BSP --- Add for asus debug
 
-// ASUS_BSP +++ get permissive status
-int permissive_enable = 0;
-EXPORT_SYMBOL(permissive_enable);
-static int get_permissive_status(char *str)
-{
-	
-	if( strcmp("permissive", str) == 0 )
-	{
-		permissive_enable = 1;
-		printk("permissive = %d\n", permissive_enable);
-	}
-
-	return 0;
-}
-__setup("androidboot.selinux=", get_permissive_status);
-// ASUS_BSP --- get permissive status
-
 #ifdef ASUS_ZS661KS_PROJECT
 bool g_Recovery_mode = false;
 static int set_recovery_mode(char *str)
