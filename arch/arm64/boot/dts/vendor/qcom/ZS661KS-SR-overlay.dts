@@ -1,0 +1,719 @@
+/dts-v1/;
+/plugin/;
+
+#include "ZS661KS-EVB-overlay.dts"
+#include "camera/zs661ks-sr-camera-sensor-mtp.dtsi"
+#include <dt-bindings/phy/qcom,kona-qmp-usb3.h>
+
+#include "dsi-panel-asus-r66451-fhd-dsc-cmd-dim-er2.dtsi"
+
+/ {
+	model = "OBIWAN SR";
+	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
+	qcom,board-id = <20 0>;
+};
+
+// ASUS_BSP Deeo : Inbox AURA ML51 +++
+&qupv3_se1_i2c {
+       ml51fb9ae@15 {
+               nuvoton,aura_3p3_en = <&tlmm 67 0x0>;
+               nuvoton,fan_pwr_on = <&tlmm 100 0x0>;
+       };
+
+       ms51@16 {
+               nuvoton,remove_aura_3p3_en;
+               nuvoton,ms51_on = <&tlmm 100 0x0>;
+       };
+
+};
+
+&tlmm{
+	pogo-fan-on {
+		pogo_fan_on_default{
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio100";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+
+	pogo-aura-en {
+		pogo_aura_en_default{
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio67";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : Inbox AURA ML51 ---
+
+// ASUS_BSP Deeo : DT ACCY driver +++
+&qupv3_se1_i2c {
+    ene8k41_dock@40 {
+        ene8k41,check-3v-gpio =<&tlmm 67 0>;
+    };
+};
+
+&qupv3_se3_i2c {
+    ene8k41_power@41 {
+		ene8k41,switch-mode-gpio = <&tlmm 100 0x0>;
+	};
+};
+
+&tlmm{
+	check-3v {
+		check_3v_default{
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio67";
+				drive-strength = <2>;
+				bias-no-pull;
+			};
+		};
+	};
+
+	switch-mode-gpio {
+		switch_mode_default{
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				bias-no-pull;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : DT ACCY driver ---
+
+// ASUS_BSP Deeo : Station Power Key +++
+&soc {
+	station_keys: station_keys_asus {
+		compatible = "station-keys";
+		label = "station-keys";
+
+		pinctrl-names = "station_key_active","station_key_suspend","station_key_remove";
+		pinctrl-0 = <&station_key_active>;
+		pinctrl-1 = <&station_key_suspend>;
+		pinctrl-2 = <&station_key_remove>;
+
+		station_key {
+			label = "station_key";
+			gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <116>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+			linux,can-disable;
+		};
+
+	};
+
+};
+
+&tlmm{
+	tlmm_gpio_key {
+		station_key_active: station_key_active {
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		station_key_suspend: station_key_suspend {
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		station_key_remove: station_key_remove {
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : Station Power Key ---
+
+// ASUS_BSP Deeo : EC_Driver +++
+&soc {
+	ec_hid {
+		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
+	};
+};
+// ASUS_BSP Deeo : EC_Driver ---
+
+//Beryl "station touch"
+&qupv3_se1_i2c {
+	status = "ok";
+	normandy-i2c@5d{
+		compatible = "goodix_station,gt9886";
+		reg = <0x5d>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <67 0x2008>;
+		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
+		goodix,irq-gpio = <&tlmm 67 0x2008>;
+		goodix,irq-flags = <2>; /* 1:trigger rising, 2:trigger falling;*/
+		goodix,panel-max-id = <10>; //max touch numbers
+		goodix,panel-max-x = <1080>; // x
+		goodix,panel-max-y = <2340>; // y
+		goodix,panel-max-w = <512>; //touch major
+		goodix,panel-max-p = <512>; //touch pressure
+		goodix,panel-key-map = <158 172 217>; /*KEY_BACK, KEY_HOMEPAGE, KEY_SEARCH*/
+		goodix,power-on-delay-us = <300000>; /*300ms*/
+		goodix,power-off-delay-us = <5000>;
+		/*goodix,swap-axis;
+		goodix,x2x;
+		goodix,y2y;
+		goodix,pen-enable;
+		goodix,key-of-pen = <331 332>;*/
+		sensor0 {
+		    normal-cfg = [];
+		};
+	};
+};
+
+
+// ASUS display SR overlay +++
+
+&dsi_panel_pwr_supply_vci_no_labibb {
+	qcom,panel-supply-entry@2 {
+		reg = <2>;
+		qcom,supply-name = "touch";
+		qcom,supply-min-voltage = <1800000>;
+		qcom,supply-max-voltage = <1800000>;
+		qcom,supply-enable-load = <62000>;
+		qcom,supply-disable-load = <80>;
+		qcom,supply-post-on-sleep = <0>;
+		qcom,supply-post-off-sleep = <2>;
+	};
+
+	qcom,panel-supply-entry@3 {
+		reg = <3>;
+		qcom,supply-name = "amoled"; //external vdd
+		qcom,supply-min-voltage = <1200000>;
+		qcom,supply-max-voltage = <1200000>;
+		qcom,supply-enable-load = <140000>;
+		qcom,supply-disable-load = <0>;
+		qcom,supply-post-on-sleep = <2>; //tRW1
+		qcom,supply-pre-on-sleep = <1>; //tsVDD
+	};
+};
+
+
+&sde_dsi {
+	amoled-supply = <&pm8150a_l3>;
+	touch-supply = <&pm8150_l7>;
+	qcom,dsi-default-panel = <&dsi_r66451_fhd_dsc_cmd_dim>;
+	asus,platform-fod-exi1-gpio = <&tlmm 32 0>; //EXI CN SKU
+	asus,platform-fod-exi2-gpio = <&tlmm 54 0>; //EXI CN SKU
+};
+
+&dsi_r66451_fhd_video {
+	qcom,platform-en-gpio = <&tlmm 12 0>;
+};
+
+&dsi_r66451_fhd_dsc_cmd_dim {
+	qcom,platform-en-gpio = <&tlmm 12 0>;
+};
+
+&dsi_r66451_fhd_dsc_cmd_dim_er2 {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_vci_no_labibb>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
+	qcom,platform-te-gpio = <&tlmm 66 0>;
+	qcom,platform-reset-gpio = <&tlmm 75 0>;
+	qcom,platform-en-gpio = <&tlmm 12 0>;
+};
+
+&pm8150b_charger {
+	panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
+};
+
+&FOD_EXI_active {
+	mux {
+		pins = "gpio32", "gpio54";
+		function = "gpio";
+	};
+	config {
+		pins = "gpio32", "gpio54";
+		drive-strength = <8>;   /* 8 mA */
+		bias-disable;           /* NO PULL */
+		output-low;
+	};
+};
+// ASUS display SR overlay ---
+
+&soc {
+	wlansr: qcom,cnss-qca6390@b0000000 {
+		compatible = "qcom,cnss-qca6390";
+		status = "okay";
+		vdd-wlan-aon-supply = <&pm8150_s6>;
+		qcom,vdd-wlan-aon-config = <950000 950000 0 0 1>;
+		vdd-wlan-io-supply = <&pm8150_s4>;
+		qcom,vdd-wlan-io-config = <1800000 1800000 0 0 1>;
+		vdd-wlan-rfa1-supply = <&pm8150_s5>;
+		qcom,vdd-wlan-rfa1-config = <1900000 1900000 0 0 1>;
+		vdd-wlan-rfa2-supply = <&pm8150a_s8>;
+		qcom,vdd-wlan-rfa2-config = <1350000 1350000 0 0 1>;
+		vdd-wlan-dig-supply = <&pm8150_s6>;
+		qcom,vdd-wlan-dig-config = <950000 952000 0 0 1>;
+	};
+};
+
+&vendor {
+	bluetoothsr: bt_qca6390 {
+		compatible = "qca,qca6390";
+		qca,bt-vdd-dig-supply = <&pm8150_s6>;
+		qca,bt-vdd-dig-voltage-level = <950000 950000>;
+	};
+
+};
+
+// Aura Sync on phone +++
+
+&qupv3_se10_i2c {
+	status = "ok";
+	ene8k41@40 {
+		compatible = "ene8k41";
+		reg = <0x40>;
+		ene_vcc-supply = <&pm8150a_l7>;
+	};
+};
+
+&apps_rsc {
+	rpmh-regulator-ldoc7 {
+		L7C: pm8150a_l7: regulator-pm8150a-l7 {
+			qcom,init-voltage = <3000000>;
+			//regulator-always-on;	/* ASUS BSP Always Enable 1.8V for I2C & Sensors */
+		};
+	};
+};
+
+// Aura Sync on phone ---
+
+&qupv3_se10_i2c {
+        status = "ok";
+            vcnl36866@60 {
+			pinctrl-names = "alsps_gpio_high","alsps_gpio_low";
+			pinctrl-0 = <&vcnl36866_default1>;
+			pinctrl-1 = <&vcnl36866_sleep1>;
+			qcom,alsps-gpio = <&tlmm 122 0x0>;
+		};
+};
+
+&tlmm {
+	// ASUS_BSP +++ ClayWang vcnl36866
+	vcnl36866_int_sr_pin {
+		vcnl36866_default1: vcnl36866_default1 {
+			mux {
+				pins = "gpio122";
+				function = "gpio";
+			};
+				config {
+				pins = "gpio122";
+				bias-pull-up;
+				drive-strength = <6>;
+			};
+		};
+			vcnl36866_sleep1: vcnl36866_sleep1 {
+			mux {
+				pins = "gpio122";
+				function = "gpio";
+			};
+				config {
+				pins = "gpio122";
+				bias-pull-up;
+				drive-strength = <6>;
+			};
+		};
+	};
+	// ASUS_BSP ClayWang vcnl36866 ---
+};
+
+/* ASUS BSP Clay: Grip sensor gpio change +++ */
+&qupv3_se2_i2c {
+	snt8100fsr-i2c@2c {
+		qcom,snt-host1-gpio = <&tlmm 157 0x0>;
+		snt,gpio_reset = <&tlmm 12 0x0>;
+		vcc_gripsensor-supply = <&pm8008_l7>;
+	};
+};
+/* ASUS BSP Clay: Grip sensor gpio change --- */
+
+/* ASUS BSP Clay: PM8008 regulator setting +++ */
+&qupv3_se15_i2c {
+	status = "ok";
+	#include "pm8008.dtsi"
+        vcnl36866@60 {
+			compatible = "qcom,vcnl36866";
+			pinctrl-names = "clay_test";
+			pinctrl-0 = <&vcnl36866_default>;
+		};
+};
+
+&tlmm {
+	pm8008_active: pm8008_active {
+		mux {
+			pins = "gpio38";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio38";
+			bias-pull-up;
+			output-high;
+			drive-strength = <2>;
+		};
+	};
+}; 
+&pm8008_chip {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pm8008_active>;
+}; 
+
+&pm8008_regulators {
+	vdd_l1_l2-supply = <&S8C>;
+	vdd_l3_l4-supply = <&BOB>;
+	vdd_l5-supply = <&BOB>;
+	vdd_l6-supply = <&S5A>;
+	vdd_l7-supply = <&BOB>;
+}; 
+	
+&L7P {
+	regulator-min-microvolt = <2800000>;
+	regulator-max-microvolt = <2800000>;
+	qcom,min-dropout-voltage = <300000>;
+
+	/*regulator-always-on;*/
+};
+
+/* ASUS BSP Clay: PM8008 regulator setting --- */
+/* Audio overlay +++ */
+&va_macro {
+	va-vdd-micb-supply = <&L1C>;
+	qcom,va-dmic-sample-rate = <2400000>;
+};
+
+&tx_macro {
+	tx-vdd-micb-supply = <&L1C>;
+	qcom,tx-vdd-micb-voltage = <1800000 1800000>;
+	qcom,tx-vdd-micb-current = <11200>;
+	qcom,tx-dmic-sample-rate = <2400000>;
+	qcom,tx-swr-gpios;
+};
+
+&wsa_spkr_en1 {
+	status = "disabled";
+};
+
+&wsa_spkr_en2 {
+	status = "disabled";
+};
+
+&wcd938x_rst_gpio {
+	status = "disabled";
+};
+/* Audio overlay --- */
+
+&usb2_phy0 {
+	qcom,param-override-seq = <0x64 0x6c
+				   0x48 0x70>;
+};
+
+&usb2_phy1 {
+	qcom,param-override-seq = <0x65 0x6c
+				   0x8c 0x70>;
+};
+
+&usb_qmp_dp_phy {
+	qcom,qmp-phy-init-seq =
+			/* <reg_offset, value, delay> */
+			<USB3_DP_QSERDES_COM_SSC_EN_CENTER 0x01 0
+			USB3_DP_QSERDES_COM_SSC_PER1 0x31 0
+			USB3_DP_QSERDES_COM_SSC_PER2 0x01 0
+			USB3_DP_QSERDES_COM_SSC_STEP_SIZE1_MODE0 0xDE 0
+			USB3_DP_QSERDES_COM_SSC_STEP_SIZE2_MODE0 0x07 0
+			USB3_DP_QSERDES_COM_SSC_STEP_SIZE1_MODE1 0xDE 0
+			USB3_DP_QSERDES_COM_SSC_STEP_SIZE2_MODE1 0x07 0
+			USB3_DP_QSERDES_COM_SYSCLK_BUF_ENABLE 0x0A 0
+			USB3_DP_QSERDES_COM_CMN_IPTRIM 0x20 0
+			USB3_DP_QSERDES_COM_CP_CTRL_MODE0 0x06 0
+			USB3_DP_QSERDES_COM_CP_CTRL_MODE1 0x06 0
+			USB3_DP_QSERDES_COM_PLL_RCTRL_MODE0 0x16 0
+			USB3_DP_QSERDES_COM_PLL_RCTRL_MODE1 0x16 0
+			USB3_DP_QSERDES_COM_PLL_CCTRL_MODE0 0x36 0
+			USB3_DP_QSERDES_COM_PLL_CCTRL_MODE1 0x36 0
+			USB3_DP_QSERDES_COM_SYSCLK_EN_SEL 0x1A 0
+			USB3_DP_QSERDES_COM_LOCK_CMP_EN 0x04 0
+			USB3_DP_QSERDES_COM_LOCK_CMP1_MODE0 0x14 0
+			USB3_DP_QSERDES_COM_LOCK_CMP2_MODE0 0x34 0
+			USB3_DP_QSERDES_COM_LOCK_CMP1_MODE1 0x34 0
+			USB3_DP_QSERDES_COM_LOCK_CMP2_MODE1 0x82 0
+			USB3_DP_QSERDES_COM_DEC_START_MODE0 0x82 0
+			USB3_DP_QSERDES_COM_DEC_START_MODE1 0x82 0
+			USB3_DP_QSERDES_COM_DIV_FRAC_START1_MODE0 0xAB 0
+			USB3_DP_QSERDES_COM_DIV_FRAC_START2_MODE0 0xEA 0
+			USB3_DP_QSERDES_COM_DIV_FRAC_START3_MODE0 0x02 0
+			USB3_DP_QSERDES_COM_DIV_FRAC_START1_MODE1 0xAB 0
+			USB3_DP_QSERDES_COM_DIV_FRAC_START2_MODE1 0xEA 0
+			USB3_DP_QSERDES_COM_DIV_FRAC_START3_MODE1 0x02 0
+			USB3_DP_QSERDES_COM_VCO_TUNE_MAP 0x02 0
+			USB3_DP_QSERDES_COM_VCO_TUNE1_MODE0 0x24 0
+			USB3_DP_QSERDES_COM_VCO_TUNE1_MODE1 0x24 0
+			USB3_DP_QSERDES_COM_VCO_TUNE2_MODE1 0x02 0
+			USB3_DP_QSERDES_COM_HSCLK_SEL 0x01 0
+			USB3_DP_QSERDES_COM_CORECLK_DIV_MODE1 0x08 0
+			USB3_DP_QSERDES_COM_BIN_VCOCAL_CMP_CODE1_MODE0 0xCA 0
+			USB3_DP_QSERDES_COM_BIN_VCOCAL_CMP_CODE2_MODE0 0x1E 0
+			USB3_DP_QSERDES_COM_BIN_VCOCAL_CMP_CODE1_MODE1 0xCA 0
+			USB3_DP_QSERDES_COM_BIN_VCOCAL_CMP_CODE2_MODE1 0x1E 0
+			USB3_DP_QSERDES_COM_BIN_VCOCAL_HSCLK_SEL 0x11 0
+		        USB3_DP_QSERDES_TXA_TX_DRV_LVL 0x3B 0
+			USB3_DP_QSERDES_TXA_PRE_EMPH 0x25 0
+			USB3_DP_QSERDES_TXA_RES_CODE_LANE_TX 0x60 0
+			USB3_DP_QSERDES_TXA_RES_CODE_LANE_RX 0x60 0
+			USB3_DP_QSERDES_TXA_RES_CODE_LANE_OFFSET_TX 0x11 0
+			USB3_DP_QSERDES_TXA_RES_CODE_LANE_OFFSET_RX 0x02 0
+			USB3_DP_QSERDES_TXA_LANE_MODE_1 0xD5 0
+			USB3_DP_QSERDES_TXA_RCV_DETECT_LVL_2 0x12 0
+			USB3_DP_QSERDES_TXA_PI_QEC_CTRL 0x40 0
+			USB3_DP_QSERDES_RXA_UCDR_SO_GAIN 0x06 0
+			USB3_DP_QSERDES_RXA_UCDR_FASTLOCK_FO_GAIN 0x2F 0
+			USB3_DP_QSERDES_RXA_UCDR_SO_SATURATION_AND_ENABLE 0x7F 0
+			USB3_DP_QSERDES_RXA_UCDR_FASTLOCK_COUNT_LOW 0xFF 0
+			USB3_DP_QSERDES_RXA_UCDR_FASTLOCK_COUNT_HIGH 0x0F 0
+			USB3_DP_QSERDES_RXA_UCDR_PI_CONTROLS 0x99 0
+			USB3_DP_QSERDES_RXA_UCDR_SB2_THRESH1 0x04 0
+			USB3_DP_QSERDES_RXA_UCDR_SB2_THRESH2 0x08 0
+			USB3_DP_QSERDES_RXA_UCDR_SB2_GAIN1 0x05 0
+			USB3_DP_QSERDES_RXA_UCDR_SB2_GAIN2 0x05 0
+			USB3_DP_QSERDES_RXA_VGA_CAL_CNTRL1 0x54 0
+			USB3_DP_QSERDES_RXA_VGA_CAL_CNTRL2 0x0C 0
+			USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2 0x0F 0
+			USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3 0x4A 0
+			USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4 0x08 0
+			USB3_DP_QSERDES_RXA_RX_IDAC_TSETTLE_LOW 0xC0 0
+			USB3_DP_QSERDES_RXA_RX_IDAC_TSETTLE_HIGH 0x00 0
+			USB3_DP_QSERDES_RXA_RX_EQ_OFFSET_ADAPTOR_CNTRL1 0x77 0
+			USB3_DP_QSERDES_RXA_SIGDET_CNTRL 0x04 0
+			USB3_DP_QSERDES_RXA_SIGDET_DEGLITCH_CNTRL 0x0E 0
+			USB3_DP_QSERDES_RXA_RX_MODE_00_LOW 0xFF 0
+			USB3_DP_QSERDES_RXA_RX_MODE_00_HIGH 0x7F 0
+			USB3_DP_QSERDES_RXA_RX_MODE_00_HIGH2 0x7F 0
+			USB3_DP_QSERDES_RXA_RX_MODE_00_HIGH3 0x7F 0
+			USB3_DP_QSERDES_RXA_RX_MODE_00_HIGH4 0x97 0
+			USB3_DP_QSERDES_RXA_RX_MODE_01_LOW 0xDC 0
+			USB3_DP_QSERDES_RXA_RX_MODE_01_HIGH 0xDC 0
+			USB3_DP_QSERDES_RXA_RX_MODE_01_HIGH2 0x5C 0
+			USB3_DP_QSERDES_RXA_RX_MODE_01_HIGH3 0x7B 0
+			USB3_DP_QSERDES_RXA_RX_MODE_01_HIGH4 0xB4 0
+			USB3_DP_QSERDES_RXA_DFE_EN_TIMER 0x04 0
+			USB3_DP_QSERDES_RXA_DFE_CTLE_POST_CAL_OFFSET 0x38 0
+			USB3_DP_QSERDES_RXA_AUX_DATA_TCOARSE_TFINE 0xA0 0
+			USB3_DP_QSERDES_RXA_DCC_CTRL1 0x0C 0
+			USB3_DP_QSERDES_RXA_GM_CAL 0x1F 0
+			USB3_DP_QSERDES_RXA_VTH_CODE 0x10 0
+		        USB3_DP_QSERDES_TXB_TX_DRV_LVL 0x3B 0
+			USB3_DP_QSERDES_TXB_PRE_EMPH 0x25 0
+			USB3_DP_QSERDES_TXB_RES_CODE_LANE_TX 0x60 0
+			USB3_DP_QSERDES_TXB_RES_CODE_LANE_RX 0x60 0
+			USB3_DP_QSERDES_TXB_RES_CODE_LANE_OFFSET_TX 0x11 0
+			USB3_DP_QSERDES_TXB_RES_CODE_LANE_OFFSET_RX 0x02 0
+			USB3_DP_QSERDES_TXB_LANE_MODE_1 0xD5 0
+			USB3_DP_QSERDES_TXB_RCV_DETECT_LVL_2 0x12 0
+			USB3_DP_QSERDES_TXB_PI_QEC_CTRL 0x54 0
+			USB3_DP_QSERDES_RXB_UCDR_SO_GAIN 0x06 0
+			USB3_DP_QSERDES_RXB_UCDR_FASTLOCK_FO_GAIN 0x2F 0
+			USB3_DP_QSERDES_RXB_UCDR_SO_SATURATION_AND_ENABLE 0x7F 0
+			USB3_DP_QSERDES_RXB_UCDR_FASTLOCK_COUNT_LOW 0xFF 0
+			USB3_DP_QSERDES_RXB_UCDR_FASTLOCK_COUNT_HIGH 0x0F 0
+			USB3_DP_QSERDES_RXB_UCDR_PI_CONTROLS 0x99 0
+			USB3_DP_QSERDES_RXB_UCDR_SB2_THRESH1 0x04 0
+			USB3_DP_QSERDES_RXB_UCDR_SB2_THRESH2 0x08 0
+			USB3_DP_QSERDES_RXB_UCDR_SB2_GAIN1 0x05 0
+			USB3_DP_QSERDES_RXB_UCDR_SB2_GAIN2 0x05 0
+			USB3_DP_QSERDES_RXB_VGA_CAL_CNTRL1 0x54 0
+			USB3_DP_QSERDES_RXB_VGA_CAL_CNTRL2 0x0C 0
+			USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2 0x0F 0
+			USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3 0x4A 0
+			USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4 0x08 0
+			USB3_DP_QSERDES_RXB_RX_IDAC_TSETTLE_LOW 0xC0 0
+			USB3_DP_QSERDES_RXB_RX_IDAC_TSETTLE_HIGH 0x00 0
+			USB3_DP_QSERDES_RXB_RX_EQ_OFFSET_ADAPTOR_CNTRL1 0x77 0
+			USB3_DP_QSERDES_RXB_SIGDET_CNTRL 0x04 0
+			USB3_DP_QSERDES_RXB_SIGDET_DEGLITCH_CNTRL 0x0E 0
+			USB3_DP_QSERDES_RXB_RX_MODE_00_LOW 0x7F 0
+			USB3_DP_QSERDES_RXB_RX_MODE_00_HIGH 0xFF 0
+			USB3_DP_QSERDES_RXB_RX_MODE_00_HIGH2 0x7F 0
+			USB3_DP_QSERDES_RXB_RX_MODE_00_HIGH3 0x7F 0
+			USB3_DP_QSERDES_RXB_RX_MODE_00_HIGH4 0x97 0
+			USB3_DP_QSERDES_RXB_RX_MODE_01_LOW 0xDC 0
+			USB3_DP_QSERDES_RXB_RX_MODE_01_HIGH 0xDC 0
+			USB3_DP_QSERDES_RXB_RX_MODE_01_HIGH2 0x5C 0
+			USB3_DP_QSERDES_RXB_RX_MODE_01_HIGH3 0x7B 0
+			USB3_DP_QSERDES_RXB_RX_MODE_01_HIGH4 0xB4 0
+			USB3_DP_QSERDES_RXB_DFE_EN_TIMER 0x04 0
+			USB3_DP_QSERDES_RXB_DFE_CTLE_POST_CAL_OFFSET 0x38 0
+			USB3_DP_QSERDES_RXB_AUX_DATA_TCOARSE_TFINE 0xA0 0
+			USB3_DP_QSERDES_RXB_DCC_CTRL1 0x0C 0
+			USB3_DP_QSERDES_RXB_GM_CAL 0x1F 0
+			USB3_DP_QSERDES_RXB_VTH_CODE 0x10 0
+			USB3_DP_PCS_LOCK_DETECT_CONFIG1 0xD0 0
+			USB3_DP_PCS_LOCK_DETECT_CONFIG2 0x07 0
+			USB3_DP_PCS_LOCK_DETECT_CONFIG3 0x20 0
+			USB3_DP_PCS_LOCK_DETECT_CONFIG6 0x13 0
+			USB3_DP_PCS_REFGEN_REQ_CONFIG1 0x21 0
+			USB3_DP_PCS_RX_SIGDET_LVL 0xA9 0
+			USB3_DP_PCS_CDR_RESET_TIME 0x0A 0
+			USB3_DP_PCS_ALIGN_DETECT_CONFIG1 0x88 0
+			USB3_DP_PCS_ALIGN_DETECT_CONFIG2 0x13 0
+			USB3_DP_PCS_PCS_TX_RX_CONFIG 0x0C 0
+			USB3_DP_PCS_EQ_CONFIG1 0x4B 0
+			USB3_DP_PCS_EQ_CONFIG5 0x10 0
+			USB3_DP_PCS_USB3_LFPS_DET_HIGH_COUNT_VAL 0xF8 0
+			USB3_DP_PCS_USB3_RXEQTRAINING_DFE_TIME_S2 0x07 0
+			0xffffffff 0xffffffff 0x00>;
+};
+// ASUS_BSP Charger dtsi overlay +++
+&chg_output_lo_default {
+	mux {
+		pins = "gpio11", "gpio71", "gpio98", "gpio117";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio11", "gpio71", "gpio98", "gpio117";
+		drive-strength = <2>;
+		bias-disable;
+		output-low;
+	};
+};
+
+&pm8150l_vadc {
+	asus_adapter_vadc {
+		reg = <ADC_GPIO4>;
+		label = "asus_adapter_vadc";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+	
+	side_conn_temp {
+		reg = <ADC_AMUX_THM3>;
+		label = "side_conn_temp";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+	
+	btm_conn_temp {
+		reg = <ADC_GPIO1>;
+		label = "btm_conn_temp";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+};
+
+&pm8150b_charger {
+	io-channels = <&pm8150b_vadc ADC_MID_CHG_DIV6>,
+		      <&pm8150b_vadc ADC_USB_IN_I>,
+		      <&pm8150b_vadc ADC_SBUx>,
+		      <&pm8150b_vadc ADC_VPH_PWR>,
+		      <&pm8150b_vadc ADC_CHG_TEMP>,
+		      <&pm8150l_vadc ADC_GPIO4>,
+		      <&pm8150l_vadc ADC_AMUX_THM3>,
+		      <&pm8150l_vadc ADC_GPIO1>;
+	io-channel-names = "mid_voltage",
+			   "usb_in_current",
+			   "sbux_res",
+			   "vph_voltage",
+			   "chg_temp",
+			   "asus_adapter_vadc",
+			   "side_conn_temp",
+			   "btm_conn_temp";
+
+	ADC_SW_EN = <&tlmm 98 0x0>;
+	ADC_VH_EN_5 = <&tlmm 117 0x0>;
+};
+// ASUS_BSP Charger dtsi overlay ---
+
+//ASUS_BSP: aw haptic +++
+&qupv3_se4_i2c {
+	status = "ok";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	aw8697_haptic@5B {
+		compatible = "awinic,aw8697_haptic";
+		reg = <0x5B>;
+		status = "disabled";
+	};
+
+	aw8697_haptic@5A {
+		compatible = "awinic,aw8697_haptic";
+		reg = <0x5A>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <77 0>; // set type in driver IRQ_TYPE_NONE
+		irq-gpio = <&tlmm 77 0>; // set type in driver IRQ_TYPE_NONE
+		vib_mode = < 0 >;   /*mode:   RAM mode->0; CONT mode -> 1*/
+		vib_f0_pre = < 1500 >; // 150Hz
+		vib_f0_cali_percen = < 7 >;
+		vib_cont_drv_lev = < 100 >; // 2*1.414*255/6.1
+		vib_cont_drv_lvl_ov = < 100 >;
+		vib_cont_td = < 0x006c >;
+		vib_cont_zc_thr = < 0x0ff1 >;
+		vib_cont_num_brk = < 3 >;
+		vib_f0_coeff = < 260 >; /*Don't modify it    2.604167*/
+		vib_f0_trace_parameter = < 0x05 0x03 0x02 0x0f >;
+		vib_bemf_config = < 0x10 0x08 0x03 0xf8 >;
+		vib_sw_brake = < 0x2c >;
+		vib_tset = < 0x12 >;
+		vib_r_spare = < 0x68 >;
+		vib_bstdbg = < 0x30 0xeb 0xd4 0 0 0 >;
+		pinctrl-names = "default";
+		pinctrl-states = "default";
+		pinctrl-0 = <&vib_irq_default>;
+		status = "okay";
+	};
+};
