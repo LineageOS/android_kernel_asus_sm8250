@@ -692,11 +692,7 @@ ifeq ($(call shell-cached,$(CONFIG_SHELL) $(srctree)/scripts/gcc-goto.sh $(CC) $
 	KBUILD_AFLAGS += -DCC_HAVE_ASM_GOTO
 endif
 
-ifneq ($(BUILD_NUMBER),)
-	KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(TARGET_SKU)-$(BUILD_NUMBER)\"
-else
-	KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(TARGET_SKU)-$(ASUS_BUILD_PROJECT)_ENG\"
-endif
+KBUILD_CPPFLAGS += -DASUS_SW_VER=\"lineage\"
 
 include scripts/Makefile.kcov
 include scripts/Makefile.gcc-plugins
