@@ -3,7 +3,7 @@ obj-y += ALSPSsensor.o
 obj-n += psensor.o
 obj-n += lsensor.o
 obj-n += ALSPS_FRGBsensor.o
-ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+ifdef CONFIG_MACH_ASUS_ZS670KS
 obj-y += ALSPSsensor_2nd.o
 endif
 #obj-y += SARsensor.o
