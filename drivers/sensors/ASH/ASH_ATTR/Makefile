@@ -2,7 +2,7 @@ obj-y += ASH_ATTR.o
 obj-y += HALLsensor_ATTR.o
 obj-y += psensor_ATTR.o
 obj-y += lsensor_ATTR.o
-ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+ifdef CONFIG_MACH_ASUS_ZS670KS
 obj-y += psensor_2nd_ATTR.o
 obj-y += lsensor_2nd_ATTR.o
 endif

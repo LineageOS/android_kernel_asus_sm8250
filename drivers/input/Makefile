@@ -31,7 +31,7 @@ obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
 obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o
 obj-$(CONFIG_GOODIX_FINGERPRINT) += fingerprint/
 
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+ifdef CONFIG_MACH_ASUS_ZS661KS
 obj-$(CONFIG_INPUT_HALLSENSOR)	+= lid.o
 obj-$(CONFIG_INPUT_HALLSENSOR2)	+= lid_2.o
 else
