@@ -1,5 +1,4 @@
 config GAMEPAD_HID
-	tristate "ASUS GamePad"
 	bool "Asus Kuni Gamepad"
 	default y
 	depends on USB_HID
