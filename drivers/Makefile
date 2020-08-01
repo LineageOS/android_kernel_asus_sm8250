@@ -220,14 +220,3 @@ obj-y				+= ec_hid_driver/
 obj-y				+= dt_power/
 obj-y				+= fan/
 endif
-
-#Tuxera
-ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
-	ifdef CONFIG_TUXERA_USERDEBUG
-		obj-y				+= tuxera/zs661ks/exfat/userdebug/
-		obj-y				+= tuxera/zs661ks/ntfs/userdebug/
-	else
-		obj-y				+= tuxera/zs661ks/exfat/user/
-		obj-y				+= tuxera/zs661ks/ntfs/user/
-	endif
-endif
