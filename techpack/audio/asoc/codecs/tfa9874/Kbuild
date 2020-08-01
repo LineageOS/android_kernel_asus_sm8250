@@ -80,7 +80,7 @@ GIT_VERSION=$(shell cd $(PLMA_HOSTSW_DIR); git describe --tags --dirty --match "
 EXTRA_CFLAGS += -DTFA98XX_GIT_VERSIONS=\"$(GIT_VERSION)\"
 
 # debugging support (also enables trace_printk)
-EXTRA_CFLAGS += -DDEBUG -DTFA9874_NONDSP_STEREO -DCONFIG_SND_SOC_TFA9874
+EXTRA_CFLAGS += -DTFA9874_NONDSP_STEREO -DCONFIG_SND_SOC_TFA9874
 
 EXTRA_CFLAGS += -I$(AUDIO_ROOT)/asoc/codecs/tfa9874/inc
 EXTRA_CFLAGS += -Werror
