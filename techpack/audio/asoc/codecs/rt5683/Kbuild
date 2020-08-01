@@ -27,12 +27,17 @@ ifeq ($(KERNEL_BUILD), 1)
 	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
 endif
 
-
-ifeq ($(CONFIG_ARCH_KONA), y)
-	include $(AUDIO_ROOT)/config/konaauto.conf
-	INCS    +=  -include $(AUDIO_ROOT)/config/konaautoconf.h
+ifeq ($(KERNEL_BUILD), 0)
+	ifeq ($(CONFIG_ARCH_KONA), y)
+		include $(AUDIO_ROOT)/config/konaauto.conf
+		INCS    +=  -include $(AUDIO_ROOT)/config/konaautoconf.h
+	endif
+	ifeq ($(CONFIG_ARCH_LITO), y)
+		include $(AUDIO_ROOT)/config/litoauto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/litoautoconf.h
+	endif
 endif
-
 
 RT5683_OBJS += rt5683.o
 
