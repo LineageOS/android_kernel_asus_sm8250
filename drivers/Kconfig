@@ -241,12 +241,4 @@ source "drivers/motor/tspdrv/Kconfig"
 #ASUS_BSP GamePad driver
 source "drivers/gamepad_hid_driver/Kconfig"
 
-source "drivers/tuxera/zs661ks/exfat/user/Kconfig"
-
-source "drivers/tuxera/zs661ks/exfat/userdebug/Kconfig"
-
-source "drivers/tuxera/zs661ks/ntfs/user/Kconfig"
-
-source "drivers/tuxera/zs661ks/ntfs/userdebug/Kconfig"
-
 endmenu
