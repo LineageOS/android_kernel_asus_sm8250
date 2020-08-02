@@ -924,7 +924,6 @@ int smblib_set_usb_suspend(struct smb_charger *chg, bool suspend)
 		CHG_DBG("usb alert triggered! Suspend charger input! alert_side = %d, alert_btm = %d, alert_ACCY = %d, keep_ACCY = %d, cos_once = %d\n",
 			usb_alert_side_flag, usb_alert_btm_flag, usb_alert_flag_ACCY, usb_alert_keep_suspend_flag_ACCY, cos_alert_once_flag);
 		suspend = 1;
-		//ASUSErclog(ASUS_USB_THERMAL_ALERT, "USB Thermal Alert is triggered\n");
 	}
 
 	if (asus_suspend_cmd_flag) {
@@ -5818,7 +5817,6 @@ int asus_get_batt_health(void)
 	if (bat_health == POWER_SUPPLY_HEALTH_GOOD)
 		return 0;
 	else if (bat_health == POWER_SUPPLY_HEALTH_COLD) {
-		//ASUSErclog(ASUS_JEITA_HARD_COLD, "JEITA Hard Cold is triggered\n");
 		return 1;
 	}
 	else if (bat_health == POWER_SUPPLY_HEALTH_COOL)
@@ -5826,11 +5824,9 @@ int asus_get_batt_health(void)
 	else if (bat_health == POWER_SUPPLY_HEALTH_WARM)
 		return 3;
 	else if (bat_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
-		//ASUSErclog(ASUS_JEITA_HARD_HOT, "JEITA Hard Hot is triggered\n");
 		return 4;
 	}
 	else if (bat_health == POWER_SUPPLY_HEALTH_OVERVOLTAGE) {
-		//ASUSErclog(ASUS_OUTPUT_OVP, "Battery OVP is triggered\n");
 		return 5;
 	}
 	else

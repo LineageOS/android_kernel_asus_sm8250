@@ -11431,12 +11431,12 @@ static void ufs_asusevent_log(struct ufs_hba *hba)
 		pre_life_time_B = desc_buf[4];
 		get_ufs_status(hba);
 		pr_info("[UFS_STATUS] vendor: %s, ufs_version=%s, ufs_size=%sG, fw_version=%s, lifeA=0x%02x, lifeB=0x%02x, preEOL=0x%02x\n", ufs_vendor, ufs_spec_ver, hba->ufs_total_size, (str_desc_buf+2), pre_life_time_A, pre_life_time_B, pre_Pre_EOL);
-		ASUSEvtlog("[UFS_STATUS] vendor: %s, ufs_version=%s, ufs_size=%sG, fw_version=%s, lifeA=0x%02x, lifeB=0x%02x, preEOL=0x%02x\n", ufs_vendor, ufs_spec_ver, hba->ufs_total_size, (str_desc_buf+2), pre_life_time_A, pre_life_time_B, pre_Pre_EOL);
+		pr_debug("[UFS_STATUS] vendor: %s, ufs_version=%s, ufs_size=%sG, fw_version=%s, lifeA=0x%02x, lifeB=0x%02x, preEOL=0x%02x\n", ufs_vendor, ufs_spec_ver, hba->ufs_total_size, (str_desc_buf+2), pre_life_time_A, pre_life_time_B, pre_Pre_EOL);
 		init_ufs_health_flag = true;
 	}else{
 		if(pre_Pre_EOL != desc_buf[2] || pre_life_time_A != desc_buf[3] || pre_life_time_B != desc_buf[4]){
 			pr_info("[UFS_STATUS] vendor: %s, ufs_version=%s, ufs_size=%sG, fw_version=%s, lifeA=0x%02x, lifeB=0x%02x, preEOL=0x%02x\n", ufs_vendor, ufs_spec_ver, hba->ufs_total_size, (str_desc_buf+2), pre_life_time_A, pre_life_time_B, pre_Pre_EOL);
-			ASUSEvtlog("[UFS_STATUS] vendor: %s, ufs_version=%s, ufs_size=%sG, fw_version=%s, lifeA=0x%02x, lifeB=0x%02x, preEOL=0x%02x\n", ufs_vendor, ufs_spec_ver, hba->ufs_total_size, (str_desc_buf+2), pre_life_time_A, pre_life_time_B, pre_Pre_EOL);
+			pr_debug("[UFS_STATUS] vendor: %s, ufs_version=%s, ufs_size=%sG, fw_version=%s, lifeA=0x%02x, lifeB=0x%02x, preEOL=0x%02x\n", ufs_vendor, ufs_spec_ver, hba->ufs_total_size, (str_desc_buf+2), pre_life_time_A, pre_life_time_B, pre_Pre_EOL);
 			pre_Pre_EOL = desc_buf[2];
 			pre_life_time_A = desc_buf[3];
 			pre_life_time_B = desc_buf[4];
