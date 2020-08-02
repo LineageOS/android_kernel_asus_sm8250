@@ -529,7 +529,7 @@ int i2c_get_eventlog(char *log)
 
 	if (buffer[1] == 'e')
 		//printk("[EC_I2C] Station Event Log\n");
-		ASUSEvtlog("[EC_HID][EC_LOG] %s\n", log);
+		pr_debug("[EC_HID][EC_LOG] %s\n", log);
 	else if (buffer[1] == 'd')
 		//printk("[EC_I2C] Station EC Log\n");
 		printk("[EC_HID][EC_LOG] %s\n", log);
@@ -581,7 +581,7 @@ int i2c_check_interrupt(char *type, char *event)
 		ret = ec_i2c_read(ec_i2c_data->client,&cmd,1,temp,2);
 
 		(*event) = temp[1];
-		ASUSEvtlog("[EC_I2C] Thermal alert event is 0x%x.\n",*event);
+		pr_debug("[EC_I2C] Thermal alert event is 0x%x.\n",*event);
 	}
 
 	if((*type) & NotifyWakeFromUltraPowerMode)

@@ -15,7 +15,6 @@
 #include <linux/build_bug.h>
 #include <asm/byteorder.h>
 #include <uapi/linux/kernel.h>
-#include <linux/asusdebug.h>
 
 #ifdef ASUS_ZS661KS_PROJECT
 enum DEVICE_HWID
@@ -146,12 +145,6 @@ extern enum DEVICE_NFCID g_ASUS_nfcID;
 
 #endif //ZS670KS
 //ASUS_SZ_BSP 2019/11/19 Cassie : Add for zs670ks id ---
-
-// ASUS_BSP +++ get permissive status
-extern int permissive_enable;
-// ASUS_BSP --- get permissive status
-
-#define FORCE_RAMDUMP_FEATURE 1
 
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))
