@@ -36,8 +36,6 @@
 # include "mutex.h"
 #endif
 
-extern struct mutex fake_mutex;
-
 void
 __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 {
@@ -47,8 +45,6 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
 	osq_lock_init(&lock->osq);
 #endif
-	//added by jack
-	lock->name = name;
 
 	debug_mutex_init(lock, name, key);
 }
@@ -118,8 +114,6 @@ static inline struct task_struct *__mutex_trylock_or_owner(struct mutex *lock)
 
 		owner = old;
 	}
-	if(!__owner_task(owner))
-		lock->mutex_owner_asusdebug = current;
 
 	return __owner_task(owner);
 }
@@ -262,7 +256,6 @@ void __sched mutex_lock(struct mutex *lock)
 
 	if (!__mutex_trylock_fast(lock))
 		__mutex_lock_slowpath(lock);
-	lock->mutex_owner_asusdebug = current;
 }
 EXPORT_SYMBOL(mutex_lock);
 #endif
@@ -725,7 +718,6 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
  */
 void __sched mutex_unlock(struct mutex *lock)
 {
-	//mutex_clear_owner(lock); //added by jack for debugging mutex deadlock
 #ifndef CONFIG_DEBUG_LOCK_ALLOC
 	if (__mutex_unlock_fast(lock))
 		return;
@@ -920,7 +912,6 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		    struct lockdep_map *nest_lock, unsigned long ip,
 		    struct ww_acquire_ctx *ww_ctx, const bool use_ww_ctx)
 {
-	struct task_struct *task = current;
 	struct mutex_waiter waiter;
 	bool first = false;
 	struct ww_mutex *ww;
@@ -1020,9 +1011,7 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		}
 
 		spin_unlock(&lock->wait_lock);
-		task_thread_info(task)->pWaitingMutex = lock;
 		schedule_preempt_disabled();
-		task_thread_info(task)->pWaitingMutex = &fake_mutex;
 
 		/*
 		 * ww_mutex needs to always recheck its position since its waiter
@@ -1069,7 +1058,7 @@ acquired:
 skip_wait:
 	/* got the lock - cleanup and rejoice! */
 	lock_acquired(&lock->dep_map, ip);
-	lock->mutex_owner_asusdebug = current;
+
 	if (use_ww_ctx && ww_ctx)
 		ww_mutex_lock_acquired(ww, ww_ctx);
 
@@ -1299,10 +1288,9 @@ int __sched mutex_lock_interruptible(struct mutex *lock)
 {
 	might_sleep();
 
-	if (__mutex_trylock_fast(lock)){
-		lock->mutex_owner_asusdebug = current;
+	if (__mutex_trylock_fast(lock))
 		return 0;
-	}
+
 	return __mutex_lock_interruptible_slowpath(lock);
 }
 
@@ -1324,10 +1312,9 @@ int __sched mutex_lock_killable(struct mutex *lock)
 {
 	might_sleep();
 
-	if (__mutex_trylock_fast(lock)){
-		lock->mutex_owner_asusdebug = current;
+	if (__mutex_trylock_fast(lock))
 		return 0;
-	}
+
 	return __mutex_lock_killable_slowpath(lock);
 }
 EXPORT_SYMBOL(mutex_lock_killable);

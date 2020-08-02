@@ -167,40 +167,6 @@ static int set_ftm_mode(char *str)
 }
 __setup("androidboot.pre-ftm=", set_ftm_mode);
 
-// ASUS_BSP +++ Add for asus debug
-int g_user_dbg_mode = 1;
-EXPORT_SYMBOL(g_user_dbg_mode);
-
-static int set_user_dbg_mode(char *str)
-{
-       if (strcmp("y", str) == 0)
-               g_user_dbg_mode = 1;
-       else
-               g_user_dbg_mode = 0;
-       g_user_dbg_mode = 1;
-       printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
-       return 0;
-}
-__setup("dbg=", set_user_dbg_mode);
-// ASUS_BSP --- Add for asus debug
-
-// ASUS_BSP +++ get permissive status
-int permissive_enable = 0;
-EXPORT_SYMBOL(permissive_enable);
-static int get_permissive_status(char *str)
-{
-	
-	if( strcmp("permissive", str) == 0 )
-	{
-		permissive_enable = 1;
-		printk("permissive = %d\n", permissive_enable);
-	}
-
-	return 0;
-}
-__setup("androidboot.selinux=", get_permissive_status);
-// ASUS_BSP --- get permissive status
-
 #ifdef ASUS_ZS661KS_PROJECT
 bool g_Recovery_mode = false;
 static int set_recovery_mode(char *str)
@@ -682,24 +648,6 @@ static int __init set_reset_devices(char *str)
 }
 
 __setup("reset_devices", set_reset_devices);
-
-char evtlog_bootup_reason[50];
-EXPORT_SYMBOL(evtlog_bootup_reason);
-#if defined(FORCE_WD_RESET_FEATURE) && defined(ASUS_ZS661KS_PROJECT)
-int g_watchdog_reboot = 0;
-EXPORT_SYMBOL(g_watchdog_reboot);
-#endif
-static int set_ASUSEvt_pon_reason(char *str)
-{
-	strcpy(evtlog_bootup_reason, str);
-#if defined(FORCE_WD_RESET_FEATURE) && defined(ASUS_ZS661KS_PROJECT)
-	if (strstr(str,"abnormal") != NULL) {
-		g_watchdog_reboot = 1;
-	}
-#endif
-	return 0;
-}
-__setup("androidboot.bootreason=", set_ASUSEvt_pon_reason);
 
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };

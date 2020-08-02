@@ -5029,7 +5029,7 @@ static int pogo_detect_notifier (struct notifier_block *nb, unsigned long val, v
 
 	pogo_type = val;
 	CHG_DBG("pogo_type : %s", pogo_id_str[pogo_type]);	
-	//ASUSEvtlog("%s: pogo_type : %s", __func__, pogo_id_str[pogo_type]);
+	//pr_debug("%s: pogo_type : %s", __func__, pogo_id_str[pogo_type]);
 	ASUS_POGO_ID = pogo_type;
 
 	switch (pogo_type) {

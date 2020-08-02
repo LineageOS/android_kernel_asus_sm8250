@@ -39,8 +39,6 @@ typedef int __bitwise suspend_state_t;
 #define PM_SUSPEND_MEM		((__force suspend_state_t) 3)
 #define PM_SUSPEND_MIN		PM_SUSPEND_TO_IDLE
 #define PM_SUSPEND_MAX		((__force suspend_state_t) 4)
-/*#define PM_UNATTENDED_TIMEOUT   1000*60*10		//10min*/
-#define PM_UNATTENDED_TIMEOUT   1000*20		//20s
 
 enum suspend_stat_step {
 	SUSPEND_FREEZE = 1,
@@ -74,7 +72,6 @@ struct suspend_stats {
 };
 
 extern struct suspend_stats suspend_stats;
-extern bool suspend_happened;
 
 static inline void dpm_save_failed_dev(const char *name)
 {
@@ -543,5 +540,4 @@ static inline void page_key_write(void *address) {}
 
 #endif /* !CONFIG_ARCH_SAVE_PAGE_KEYS */
 
-void unattended_timer_expired(struct timer_list *unused);
 #endif /* _LINUX_SUSPEND_H */

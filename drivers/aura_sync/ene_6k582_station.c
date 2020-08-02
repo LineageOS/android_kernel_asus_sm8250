@@ -1132,7 +1132,7 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr, con
 	 		break;
 	 }
 	platform_data->current_mode = (u8)val;
-//	ASUSEvtlog("[AURA_STATION] current_mode : %d\n", platform_data->current_mode);
+//	pr_debug("[AURA_STATION] current_mode : %d\n", platform_data->current_mode);
 	return count;
 }
 
@@ -2278,7 +2278,7 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 	 		break;
 	 }
 	platform_data->current_mode = (u8)mode2;
-//	ASUSEvtlog("[AURA_STATION] current_mode : %d\n", platform_data->current_mode);
+//	pr_debug("[AURA_STATION] current_mode : %d\n", platform_data->current_mode);
 	return count;
 }
 
