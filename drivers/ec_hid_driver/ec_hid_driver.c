@@ -680,7 +680,7 @@ static ssize_t sync_state_store(struct device *dev,
 		return ret;
 
 	if (val == 0){
-		ASUSEvtlog("[EC_HID] asus_extcon_set_state_sync : %d\n", val);
+		pr_debug("[EC_HID] asus_extcon_set_state_sync : %d\n", val);
 		printk("[EC_HID][EXTCON] extcon_dongle->state : %d, val : %d\n", extcon_dongle->state, val);
 		asus_extcon_set_state_sync(extcon_dongle, val);
 
@@ -688,7 +688,7 @@ static ssize_t sync_state_store(struct device *dev,
 		printk("[EC_HID] pogo_sema up!!! %d\n", val);
 		up(&g_hid_data->pogo_sema);
 	}else if ((val > 0 && val <= 4) || val == 7 || (val >= 11 && val <= 15)){
-		ASUSEvtlog("[EC_HID] asus_extcon_set_state_sync : %d\n", val+5);
+		pr_debug("[EC_HID] asus_extcon_set_state_sync : %d\n", val+5);
 		printk("[EC_HID][EXTCON] extcon_dongle->state : %d, val : %d\n", extcon_dongle->state, (val+5));
 		asus_extcon_set_state_sync(extcon_dongle, (val+5));
 
@@ -781,7 +781,7 @@ void ec_hid_uevent(void){
 		pogo_mutex_state = 1;
 		gDongleEvent = DongleEvent_shutdown_remove_mode;
 		kobject_uevent(&g_hid_data->dev->kobj, KOBJ_CHANGE);
-		ASUSEvtlog("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
+		pr_debug("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
 		g_hid_data->previous_event = gDongleEvent;
 		return;
 	} else if(type == Dongle_Station2 && ENE_upgrade_mode) {
@@ -791,7 +791,7 @@ void ec_hid_uevent(void){
 		pogo_mutex_state = 1;
 		gDongleEvent = 1;
 		kobject_uevent(&g_hid_data->dev->kobj, KOBJ_CHANGE);
-		ASUSEvtlog("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
+		pr_debug("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
 		g_hid_data->previous_event = ENE_upgrade_mode;
 		return;
 	} else if(type == Dongle_Station2 && g_hid_data->previous_event == DongleEvent_shutdown_remove_mode && gDongleEvent == DongleEvent_Normal_mode){
@@ -802,7 +802,7 @@ void ec_hid_uevent(void){
 		pogo_mutex_state = 1;
 
 		kobject_uevent(&g_hid_data->dev->kobj, KOBJ_CHANGE);
-		ASUSEvtlog("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
+		pr_debug("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
 		g_hid_data->previous_event = gDongleEvent;
 
 	} else if(type == 100 || type == 200) {
@@ -836,7 +836,7 @@ void ec_hid_uevent(void){
 		pogo_mutex_state = 1;
 
 		kobject_uevent(&g_hid_data->dev->kobj, KOBJ_CHANGE);
-		ASUSEvtlog("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
+		pr_debug("[EC_HID] gDongleEvent : %d, previous_event %d\n", gDongleEvent, g_hid_data->previous_event);
 		g_hid_data->previous_event = gDongleEvent;
 	}
 }

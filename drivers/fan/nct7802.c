@@ -40,8 +40,6 @@
 #include <linux/usb.h>
 #include <linux/msm_drm_notify.h>
 
-//#include "linux/asusdebug.h"
-
 //ASUS_SZ_BSP Cassie  add gDongleType to diff jedi's inbox and DT+++
 extern uint8_t gDongleType;
 uint8_t fan_current_type=0;
@@ -1361,7 +1359,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 	mutex_lock(&g_data->update_lock);
 	sscanf(buf, "%d", &num);
 	printk("[FAN] %s : num=%d\n",__func__, num);
-	//ASUSEvtlog("[FAN] %s : fan_type=%d\n",__func__, num);
+	//pr_debug("[FAN] %s : fan_type=%d\n",__func__, num);
 	if ((num != 0) && (gpio_get_value(g_data->enable_pin) != 1)) {
 		printk("[FAN] %s : enable fan\n",__func__);
 		if ( gpio_is_valid(g_data->enable_pin) ) {
@@ -1548,7 +1546,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 	mutex_lock(&g_data->update_lock);
 	sscanf(buf, "%d", &num);
 	printk("[FAN] %s : num=%d\n",__func__, num);
-	//ASUSEvtlog("[FAN] %s : fan_type=%d\n",__func__, num);
+	//pr_debug("[FAN] %s : fan_type=%d\n",__func__, num);
 	if ((num != 0) && (gpio_get_value(g_data->enable_pin) != 1)) {
 		printk("[FAN] %s : enable fan\n",__func__);
 		if ( gpio_is_valid(g_data->enable_pin) ) {
@@ -1756,7 +1754,7 @@ static ssize_t dt_user_fan(struct device *dev,
 	mutex_lock(&g_data->update_lock);
 	sscanf(buf, "%d", &num);
 	//printk("[FAN] %s : num=%d\n",__func__, num);
-	//ASUSEvtlog("[FAN] %s : fan_type=%d\n",__func__, num);
+	//pr_debug("[FAN] %s : fan_type=%d\n",__func__, num);
 /*	if ((num != 0) && (gpio_get_value(g_data->enable_pin) != 1)) {
 		printk("[FAN] %s : enable fan\n",__func__);
 		if ( gpio_is_valid(g_data->enable_pin) ) {
@@ -1942,7 +1940,7 @@ static ssize_t dt_thermal_fan(struct device *dev,
 	mutex_lock(&g_data->update_lock);
 	sscanf(buf, "%d", &num);
 	//printk("[FAN] %s : num=%d\n",__func__, num);
-	//ASUSEvtlog("[FAN] %s : fan_type=%d\n",__func__, num);
+	//pr_debug("[FAN] %s : fan_type=%d\n",__func__, num);
 	/*if ((num != 0) && (gpio_get_value(g_data->enable_pin) != 1)) {
 		printk("[FAN] %s : enable fan\n",__func__);
 		if ( gpio_is_valid(g_data->enable_pin) ) {
@@ -2194,7 +2192,7 @@ static ssize_t show_reg(struct device *dev,
 	}
 	//strcat(outtmp, "\n");
 	printk("[FAN]show_reg : pwm=0x%s\n", outtmp);
-	//ASUSEvtlog("[FAN] %s : outtmp=%s\n",__func__, outtmp);
+	//pr_debug("[FAN] %s : outtmp=%s\n",__func__, outtmp);
 
 	strcpy(buf, outtmp);
 	kfree(outtmp);
