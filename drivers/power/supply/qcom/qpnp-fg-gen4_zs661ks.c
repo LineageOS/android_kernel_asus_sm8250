@@ -8245,7 +8245,7 @@ static struct notifier_block reboot_blk = {
 };
 //ASUS_BSP battery safety upgrade ---
 
-//[+++]Add log to show charging status in ASUSEvtlog.txt
+//[+++]Add log to show charging status in pr_debug.txt
 static char *charging_stats[] = {
 	"UNKNOWN",
 	"CHARGING",
@@ -8271,9 +8271,9 @@ static char *charging_mode[] = {
 
 extern char *ufp_type[];
 extern char *health_type[];
-//[---]Add log to show charging status in ASUSEvtlog.txt
+//[---]Add log to show charging status in pr_debug.txt
 
-//[+++]Add log to show charging status/type in ASUSEvtlog.txt
+//[+++]Add log to show charging status/type in pr_debug.txt
 static int get_bat_charging_status(struct fg_dev *fg)
 {
 	int rc = 0;
@@ -8309,7 +8309,7 @@ static int get_bat_charging_mode(struct fg_dev *fg)
 	}
 	return prop.intval;
 }
-//[---]Add log to show charging status/type in ASUSEvtlog.txt
+//[---]Add log to show charging status/type in pr_debug.txt
 
 //[+++]Add to print the battery status of the station
 extern int hid_to_get_battery_cap(int *cap);
@@ -8617,7 +8617,7 @@ static int print_battery_status(void)
 		socSts,
 		battSts);
 
-	ASUSEvtlog("[BAT][Ser]%s", battInfo);
+	pr_debug("[BAT][Ser]%s", battInfo);
 	BAT_DBG("%s: %s", __func__, additionBattInfo);
 
 	g_last_print_time = current_kernel_time();
@@ -8652,7 +8652,7 @@ static int print_battery_status(void)
 			station_vol,
 			station_cur,
 			station_cap);
-		ASUSEvtlog("[BAT][Station]%s", stationInfo);
+		pr_debug("[BAT][Station]%s", stationInfo);
 	}
 	//[---]Add to print the battery status of the station
 

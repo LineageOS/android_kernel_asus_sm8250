@@ -873,7 +873,7 @@ static int gamepad_usb_probe(struct hid_device *hdev, const struct hid_device_id
 	pr_info("[GAMEPAD_III] hid->name : %s\n", hdev->name);
 	pr_info("[GAMEPAD_III] hid->vendor  : 0x%x\n", hdev->vendor);
 	pr_info("[GAMEPAD_III] hid->product : 0x%x\n", hdev->product);
-	ASUSEvtlog("[GAMEPAD_III] GamePad connect\n");
+	pr_debug("[GAMEPAD_III] GamePad connect\n");
 
 	drvdata = devm_kzalloc(&hdev->dev, sizeof(*drvdata), GFP_KERNEL);
 	if (drvdata == NULL) {
@@ -927,7 +927,7 @@ static void gamepad_usb_remove(struct hid_device *hdev)
 {
 	struct gamepad_drvdata *drvdata = dev_get_drvdata(&hdev->dev);;
 	pr_info("[GAMEPAD_III] gamepad_usb_remove .\n");
-	ASUSEvtlog("[GAMEPAD_III] GamePad disconnect!!!\n");
+	pr_debug("[GAMEPAD_III] GamePad disconnect!!!\n");
 
 	sysfs_remove_group(&drvdata->led.dev->kobj, &pwm_attr_group);
 	aura_sync_unregister(drvdata);
