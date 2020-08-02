@@ -2651,9 +2651,9 @@ int cnss_setWifiAntenna(void)
 		gpio_set_value(wlan_asus_ant_137_gpio, antenna_gpio_137);
 	}
 
-	//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-//	ASUSEvtlog("[wlan]: wifi_antenna_switch GPIO(79/80/64/67) = %d%d%d%d.\n", gpio_get_value(79),gpio_get_value(80),gpio_get_value(64),gpio_get_value(67));
-	//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+	//ASUS_BSP+++ "for /data/log/pr_debug"
+//	pr_debug("[wlan]: wifi_antenna_switch GPIO(79/80/64/67) = %d%d%d%d.\n", gpio_get_value(79),gpio_get_value(80),gpio_get_value(64),gpio_get_value(67));
+	//ASUS_BSP--- "for /data/log/pr_debug"
 
 	cnss_pr_info("[cnss]: wifi_antenna_switch_end = %s, GPIO(10/15/136/137) = %d%d%d%d.\n", do_wifi_antenna_switch, gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
 
