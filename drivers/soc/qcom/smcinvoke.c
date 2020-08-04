@@ -990,6 +990,7 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	ret = wait_event_interruptible(srvr_info->rsp_wait_q,
 		(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
 		(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT));
+
 out:
 	/*
 	 * we could be here because of either: a. Req is PROCESSED
@@ -1560,13 +1561,14 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 
 	if (!server_info) {
 		pr_err("No matching server with server id : %u found\n",
-						server_obj->server_id);
+					server_obj->server_id);
 		mutex_unlock(&g_smcinvoke_lock);
+		return -EINVAL;
 	}
 
 	if (server_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT)
 		server_info->state = 0;
-		
+
 	mutex_unlock(&g_smcinvoke_lock);
 
 	/* First check if it has response otherwise wait for req */
@@ -1980,7 +1982,6 @@ static int __maybe_unused smcinvoke_suspend(struct platform_device *pdev,
 		pr_err("Failed to suspend smcinvoke driver\n");
 		ret = -EIO;
 	}
-
 	mutex_unlock(&g_smcinvoke_lock);
 	return ret;
 }
