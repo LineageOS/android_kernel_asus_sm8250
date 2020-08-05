@@ -2425,18 +2425,8 @@ static struct platform_driver goodix_ts_driver = {
 	.id_table = ts_core_ids,
 };
 
-#ifdef ASUS_ZS661KS_PROJECT
-extern bool g_Recovery_mode;
-#endif
-
 int goodix_ts_core_init(void)
 {
-#ifdef ASUS_ZS661KS_PROJECT
-      if(g_Recovery_mode) {
-          ts_info("Core layer init(station): not for recovery mode");
-          return 0;
-	}
-#endif
 	ts_info("[station] Core layer init");
 	if (!goodix_modules.initilized) {
 		/* this may init by outer modules register event */
