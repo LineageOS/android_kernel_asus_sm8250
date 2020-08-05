@@ -33,10 +33,6 @@
 #define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
 
-#ifdef ASUS_ZS661KS_PROJECT
-extern bool g_Recovery_mode;
-#endif
-
 static int goodix_ts_remove(struct platform_device *pdev);
 int goodix_start_later_init(struct goodix_ts_core *ts_core);
 void goodix_ts_dev_release(void);
@@ -2179,13 +2175,6 @@ static void goodix_resume_work(struct work_struct *work)
 }
 
 void phone_touch_resume(void) {
-
-#ifdef ASUS_ZS661KS_PROJECT
-	if(g_Recovery_mode) {
-		ts_info("phone_touch_resume(): not for recovery mode");
-		return ;
-	}
-#endif
 	/* driver probe failed */
 	if (!goodix_modules.core_data ||
 	    !goodix_modules.core_data->initialized) {
@@ -2211,14 +2200,6 @@ void phone_touch_resume(void) {
 EXPORT_SYMBOL_GPL(phone_touch_resume);
 
 void phone_touch_suspend(void) {
-
-#ifdef ASUS_ZS661KS_PROJECT
-	if(g_Recovery_mode) {
-		ts_info("phone_touch_suspend(): not for recovery mode");
-		return ;
-	}
-#endif
-
 	/* driver probe failed */
 	if (!goodix_modules.core_data ||
 	    !goodix_modules.core_data->initialized) {
