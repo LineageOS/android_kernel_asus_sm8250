@@ -321,8 +321,11 @@ static inline void coresight_abort(void) {}
 static inline void coresight_disable_reg_clk(struct coresight_device *csdev) {}
 static inline int coresight_enable_reg_clk(struct coresight_device *csdev)
 { return -EINVAL; }
+#if 0
+// mask for bug: "warning: unused function 'coresight_disable_all_source_link' [-Wunused-function] error, forbidden warning: coresight.h"
 static void coresight_disable_all_source_link(void) {};
 static void coresight_enable_all_source_link(void) {};
+#endif
 #endif
 
 #if defined(CONFIG_OF) && defined(CONFIG_CORESIGHT)

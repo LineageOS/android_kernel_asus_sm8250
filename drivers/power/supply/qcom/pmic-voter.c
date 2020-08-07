@@ -830,3 +830,40 @@ void destroy_votable(struct votable *votable)
 	kfree(votable->name);
 	kfree(votable);
 }
+
+//[+++]ASUS : For dumping voters and their value
+int asus_dump_voter(struct votable *votable)
+{
+	int i;
+
+	pr_err("[BAT][CHG] %s: votable(%s)\n", __func__, votable->name);
+	for (i = 0; i < votable->num_clients; i++) {
+		if (votable->client_strs[i]) {
+			pr_err("client_strs[%d] = %s, enabled = %d, value = %d\n", i, votable->client_strs[i], votable->votes[i].enabled, votable->votes[i].value);
+		}
+	}
+
+	return 0;
+}
+//[---]ASUS : For dumping voters and their value
+
+//[+++]ASUS : For setting ICL
+int asus_exclusive_vote(struct votable *votable, const char *client_str, bool enabled, int val)
+{
+	int i;
+	int rc = 0;
+
+	lock_votable(votable);
+	for (i = 0; i < votable->num_clients; i++) {
+		if (votable->client_strs[i]) {
+			votable->votes[i].enabled = false;
+			votable->votes[i].value = 0;
+		}
+	}
+	unlock_votable(votable);
+
+	rc = vote(votable, client_str, enabled, val);
+
+	return rc;
+}
+//[---]ASUS : For setting ICL

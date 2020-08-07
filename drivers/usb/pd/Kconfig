@@ -28,4 +28,21 @@ config QPNP_USB_PDPHY
 	  The is used to handle the PHY layer communication of the
 	  Power Delivery stack.
 
+config ASUS_PD_CHARGER
+	tristate "ASUS CHG USB Power Delivery"
+	help
+          Choose the limit of voltage and power for ASUS device.
+
+config USBPD_PHY_QCOM
+	bool "Qualcomm USBPD PHY"
+	depends on QPNP_USB_PDPHY
+	help
+	  Say Y here to enable QCOM USBPD API function for PD message.
+
+config DUAL_PD_PORT
+	bool "Dual USBPD PHY Port"
+	depends on QPNP_USB_PDPHY
+	help
+	  Say Y here to enable dual port PD phy chip and API functions.
+
 endmenu

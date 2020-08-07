@@ -69,10 +69,10 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
 
-#define POWER_ON_RETRY_MAX_TIMES		3
-#define POWER_ON_RETRY_DELAY_MS			200
+#define POWER_ON_RETRY_MAX_TIMES		10
+#define POWER_ON_RETRY_DELAY_MS			600
 
-#define LINK_TRAINING_RETRY_MAX_TIMES		3
+#define LINK_TRAINING_RETRY_MAX_TIMES		30
 
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", QCA6390_CE_SRC_RING_BASE_LSB_OFFSET },
@@ -1040,6 +1040,11 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 		break;
 	case CNSS_MHI_POWER_ON:
 		ret = mhi_sync_power_up(pci_priv->mhi_ctrl);
+		/* Only set img_pre_alloc when power up succeeds */
+		if (!ret && !pci_priv->mhi_ctrl->img_pre_alloc) {
+			cnss_pr_dbg("Notify MHI to use already allocated images\n");
+			pci_priv->mhi_ctrl->img_pre_alloc = true;
+		}
 		/* -ETIMEDOUT means MHI power up has succeeded but timed out
 		 * for firmware mission mode event, so handle it properly.
 		 */
@@ -1743,7 +1748,7 @@ retry:
 		if (ret == -EAGAIN && retry++ < POWER_ON_RETRY_MAX_TIMES) {
 			cnss_power_off_device(plat_priv);
 			cnss_pr_dbg("Retry to resume PCI link #%d\n", retry);
-			msleep(POWER_ON_RETRY_DELAY_MS * retry);
+			msleep(POWER_ON_RETRY_DELAY_MS);
 			goto retry;
 		}
 		goto power_off;
@@ -4379,10 +4384,11 @@ static const struct pci_device_id cnss_pci_id_table[] = {
 };
 MODULE_DEVICE_TABLE(pci, cnss_pci_id_table);
 
+
 static const struct dev_pm_ops cnss_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(cnss_pci_suspend, cnss_pci_resume)
 	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(cnss_pci_suspend_noirq,
-				      cnss_pci_resume_noirq)
+        			      cnss_pci_resume_noirq)
 	SET_RUNTIME_PM_OPS(cnss_pci_runtime_suspend, cnss_pci_runtime_resume,
 			   cnss_pci_runtime_idle)
 };

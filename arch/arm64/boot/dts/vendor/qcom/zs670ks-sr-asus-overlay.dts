@@ -1,0 +1,163 @@
+/dts-v1/;
+/plugin/;
+
+#include "zs670ks-evb-asus-overlay.dts"
+
+/* ASUS BSP Clay: PM8008 regulator setting +++ */
+
+&tlmm {
+	#include "pm8008.dtsi"
+        pm8008_active: pm8008_active {
+                mux {
+                        pins = "gpio38";
+                        function = "gpio";
+                };
+
+                config {
+                        pins = "gpio38";
+                        bias-pull-up;
+                        output-high;
+                        drive-strength = <2>;
+                };
+        };
+};
+
+&pm8008_chip {
+        pinctrl-names = "default";
+        pinctrl-0 = <&pm8008_active>;
+};
+
+
+#include "camera/zs670ks-sr-camera-sensor-mtp.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. kona ZF7 SR";
+	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
+	qcom,board-id = <40 0>;
+};
+
+
+
+/*    ====================================
+ *    overlay for kona-v2.dtsi - start
+ *    ====================================
+ */
+
+/*    ====================================
+ *    overlay for kona-v2.dtsi - end
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for kona.dtsi - start
+ *    ====================================
+ */
+&dsi_panel_pwr_supply_lab_ibb{
+	/delete-node/ qcom,panel-supply-entry@1;
+	/delete-node/ qcom,panel-supply-entry@2; 
+
+};
+
+&qupv3_se10_i2c {
+        vcnl36866@60 {
+			qcom,alsps-gpio = <&tlmm 122 0x0>;
+		};
+};
+ /*    ====================================
+ *    overlay for kona.dtsi - end
+ *    ====================================
+ */
+
+
+/*    ====================================
+ *    overlay for kona-mtp.dtsi - start
+ *    ====================================
+ */
+&pm8150b_charger {
+	ADCPWREN_PMI_GP1-gpio82 = <&tlmm 51 0 0x0>; //EVB use PM8150B GPIO3, SR use SM8250 GPIO51
+};
+
+&smb1390_charger {
+	qcom,parallel-output-mode = <1>;
+};
+
+&soc {
+	wlansr: qcom,cnss-qca6390@b0000000 {
+		compatible = "qcom,cnss-qca6390";
+		status = "okay";
+		vdd-wlan-dig-supply = <&pm8150_s6>;
+		qcom,vdd-wlan-dig-config = <950000 952000 0 0 1>;
+	};
+};
+
+&vendor {
+	bluetoothsr: bt_qca6390 {
+		compatible = "qca,qca6390";
+		qca,bt-vdd-dig-supply = <&pm8150_s6>;
+		qca,bt-vdd-asd-supply = <&pm8150_l16>;
+		qca,bt-vdd-dig-voltage-level = <950000 950000>;
+		qca,bt-vdd-asd-voltage-level = <2850000 2850000>;
+	};
+
+};
+
+/*    ====================================
+ *    overlay for kona-pinctrl.dtsi - start
+ *    ====================================
+ */
+
+/*    ====================================
+ *    overlay for kona-pinctrl.dtsi - end
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for kona-pmic-overlay.dtsi  - start
+ *    ====================================
+ */
+
+/*    ====================================
+ *    overlay for kona-pmic-overlay.dtsi - end
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for kona-regulator.dtsi - start
+ *    ====================================
+ */
+
+/*    ====================================
+ *    overlay for kona-regulator.dtsi - end
+ *    ====================================
+ */
+ 
+
+
+/*    ====================================
+ *    overlay for kona-audio-overlay.dtsi - start
+ *    ====================================
+ */
+
+/*    ====================================
+ *    overlay for kona-audio-overlay.dtsi - end
+ *    ====================================
+ */
+
+
+
+
+/*    ====================================
+ *    overlay for kona-camera-sensor-mtp.dtsi - start
+ *    ====================================
+ */
+
+/*    ====================================
+ *    overlay for kona-camera-sensor-mtp.dtsi - end
+ *    ====================================
+ */

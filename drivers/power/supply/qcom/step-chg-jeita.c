@@ -23,6 +23,9 @@
 		|| ((left) <= (right) && (left) <= (value) \
 			&& (value) <= (right)))
 
+#define BATT_TYPE_TEMP  "mlp466076_3250mah_averaged_masterslave_sept24th2018"
+#define BATT_TYPE_OBIWAN_4P35V	"c11p1901_5800mah_jan22nd2020_4p35v" //ASUS_BSP for OBIWAN
+
 struct step_chg_cfg {
 	struct step_chg_jeita_param	param;
 	struct range_data		fcc_cfg[MAX_STEP_CHG_ENTRIES];
@@ -256,8 +259,14 @@ static int get_step_chg_jeita_setting_from_profile(struct step_chg_info *chip)
 	if (batt_id_ohms < 0)
 		return -EBUSY;
 
+#ifdef ASUS_ZS661KS_PROJECT
 	profile_node = of_batterydata_get_best_profile(batt_node,
-					batt_id_ohms / 1000, NULL);
+					batt_id_ohms / 1000, BATT_TYPE_OBIWAN_4P35V);
+#else
+	profile_node = of_batterydata_get_best_profile(batt_node,
+					batt_id_ohms / 1000, BATT_TYPE_TEMP);
+#endif
+
 	if (IS_ERR(profile_node))
 		return PTR_ERR(profile_node);
 

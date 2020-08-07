@@ -1,0 +1,86 @@
+/* Copyright (c) 2016-2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_r66451_fhd_video: qcom,mdss_dsi_r66451_fhd_video {
+		qcom,mdss-dsi-panel-name = "ASUS r64451 vid mode fhd panel";
+		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+
+		qcom,mdss-dsi-panel-physical-type = "oled";
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-pan-physical-width-dimension = <70>;
+		qcom,mdss-pan-physical-height-dimension = <152>;
+		qcom,mdss-dsi-tx-eot-append;
+
+		qcom,adjust-timer-wakeup-ms = <1>;
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
+			17000 15500 30000 8000 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <4200000>;
+		qcom,mdss-dsi-panel-blackness-level = <3230>;
+
+		qcom,mdss-dsi-display-timings {
+			timing@0{
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2340>;
+				qcom,mdss-dsi-h-front-porch = <47>;
+				qcom,mdss-dsi-h-back-porch = <20>;
+				qcom,mdss-dsi-h-pulse-width = <1>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-v-back-porch = <23>;
+				qcom,mdss-dsi-v-front-porch = <4>;
+				qcom,mdss-dsi-v-pulse-width = <1>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-panel-framerate = <60>;
+
+				qcom,mdss-dsi-on-command = [
+					15 01 00 00 00 00 02 B0 00
+					39 01 00 00 00 00 20 B3 01 22 00 02 08 00 10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04
+					39 01 00 00 00 00 03 EB 00 00
+					15 01 00 00 00 00 02 F7 00
+					15 01 00 00 00 00 02 B0 80
+					//39 01 00 00 00 00 3C D4 90 93 60 1E E1 02 08 00 00 02 22 02 EC 03 83 04 00 04 00 04 00 04 00 04 00 04 00 04 00 0F FF 00 00 0F FF 00 00 0F FF 00 00 03 20 00 F0 03 7D 01 00 4D 8B 00 4D 8B 00 4D 8B 03 38
+					39 01 00 00 00 00 9F D1 03 00 00 00 00 00 F0 0F F0 3F 00 00 1F 00 00 11 D0 00 10 E0 00 00 C0 01 00 00 04 00 40 8E 00 A0 90 11 60 91 12 70 91 22 30 92 3F 30 92 FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF FF F7 FF 60 11 79 48 61 79 3A E1 7A 3A F1 7A 2A 91 7C 2A C1 7E 2A D1 7E 2A 51 81 3C D1 82 3C E1 82 4B 51 84 61 91 84 00 00 F0 00 F0
+					15 01 00 00 00 00 02 53 2C
+					15 01 00 00 00 00 02 35 00
+					15 01 00 00 00 00 02 B0 80
+					15 01 00 00 00 00 02 E6 01
+					05 01 00 00 32 00 02 29 00
+					05 01 00 00 96 00 02 11 00
+					];
+				qcom,mdss-dsi-off-command =
+					[05 01 00 00 00 00 02 28 00
+					 05 01 00 00 78 00 02 10 00];
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+			};
+		};
+	};
+};

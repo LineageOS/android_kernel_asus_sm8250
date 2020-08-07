@@ -49,6 +49,8 @@
 
 #include "scsi_priv.h"
 #include "scsi_logging.h"
+#include "ufs/ufshcd.h"
+#include "ufs/ufs.h"
 
 #define ALLOC_FAILURE_MSG	KERN_ERR "%s: Allocation failure during" \
 	" SCSI scanning, some SCSI devices might not be configured\n"

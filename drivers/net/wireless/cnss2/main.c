@@ -14,6 +14,12 @@
 #include <soc/qcom/minidump.h>
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
+#ifdef ASUS_ZS661KS_PROJECT
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/module.h>
+#include <linux/regulator/consumer.h>
+#endif
 
 #include "main.h"
 #include "bus.h"
@@ -57,6 +63,44 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 	"qwlan.bin", "bdwlan.bin", "otp.bin", "utf.bin",
 	"utfbd.bin", "epping.bin", "evicted.bin"
 };
+
+#ifdef ASUS_ZS661KS_PROJECT
+/* ASUS_BSP+++ for wifi antenna switch */
+#define default_wifi_antenna_switch		"1101"
+#define GPIO_LOOKUP_STATE		"wifi_ant_gpio"
+char *do_wifi_antenna_switch = default_wifi_antenna_switch;
+module_param(do_wifi_antenna_switch, charp, 0664);
+MODULE_PARM_DESC(do_wifi_antenna_switch, "Wifi antenna switch flag");
+
+int wlan_asus_ant_10_gpio = 0;
+int wlan_asus_ant_15_gpio = 0;
+int wlan_asus_ant_136_gpio = 0;
+int wlan_asus_ant_137_gpio = 0;
+
+/* ASUS_BSP--- for wifi antenna switch */
+
+/* ASUS_BSP+++ add for the antenna switch power (LDO13A) */
+int do_antenna_switch = 1;
+module_param(do_antenna_switch, int, 0664);
+MODULE_PARM_DESC(do_antenna_switch, "Switch VREG_L13A_3P0 flag");
+
+struct antenna_switch_vreg antenna_switch_vreg = {NULL, "vdd-3.0-wifi-antenna", 3000000, 3000000, 0, false};
+/* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
+#endif
+
+
+/* ASUS_BSP+++ for wlan driver add debug log level */
+static char do_wlan_driver_log_level[256];
+module_param_string(do_wlan_driver_log_level,do_wlan_driver_log_level, sizeof(do_wlan_driver_log_level), S_IWUSR | S_IRUGO);
+MODULE_PARM_DESC(do_wlan_driver_log_level, "wlan driver log level flag");
+
+char * wcnss_get_driver_log_level(void)
+{
+       pr_info("[wcnss]: do_wlan_driver_log_level=%s.\n", do_wlan_driver_log_level);
+       return do_wlan_driver_log_level;
+}
+EXPORT_SYMBOL(wcnss_get_driver_log_level);
+/* ASUS_BSP--- for wlan driver add debug log level  */
 
 struct cnss_driver_event {
 	struct list_head list;
@@ -2230,6 +2274,16 @@ static int cnss_probe(struct platform_device *plat_dev)
 	struct cnss_plat_data *plat_priv;
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
+	/* ASUS_BSP+++ "add for the antenna switch power (LDO13A)" */
+#ifdef ASUS_ZS661KS_PROJECT
+	struct device *dev;
+	struct regulator *temp_reg;
+	int rc = 0;
+
+	struct pinctrl *key_pinctrl;
+	struct pinctrl_state *set_state;
+#endif
+	/* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
 
 	if (cnss_get_plat_priv(plat_dev)) {
 		cnss_pr_err("Driver is already initialized!\n");
@@ -2269,6 +2323,22 @@ static int cnss_probe(struct platform_device *plat_dev)
 	ret = cnss_get_resources(plat_priv);
 	if (ret)
 		goto reset_ctx;
+
+	/* ASUS_BSP+++ "add for the antenna switch power (LDO13A)" */
+#ifdef ASUS_ZS661KS_PROJECT
+	plat_priv->vreg_antenna = &antenna_switch_vreg;
+	dev = &plat_priv->plat_dev->dev;
+	temp_reg = devm_regulator_get_optional(dev, plat_priv->vreg_antenna->name);
+
+	if (IS_ERR_OR_NULL(temp_reg)) {
+		rc = PTR_ERR(temp_reg);
+		printk("[cnss]: failed to get %s, rc=%d.\n", plat_priv->vreg_antenna->name, rc);
+		goto out;
+	}
+	plat_priv->vreg_antenna->reg = temp_reg;
+	printk("[cnss]: %s init ok.\n", plat_priv->vreg_antenna->name);
+#endif
+	/* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
 
 	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks)) {
 		ret = cnss_power_on_device(plat_priv);
@@ -2315,6 +2385,114 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
+	/* ASUS_BSP+++ "add for the antenna switch power (LDO13A)" */
+#ifdef ASUS_ZS661KS_PROJECT
+	key_pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR_OR_NULL(key_pinctrl)) {
+		cnss_pr_err("[cnss] set_pinctrl failed");
+	}
+
+	set_state = pinctrl_lookup_state(key_pinctrl, GPIO_LOOKUP_STATE);
+	ret = pinctrl_select_state(key_pinctrl, set_state);
+	if(ret < 0)
+		cnss_pr_err("[cnss] pinctrl_select_state");
+
+	ret = antenna_switch_enable_vreg(plat_priv);
+	if (ret != 0) {
+		printk("[cnss]: icnss_probe, antenna_switch_enable_vreg ret=%d.\n", ret);
+	}
+
+	wlan_asus_ant_10_gpio = of_get_named_gpio(dev->of_node,"wlan-asus_ant_10",0);
+	if (wlan_asus_ant_10_gpio < 0) {
+		pr_err("[cnss] no wlan-asus_ant_10 \n");
+	}
+//	printk("[cnss] of_get_named_gpio_10 = %d\n", wlan_asus_ant_10_gpio);
+
+	if (gpio_is_valid (wlan_asus_ant_10_gpio)) {
+		ret = gpio_request(wlan_asus_ant_10_gpio, "wlan-asus_ant_10");
+		if (ret){
+			printk("[cnss] gpio_request_10.err %d\n", ret);
+		}
+		ret = gpio_direction_output(wlan_asus_ant_10_gpio, 1);
+		if (ret){
+			printk("[cnss] gpio_direction_output_10.err %d\n", ret);
+		}
+		gpio_set_value(wlan_asus_ant_10_gpio, 1);
+		printk("[cnss] gpio_get_value_10_end %d\n", gpio_get_value(wlan_asus_ant_10_gpio));
+	}
+	else {
+		printk("[cnss] gpio_10 is not valid");
+	}
+
+	wlan_asus_ant_15_gpio = of_get_named_gpio(dev->of_node,"wlan-asus_ant_15",0);
+	if (wlan_asus_ant_15_gpio < 0) {
+		pr_err("[cnss] no wlan-asus_ant_15 \n");
+	}
+//	printk("[cnss] of_get_named_gpio_15 = %d\n", wlan_asus_ant_15_gpio);
+
+	if (gpio_is_valid (wlan_asus_ant_15_gpio)) {
+		ret = gpio_request(wlan_asus_ant_15_gpio, "wlan-asus_ant_15");
+		if (ret){
+			printk("[cnss] gpio_request_15.err %d\n", ret);
+		}
+		ret = gpio_direction_output(wlan_asus_ant_15_gpio, 1);
+		if (ret){
+			printk("[cnss] gpio_direction_output_15.err %d\n", ret);
+		}
+		gpio_set_value(wlan_asus_ant_15_gpio, 1);
+		printk("[cnss] gpio_get_value_15_end %d\n", gpio_get_value(wlan_asus_ant_15_gpio));
+	}
+	else {
+		printk("[cnss] gpio_15 is not valid");
+	}
+
+	wlan_asus_ant_136_gpio = of_get_named_gpio(dev->of_node,"wlan-asus_ant_136",0);
+	if (wlan_asus_ant_136_gpio < 0) {
+		pr_err("[cnss] no wlan-asus_ant_136 \n");
+	}
+//	printk("[cnss] of_get_named_gpio_136 = %d\n", wlan_asus_ant_136_gpio);
+
+	if (gpio_is_valid (wlan_asus_ant_136_gpio)) {
+		ret = gpio_request(wlan_asus_ant_136_gpio, "wlan-asus_ant_136");
+		if (ret){
+			printk("[cnss] gpio_request_136.err %d\n", ret);
+		}
+		ret = gpio_direction_output(wlan_asus_ant_136_gpio, 1);
+		if (ret){
+			printk("[cnss] gpio_direction_output_136.err %d\n", ret);
+		}
+		gpio_set_value(wlan_asus_ant_136_gpio, 0);
+		printk("[cnss] gpio_get_value_136_end %d\n", gpio_get_value(wlan_asus_ant_136_gpio));
+	}
+	else {
+		printk("[cnss] gpio_136 is not valid");
+	}
+
+	wlan_asus_ant_137_gpio = of_get_named_gpio(dev->of_node,"wlan-asus_ant_137",0);
+	if (wlan_asus_ant_137_gpio < 0) {
+		pr_err("[cnss] no wlan-asus_ant_137 \n");
+	}
+//	printk("[cnss] of_get_named_gpio_137 = %d\n", wlan_asus_ant_137_gpio);
+
+	if (gpio_is_valid (wlan_asus_ant_137_gpio)) {
+		ret = gpio_request(wlan_asus_ant_137_gpio, "wlan-asus_ant_137");
+		if (ret){
+			printk("[cnss] gpio_request_137.err %d\n", ret);
+		}
+		ret = gpio_direction_output(wlan_asus_ant_137_gpio, 1);
+		if (ret){
+			printk("[cnss] gpio_direction_output_137.err %d\n", ret);
+		}
+		gpio_set_value(wlan_asus_ant_137_gpio, 1);
+		printk("[cnss] gpio_get_value_137_end %d\n", gpio_get_value(wlan_asus_ant_137_gpio));
+	}
+	else {
+		printk("[cnss] gpio_137 is not valid");
+	}
+#endif
+	/* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
+
+
 	cnss_pr_info("Platform driver probed successfully.\n");
 
 	return 0;
@@ -2345,6 +2523,146 @@ reset_ctx:
 out:
 	return ret;
 }
+
+/* ASUS_BSP--- for for wifi antenna switch*/
+#ifdef ASUS_ZS661KS_PROJECT
+int antenna_switch_enable_vreg(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	if (!(plat_priv->vreg_antenna) || !(plat_priv->vreg_antenna->reg) || (plat_priv->vreg_antenna->enabled)) {
+		printk("[cnss]: antenna_switch_enable_vreg, (%s) return.\n", plat_priv->vreg_antenna->name);
+		return ret;
+	}
+
+	ret = regulator_set_voltage(plat_priv->vreg_antenna->reg, plat_priv->vreg_antenna->min_v, plat_priv->vreg_antenna->max_v);
+	if (ret) {
+		printk("[cnss]: set voltage fail, %s (min_v:%u, max_v:%u) ret=%d.\n",
+		       plat_priv->vreg_antenna->name, plat_priv->vreg_antenna->min_v, plat_priv->vreg_antenna->max_v, ret);
+		return ret;
+	}
+
+	if (plat_priv->vreg_antenna->load_ua) {
+		ret = regulator_set_load(plat_priv->vreg_antenna->reg, plat_priv->vreg_antenna->load_ua);
+		if (ret < 0) {
+			printk("[cnss]: set load fail, %s load_ua:%u, ret=%d.\n", plat_priv->vreg_antenna->name, plat_priv->vreg_antenna->load_ua, ret);
+			return ret;
+		}
+	}
+
+
+	ret = regulator_enable(plat_priv->vreg_antenna->reg);
+	if (ret) {
+		printk("[cnss]: %s enable fail, ret=%d.\n", plat_priv->vreg_antenna->name, ret);
+		return ret;
+	}
+
+	plat_priv->vreg_antenna->enabled = true;
+	printk("[cnss]: %s enabled.\n", plat_priv->vreg_antenna->name);
+
+	return ret;
+}
+
+
+int antenna_switch_disable_vreg(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	if (!(plat_priv->vreg_antenna) || !(plat_priv->vreg_antenna->reg) || !(plat_priv->vreg_antenna->enabled)) {
+		printk("[cnss]: antenna_switch_disable_vreg, (%s) return.\n", plat_priv->vreg_antenna->name);
+		return ret;
+	}
+
+	ret = regulator_disable(plat_priv->vreg_antenna->reg);
+	if (ret) {
+		printk("[cnss]: %s disable fail, ret=%d.\n", plat_priv->vreg_antenna->name, ret);
+		return ret;
+	}
+
+	ret = regulator_set_load(plat_priv->vreg_antenna->reg, 0);
+	if (ret < 0) {
+		printk("[cnss]: set load 0 fail, %s ret=%d.\n", plat_priv->vreg_antenna->name, ret);
+		return ret;
+	}
+
+	ret = regulator_set_voltage(plat_priv->vreg_antenna->reg, 0, plat_priv->vreg_antenna->max_v);
+	if (ret) {
+		printk("[cnss]: set voltage 0 fail, %s ret=%d.\n", plat_priv->vreg_antenna->name, ret);
+		return ret;
+	}
+
+	plat_priv->vreg_antenna->enabled = false;
+	printk("[cnss]: %s disabled.\n", plat_priv->vreg_antenna->name);
+
+	return ret;
+}
+
+int cnss_setAntennaSwitch(void)
+{
+	int ret = 0;
+
+	if (do_antenna_switch == 1) {
+		printk("[cnss]: cnss_setAntennaSwitch, antenna_switch_enable_vreg.\n");
+		ret = antenna_switch_enable_vreg(plat_env);
+		if (ret != 0) {
+			printk("[cnss]: cnss_setAntennaSwitch, antenna_switch_enable_vreg failed.\n");
+		}
+	}
+	else {
+		printk("[cnss]: cnss_setAntennaSwitch, antenna_switch_disable_vreg.\n");
+		ret = antenna_switch_disable_vreg(plat_env);
+		if (ret != 0) {
+			printk("[cnss]: cnss_setAntennaSwitch, antenna_switch_disable_vreg failed.\n");
+		}
+	}
+
+	return do_antenna_switch;
+}
+EXPORT_SYMBOL(cnss_setAntennaSwitch);
+
+int cnss_setWifiAntenna(void)
+{
+	int antenna_gpio_10 = 0;
+	int antenna_gpio_15 = 0;
+	int antenna_gpio_136 = 0;
+	int antenna_gpio_137 = 0;
+
+        int antenna_temp = 0;
+
+	cnss_pr_info("[cnss]: wifi_antenna_switch_start = %s, GPIO(10/15/136/137) = %d%d%d%d.\n", do_wifi_antenna_switch, gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
+
+	if( sscanf(do_wifi_antenna_switch, "%d\n", &antenna_temp) ){
+		cnss_pr_info("[cnss] parsed antenna %d", antenna_temp);
+	}
+
+	if( antenna_temp <= 1111 ) {
+		antenna_gpio_10 = antenna_temp / 1000;
+		gpio_set_value(wlan_asus_ant_10_gpio, antenna_gpio_10);
+
+		antenna_temp = antenna_temp % 1000;
+		antenna_gpio_15 = antenna_temp / 100;
+		gpio_set_value(wlan_asus_ant_15_gpio, antenna_gpio_15);
+
+		antenna_temp = antenna_temp % 100;
+		antenna_gpio_136 = antenna_temp / 10;
+		gpio_set_value(wlan_asus_ant_136_gpio, antenna_gpio_136);
+
+		antenna_gpio_137 = antenna_temp % 10;
+		gpio_set_value(wlan_asus_ant_137_gpio, antenna_gpio_137);
+	}
+
+	//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
+//	ASUSEvtlog("[wlan]: wifi_antenna_switch GPIO(79/80/64/67) = %d%d%d%d.\n", gpio_get_value(79),gpio_get_value(80),gpio_get_value(64),gpio_get_value(67));
+	//ASUS_BSP--- "for /data/log/ASUSEvtlog"
+
+	cnss_pr_info("[cnss]: wifi_antenna_switch_end = %s, GPIO(10/15/136/137) = %d%d%d%d.\n", do_wifi_antenna_switch, gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
+
+	return 0;
+
+}
+EXPORT_SYMBOL(cnss_setWifiAntenna);
+#endif
+/* ASUS_BSP--- for for wifi antenna switch*/
 
 static int cnss_remove(struct platform_device *plat_dev)
 {

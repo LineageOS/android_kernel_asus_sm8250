@@ -35,6 +35,11 @@
 #include <linux/wakeup_reason.h>
 
 #include "power.h"
+#include <soc/qcom/boot_stats.h>
+
+int pm_stay_unattended_period = 0;
+int pmsp_flag = 0;
+extern void asus_uts_print_active_locks(void);
 
 const char * const pm_labels[] = {
 	[PM_SUSPEND_TO_IDLE] = "freeze",
@@ -69,6 +74,18 @@ bool pm_suspend_via_s2idle(void)
 	return mem_sleep_current == PM_SUSPEND_TO_IDLE;
 }
 EXPORT_SYMBOL_GPL(pm_suspend_via_s2idle);
+
+DEFINE_TIMER(unattended_timer, unattended_timer_expired);
+
+void unattended_timer_expired(struct timer_list *unused)
+{
+	printk("[PM]unattended_timer_expired\n");
+	ASUSEvtlog("[PM]unattended_timer_expired\n");
+	pm_stay_unattended_period += PM_UNATTENDED_TIMEOUT;
+	pmsp_flag = 1;
+	asus_uts_print_active_locks();
+	mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+}
 
 void s2idle_set_ops(const struct platform_s2idle_ops *ops)
 {
@@ -455,6 +472,9 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		if (!(suspend_test(TEST_CORE) || *wakeup)) {
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, true);
+#ifdef CONFIG_ASUS_POWER_DEBUG
+			suspend_happened = true;
+#endif
 			error = suspend_ops->enter(state);
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, false);
@@ -508,6 +528,9 @@ int suspend_devices_and_enter(suspend_state_t state)
 	if (error)
 		goto Close;
 
+	printk("[PM]unattended_timer: del_timer in %s\n", __func__);
+	del_timer(&unattended_timer);
+	pm_stay_unattended_period = 0;
 	suspend_console();
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);

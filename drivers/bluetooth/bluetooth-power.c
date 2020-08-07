@@ -394,6 +394,7 @@ static int bluetooth_power(int on)
 				goto vdd_rfa2_fail;
 			}
 		}
+#ifndef ASUS_ZS661KS_PROJECT
 		if (bt_power_pdata->bt_vdd_asd) {
 			rc = bt_configure_vreg(bt_power_pdata->bt_vdd_asd);
 			if (rc < 0) {
@@ -401,6 +402,7 @@ static int bluetooth_power(int on)
 				goto vdd_asd_fail;
 			}
 		}
+#endif
 		if (bt_power_pdata->bt_chip_pwd) {
 			rc = bt_configure_vreg(bt_power_pdata->bt_chip_pwd);
 			if (rc < 0) {
@@ -442,9 +444,11 @@ clk_fail:
 		if (bt_power_pdata->bt_chip_pwd)
 			bt_vreg_disable(bt_power_pdata->bt_chip_pwd);
 chip_pwd_fail:
+#ifndef ASUS_ZS661KS_PROJECT
 		if (bt_power_pdata->bt_vdd_asd)
 			bt_vreg_disable(bt_power_pdata->bt_vdd_asd);
 vdd_asd_fail:
+#endif
 		if (bt_power_pdata->bt_vdd_rfa2)
 			bt_vreg_disable(bt_power_pdata->bt_vdd_rfa2);
 vdd_rfa2_fail:
@@ -752,10 +756,11 @@ static int bt_power_populate_dt_pinfo(struct platform_device *pdev)
 					&bt_power_pdata->bt_vdd_rfa2,
 					"qca,bt-vdd-rfa2");
 
+#ifndef ASUS_ZS661KS_PROJECT
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_asd,
 					"qca,bt-vdd-asd");
-
+#endif
 		rc = bt_dt_parse_clk_info(&pdev->dev,
 					&bt_power_pdata->bt_chip_clk);
 	}

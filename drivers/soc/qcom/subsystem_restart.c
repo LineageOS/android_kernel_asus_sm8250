@@ -77,6 +77,8 @@ static unsigned long timeout_vals[NUM_SSR_COMMS] = {
 #define init_subsys_timer(subsys)
 #endif /* CONFIG_SETUP_SSR_NOTIF_TIMEOUTS */
 
+#include "linux/asusdebug.h"/*AS-K ASUS SSR and Debug - Save SSR inform to asusdebug+*/
+
 /**
  * enum p_subsys_state - state of a subsystem (private)
  * @SUBSYS_NORMAL: subsystem is operating normally
@@ -344,6 +346,14 @@ static ssize_t system_debug_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(system_debug);
 
+/*AS-K ASUS SSR and Debug - devpath+++*/
+static ssize_t devpath_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", kobject_get_path(&(to_subsys(dev)->desc->dev->kobj), GFP_KERNEL));
+}
+static DEVICE_ATTR_RO(devpath);
+/*AS-K ASUS SSR and Debug - devpath---*/
+
 int subsys_get_restart_level(struct subsys_device *dev)
 {
 	return dev->restart_level;
@@ -386,6 +396,7 @@ static struct attribute *subsys_attrs[] = {
 	&dev_attr_restart_level.attr,
 	&dev_attr_firmware_name.attr,
 	&dev_attr_system_debug.attr,
+	&dev_attr_devpath.attr,/*AS-K ASUS SSR and Debug - devpath+*/
 	NULL,
 };
 
@@ -404,6 +415,48 @@ module_param(enable_ramdumps, int, 0644);
 
 static int enable_mini_ramdumps;
 module_param(enable_mini_ramdumps, int, 0644);
+
+/*AS-K ASUS SSR and Debug+++*/
+static char *ssr_no_dump = NULL;
+module_param(ssr_no_dump, charp, 0644);
+static char *ssr_panic = NULL;
+module_param(ssr_panic, charp, 0644);
+
+#define MAX_SSR_REASON_LEN (128)
+static char *ssr_reason = NULL;
+module_param(ssr_reason, charp, 0444);
+#define SUBSYS_NAME_TAG "SUBSYS_NAME"/*Send SubSys UEvent+*/
+#define SUBSYS_REASON_TAG "SUBSYS_REASON"/*Send SubSys UEvent+*/
+
+void subsys_save_reason(const char *name, char *reason)/*Save SSR reason*/
+{
+	if (strlen(ssr_panic) > 0) {/*panic in a specific reason*/
+		char *pch = strstr(ssr_panic, "\n");
+		if(pch != NULL)
+			strncpy(pch, "\0", 1);
+		if (strstr(reason, ssr_panic) != NULL)
+			panic("%s", reason);
+	}
+
+	strlcpy(ssr_reason, reason, MAX_SSR_REASON_LEN);
+	ASUSEvtlog("[SSR]:%s %s\n", name, reason);/*Save SSR inform to ASUSEvtLog+*/
+	SubSysHealthRecord("[SSR]:%s %s\n", name, reason);/*Save SSR inform to SubSysHealthRecord+*/
+}
+
+int get_ssr_enable_ramdumps(void)/*Skip save ramdump*/
+{
+	if (strlen(ssr_no_dump) > 0) {
+		char *pch = strstr(ssr_no_dump, "\n");
+		if(pch != NULL)
+			strncpy(pch, "\0", 1);
+		if (strstr(ssr_reason, ssr_no_dump) != NULL) {
+			pr_err("[SSR] Skip ramdump for reason = %s, no_dump = %s", ssr_reason, ssr_no_dump);
+			return 0;
+		}
+	}
+	return 1;
+}
+/*AS-K ASUS SSR and Debug---*/
 
 struct workqueue_struct *ssr_wq;
 static struct class *char_class;
@@ -505,6 +558,10 @@ out:
 
 static int is_ramdump_enabled(struct subsys_device *dev)
 {
+	if (!get_ssr_enable_ramdumps()) {/*AS-K Skip save ramdump+*/
+		return 0;
+	}
+
 	if (dev->desc->ramdump_disable_irq)
 		return !dev->desc->ramdump_disable;
 
@@ -1076,6 +1133,11 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	unsigned int count;
 	unsigned long flags;
 	int ret;
+	/*AS-K ASUS SSR and Debug+++*/
+	char mName_Buf[64];
+	char mReason_Buf[512];
+	char *envp[] = {mName_Buf, mReason_Buf, NULL };
+	/*AS-K ASUS SSR and Debug---*/
 
 	/*
 	 * It's OK to not take the registration lock at this point.
@@ -1113,6 +1175,13 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 		return;
 	}
 
+	if (get_ssr_enable_ramdumps()) {/*AS-K ASUS SSR and Debug+*/
+		/*Subsys Offline*/
+		snprintf(mName_Buf, sizeof(mName_Buf), "%s=%s", SUBSYS_NAME_TAG, desc->name);
+		snprintf(mReason_Buf, sizeof(mReason_Buf), "%s=OFFLINE", SUBSYS_REASON_TAG);
+		kobject_uevent_env(&(desc->dev->kobj), KOBJ_OFFLINE, envp);
+	}
+
 	/*
 	 * It's necessary to take the registration lock because the subsystem
 	 * list in the SoC restart order will be traversed and it shouldn't be
@@ -1146,6 +1215,13 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 		goto err;
 	notify_each_subsys_device(list, count, SUBSYS_AFTER_POWERUP, NULL);
 
+	/*AS-K ASUS SSR and Debug+++*/
+	/*Subsys Crash Reason*/
+	snprintf(mName_Buf, sizeof(mName_Buf), "%s=%s", SUBSYS_NAME_TAG, desc->name);
+	snprintf(mReason_Buf, sizeof(mReason_Buf), "%s=[SSR]:%s %s", SUBSYS_REASON_TAG, desc->name, ssr_reason);
+	kobject_uevent_env(&(desc->dev->kobj), KOBJ_CHANGE, envp);
+	/*AS-K ASUS SSR and Debug---*/
+
 	pr_info("[%s:%d]: Restart sequence for %s completed.\n",
 			current->comm, current->pid, desc->name);
 
@@ -1156,6 +1232,13 @@ err:
 
 	mutex_unlock(&soc_order_reg_lock);
 	mutex_unlock(&track->lock);
+
+	if (get_ssr_enable_ramdumps()) {/*AS-K ASUS SSR and Debug+*/
+		/*Subsys Online+++*/
+		snprintf(mName_Buf, sizeof(mName_Buf), "%s=%s", SUBSYS_NAME_TAG, desc->name);
+		snprintf(mReason_Buf, sizeof(mReason_Buf), "%s=[SSR]:%s %s", SUBSYS_REASON_TAG, desc->name, ssr_reason);
+		kobject_uevent_env(&(desc->dev->kobj), KOBJ_ONLINE, envp);
+	}
 
 	spin_lock_irqsave(&track->s_lock, flags);
 	track->p_state = SUBSYS_NORMAL;
@@ -1994,6 +2077,12 @@ static int __init subsys_restart_init(void)
 			&panic_nb);
 	if (ret)
 		goto err_soc;
+
+	/*AS-K ASUS SSR and Debug+++*/
+	ssr_reason = kzalloc(sizeof(char) * MAX_SSR_REASON_LEN, GFP_KERNEL);
+	ssr_panic = kzalloc(sizeof(char) * MAX_SSR_REASON_LEN, GFP_KERNEL);
+	ssr_no_dump = kzalloc(sizeof(char) * MAX_SSR_REASON_LEN, GFP_KERNEL);
+	/*AS-K ASUS SSR and Debug---*/
 
 	return 0;
 

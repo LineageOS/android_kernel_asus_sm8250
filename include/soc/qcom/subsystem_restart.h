@@ -168,7 +168,14 @@ void complete_err_ready(struct subsys_device *subsys);
 void complete_shutdown_ack(struct subsys_device *subsys);
 struct subsys_device *find_subsys_device(const char *str);
 extern int wait_for_shutdown_ack(struct subsys_desc *desc);
+
+extern void subsys_save_reason(const char *name, char *reason);/*AS-K ASUS SSR and Debug+*/
+
 #else
+static inline void subsys_save_reason(const char *name, char *reason)/*AS-K ASUS SSR and Debug+*/
+{
+	return;
+}
 
 static inline int subsys_get_restart_level(struct subsys_device *dev)
 {

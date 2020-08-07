@@ -159,6 +159,12 @@ void show_stack(struct task_struct *tsk, unsigned long *sp)
 	barrier();
 }
 
+/*void dump_stack(void)
+{
+	dump_backtrace(NULL, NULL);
+}
+EXPORT_SYMBOL(dump_stack); //ASUS_BSP Deeo : add for SD Texura module +++
+*/
 #ifdef CONFIG_PREEMPT
 #define S_PREEMPT " PREEMPT"
 #else
@@ -199,8 +205,9 @@ static DEFINE_RAW_SPINLOCK(die_lock);
  */
 void die(const char *str, struct pt_regs *regs, int err)
 {
-	int ret;
+	int ret = 0;
 	unsigned long flags;
+	enum bug_trap_type bug_type = BUG_TRAP_TYPE_NONE;
 
 	raw_spin_lock_irqsave(&die_lock, flags);
 
@@ -210,6 +217,13 @@ void die(const char *str, struct pt_regs *regs, int err)
 	bust_spinlocks(1);
 	ret = __die(str, err, regs);
 
+       if (regs != NULL) {
+               if (!user_mode(regs))
+                       bug_type = report_bug(regs->pc, regs);
+               if (bug_type != BUG_TRAP_TYPE_NONE)
+                       str = "Oops - BUG";
+               ret = __die(str, err, regs);
+       }
 	if (regs && kexec_should_crash(current))
 		crash_kexec(regs);
 
@@ -217,10 +231,14 @@ void die(const char *str, struct pt_regs *regs, int err)
 	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
 	oops_exit();
 
-	if (in_interrupt())
+	if (in_interrupt()){
+		printk("DIE: in int %s", str);
 		panic("Fatal exception in interrupt");
-	if (panic_on_oops)
+	}
+	if (panic_on_oops){
+		printk("DIE: %s", str);
 		panic("Fatal exception");
+	}
 
 	raw_spin_unlock_irqrestore(&die_lock, flags);
 

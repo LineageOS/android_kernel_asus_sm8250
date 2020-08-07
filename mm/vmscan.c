@@ -61,6 +61,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
+// ASUS_BSP +++ get permissive status
+#include <linux/kernel.h>
+// ASUS_BSP --- get permissive status
 
 struct scan_control {
 	/* How many pages shrink_list() should reclaim */
@@ -4133,6 +4136,161 @@ void kswapd_stop(int nid)
 	}
 }
 
+static DECLARE_WAIT_QUEUE_HEAD(RoutineWaitQueue);
+static DECLARE_WAIT_QUEUE_HEAD(RoutineTimeoutWaitQueue);
+
+#define DSelinuxEnforceFile "/sys/fs/selinux/enforce"
+bool g_bSetEnforceChanged;
+static bool g_bSetEnforceTimeout;
+static bool g_bSetEnforce;
+static void asussetenforce(void)
+{
+	struct file *pFile = NULL;
+	char buf[8] = "";
+	mm_segment_t old_fs;
+
+	if (pFile == NULL)
+		pFile = filp_open(DSelinuxEnforceFile, O_RDWR, 0);
+
+	if (IS_ERR(pFile)) {
+		printk("[SELinux] Failed to open enforce file\n");
+	} else {
+		printk("[SELinux] Succeed in opening enforce file\n");
+		old_fs = get_fs();
+		set_fs(get_ds());
+		snprintf(buf, sizeof buf, "%d", g_bSetEnforce);
+		pFile->f_op->write(pFile, (char *)buf, sizeof(buf), &pFile->f_pos);
+		set_fs(old_fs);
+
+		filp_close(pFile, NULL);
+	}
+}
+
+#include <linux/proc_fs.h>
+#define DRDCmdMaxLength 100
+#define DAsusSetEnforce "asussetenforce"
+#define DAsusSetEnforceLength strlen(DAsusSetEnforce)
+char g_szRD[DRDCmdMaxLength] = "";
+int g_count = 0;
+
+int wake_setselinux_wq(int nValue){
+
+// ASUS_BSP +++ get permissive status
+	if(permissive_enable == 1 && nValue == 0)
+	{
+		printk("[SELinux] CmdLine : androidboot.selinux=permissive !!(%d)\n", nValue);
+		return 0;
+	}
+// ASUS_BSP --- get permissive status
+
+	sprintf(g_szRD, "%s", DAsusSetEnforce);
+	g_bSetEnforce = nValue;
+	g_bSetEnforceChanged = 1;
+	wake_up_interruptible(&RoutineWaitQueue);
+	g_count++;
+	return 1;
+}
+
+static ssize_t proc_rd_read(struct file *filp, char __user *buff, size_t len, loff_t *off)
+{
+	static unsigned int nFlag;
+	unsigned int ret = 0, iret = 0;
+	nFlag = !nFlag;
+	if (!nFlag)
+		return 0;
+
+	ret = strlen(g_szRD);
+	iret = copy_to_user(buff, g_szRD, ret);
+	return ret;
+}
+
+static ssize_t proc_rd_write(struct file *filp, const char __user *buff, size_t len, loff_t *off)
+{
+	char *pPos;
+
+	if (len > DRDCmdMaxLength - 1)
+		len = DRDCmdMaxLength - 1;
+
+	if (copy_from_user(g_szRD, buff, len))
+	{
+		return -EFAULT;
+	}
+
+	g_szRD[len] = '\0';
+	pPos = strchr (g_szRD, ':');
+
+	if (pPos) {
+		if (!strncmp(g_szRD, DAsusSetEnforce, pPos - g_szRD)) {
+			if (*pPos == ':') {
+				if (*(pPos+2) == '\n' || *(pPos+2) == '\0') {
+					int nValue = *(pPos+1) - '0';
+					if (nValue == 0 || nValue == 1) {
+						printk("[SELinux] Setting enforce to %d\n", nValue);
+						wake_setselinux_wq(nValue);
+					}
+				}
+
+			}
+		}
+	}
+	return len;
+}
+
+static struct file_operations proc_rd_ops = {
+    .read = proc_rd_read,
+    .write = proc_rd_write,
+};
+
+static int routine(void *pData)
+{
+	while (1) {
+		wait_event_interruptible(RoutineWaitQueue, g_bSetEnforceChanged != 0);
+		asussetenforce();
+		g_bSetEnforceChanged = 0;
+		g_bSetEnforceTimeout = 1;
+		wake_up_interruptible(&RoutineTimeoutWaitQueue);
+		if (kthread_should_stop())
+			break;
+	}
+	return 0;
+}
+
+static int routine_timeout(void *pData)
+{
+	while (1) {
+		wait_event_interruptible(RoutineTimeoutWaitQueue, g_bSetEnforceTimeout != 0);
+		//msleep(30000);
+		while(g_count > 0){
+			/* wait for 3 mins */
+			msleep(180000);
+			g_count--;
+		}
+		g_count = 0;
+		g_bSetEnforce = 1;
+		asussetenforce();
+		g_bSetEnforceTimeout = 0;
+
+		if (kthread_should_stop())
+			break;
+	}
+	return 0;
+}
+
+struct task_struct *g_pRoutine;
+struct task_struct *g_pRoutine_timeout;
+static void routine_init(void)
+{
+	if (g_pRoutine)
+		return;
+
+	g_pRoutine = kthread_run(routine, NULL, "kroutined");
+
+	if (g_pRoutine_timeout)
+		return;
+
+	g_pRoutine_timeout = kthread_run(routine_timeout, NULL, "kroutined_timeout");
+}
+
 static int __init kswapd_init(void)
 {
 	int nid, ret;
@@ -4144,6 +4302,8 @@ static int __init kswapd_init(void)
 					"mm/vmscan:online", kswapd_cpu_online,
 					NULL);
 	WARN_ON(ret < 0);
+	proc_create("rd", S_IRWXUGO, NULL, &proc_rd_ops);
+	routine_init();
 	return 0;
 }
 

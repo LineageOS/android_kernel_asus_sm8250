@@ -690,6 +690,7 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 	int r = 0;
 	struct nqx_dev *nqx_dev = filp->private_data;
 
+	dev_info(&nqx_dev->client->dev, "[NFC] nfc_ioctl_power_states:%lu\n", arg);
 	if (arg == NFC_POWER_OFF) {
 		/*
 		 * We are attempting a hardware reset so let us disable
@@ -746,6 +747,7 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 		 * We are switching to Dowload Mode, toggle the enable pin
 		 * in order to set the NFCC in the new mode
 		 */
+		dev_info(&nqx_dev->client->dev, "[NFC] We are switching to Download Mode.\n");
 		if (gpio_is_valid(nqx_dev->ese_gpio)) {
 			if (gpio_get_value(nqx_dev->ese_gpio)) {
 				dev_err(&nqx_dev->client->dev,
@@ -753,6 +755,12 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 				return -EBUSY; /* Device or resource busy */
 			}
 		}
+
+		if (!nqx_dev->irq_enabled) {
+			dev_info(&nqx_dev->client->dev, "[NFC] enable irq for FW Dowload Mode.");
+			nqx_enable_irq(nqx_dev);
+		}
+
 		gpio_set_value(nqx_dev->en_gpio, 1);
 		usleep_range(10000, 10100);
 		if (gpio_is_valid(nqx_dev->firm_gpio)) {
@@ -924,221 +932,6 @@ static const struct file_operations nfc_dev_fops = {
 	.compat_ioctl = nfc_compat_ioctl
 #endif
 };
-
-/* Check for availability of NQ_ NFC controller hardware */
-static int nfcc_hw_check(struct i2c_client *client, struct nqx_dev *nqx_dev)
-{
-	int ret = 0;
-
-	int gpio_retry_count = 0;
-	unsigned char reset_ntf_len = 0;
-	unsigned int enable_gpio = nqx_dev->en_gpio;
-	char *nci_reset_cmd = NULL;
-	char *nci_reset_rsp = NULL;
-	char *nci_reset_ntf = NULL;
-	char *nci_get_version_cmd = NULL;
-	char *nci_get_version_rsp = NULL;
-
-	nci_reset_cmd = kzalloc(NCI_RESET_CMD_LEN + 1, GFP_DMA | GFP_KERNEL);
-	if (!nci_reset_cmd) {
-		ret = -ENOMEM;
-		goto done;
-	}
-
-	nci_reset_rsp = kzalloc(NCI_RESET_RSP_LEN + 1,  GFP_DMA | GFP_KERNEL);
-	if (!nci_reset_rsp) {
-		ret = -ENOMEM;
-		goto done;
-	}
-
-	nci_reset_ntf = kzalloc(NCI_RESET_NTF_LEN + 1,  GFP_DMA | GFP_KERNEL);
-	if (!nci_reset_ntf) {
-		ret = -ENOMEM;
-		goto done;
-	}
-
-	nci_get_version_cmd = kzalloc(NCI_GET_VERSION_CMD_LEN + 1,
-					GFP_DMA | GFP_KERNEL);
-	if (!nci_get_version_cmd) {
-		ret = -ENOMEM;
-		goto done;
-	}
-
-	nci_get_version_rsp = kzalloc(NCI_GET_VERSION_RSP_LEN + 1,
-					GFP_DMA | GFP_KERNEL);
-	if (!nci_get_version_rsp) {
-		ret = -ENOMEM;
-		goto done;
-	}
-
-reset_enable_gpio:
-	/* making sure that the NFCC starts in a clean state. */
-	gpio_set_value(enable_gpio, 1);/* HPD : Enable*/
-	/* hardware dependent delay */
-	usleep_range(10000, 10100);
-	gpio_set_value(enable_gpio, 0);/* ULPM: Disable */
-	/* hardware dependent delay */
-	usleep_range(10000, 10100);
-	gpio_set_value(enable_gpio, 1);/* HPD : Enable*/
-	/* hardware dependent delay */
-	usleep_range(10000, 10100);
-
-	nci_reset_cmd[0] = 0x20;
-	nci_reset_cmd[1] = 0x00;
-	nci_reset_cmd[2] = 0x01;
-	nci_reset_cmd[3] = 0x00;
-	/* send NCI CORE RESET CMD with Keep Config parameters */
-	ret = i2c_master_send(client, nci_reset_cmd, NCI_RESET_CMD_LEN);
-	if (ret < 0) {
-		dev_err(&client->dev,
-		"%s: - i2c_master_send core reset Error\n", __func__);
-
-		if (gpio_is_valid(nqx_dev->firm_gpio)) {
-			gpio_set_value(nqx_dev->firm_gpio, 1);
-			usleep_range(10000, 10100);
-		}
-		gpio_set_value(nqx_dev->en_gpio, 0);
-		usleep_range(10000, 10100);
-		gpio_set_value(nqx_dev->en_gpio, 1);
-		usleep_range(10000, 10100);
-
-		nci_get_version_cmd[0] = 0x00;
-		nci_get_version_cmd[1] = 0x04;
-		nci_get_version_cmd[2] = 0xF1;
-		nci_get_version_cmd[3] = 0x00;
-		nci_get_version_cmd[4] = 0x00;
-		nci_get_version_cmd[5] = 0x00;
-		nci_get_version_cmd[6] = 0x6E;
-		nci_get_version_cmd[7] = 0xEF;
-		ret = i2c_master_send(client, nci_get_version_cmd,
-						NCI_GET_VERSION_CMD_LEN);
-
-		if (ret < 0) {
-			dev_err(&client->dev,
-				"%s: - i2c_master_send get version cmd Error\n",
-				__func__);
-			goto err_nfcc_hw_check;
-		}
-		/* hardware dependent delay */
-		usleep_range(10000, 10100);
-
-		ret = i2c_master_recv(client, nci_get_version_rsp,
-						NCI_GET_VERSION_RSP_LEN);
-		if (ret < 0) {
-			dev_err(&client->dev,
-				"%s: - i2c_master_recv get version rsp Error\n",
-				__func__);
-			goto err_nfcc_hw_check;
-		} else {
-			nqx_dev->nqx_info.info.chip_type =
-				nci_get_version_rsp[3];
-			nqx_dev->nqx_info.info.rom_version =
-				nci_get_version_rsp[4];
-			nqx_dev->nqx_info.info.fw_minor =
-				nci_get_version_rsp[6];
-			nqx_dev->nqx_info.info.fw_major =
-				nci_get_version_rsp[7];
-		}
-		goto err_nfcc_reset_failed;
-	}
-
-	ret = is_data_available_for_read(nqx_dev);
-	if (ret <= 0) {
-		nqx_disable_irq(nqx_dev);
-		goto err_nfcc_hw_check;
-	}
-
-	/* Read Response of RESET command */
-	ret = i2c_master_recv(client, nci_reset_rsp, NCI_RESET_RSP_LEN);
-	if (ret < 0) {
-		dev_err(&client->dev,
-		"%s: - i2c_master_recv Error\n", __func__);
-		gpio_retry_count = gpio_retry_count + 1;
-		if (gpio_retry_count < MAX_RETRY_COUNT)
-			goto reset_enable_gpio;
-		goto err_nfcc_hw_check;
-	}
-
-	ret = is_data_available_for_read(nqx_dev);
-	if (ret <= 0) {
-		nqx_disable_irq(nqx_dev);
-		goto err_nfcc_hw_check;
-	}
-
-	/* Read Notification of RESET command */
-	ret = i2c_master_recv(client, nci_reset_ntf, NCI_RESET_NTF_LEN);
-	if (ret < 0) {
-		dev_err(&client->dev,
-		"%s: - i2c_master_recv Error\n", __func__);
-		goto err_nfcc_hw_check;
-	}
-
-	reset_ntf_len = 2 + nci_reset_ntf[2]; /*payload + len*/
-	if (reset_ntf_len > PAYLOAD_HEADER_LENGTH) {
-		nqx_dev->nqx_info.info.chip_type =
-				nci_reset_ntf[reset_ntf_len - 3];
-		nqx_dev->nqx_info.info.rom_version =
-				nci_reset_ntf[reset_ntf_len - 2];
-		nqx_dev->nqx_info.info.fw_major =
-				nci_reset_ntf[reset_ntf_len - 1];
-		nqx_dev->nqx_info.info.fw_minor =
-				nci_reset_ntf[reset_ntf_len];
-	}
-	dev_dbg(&client->dev,
-		"%s: - nq - reset cmd answer : NfcNciRx %x %x %x\n",
-		__func__, nci_reset_rsp[0],
-		nci_reset_rsp[1], nci_reset_rsp[2]);
-
-err_nfcc_reset_failed:
-	dev_dbg(&nqx_dev->client->dev, "NQ NFCC chip_type = %x\n",
-		nqx_dev->nqx_info.info.chip_type);
-	dev_dbg(&nqx_dev->client->dev, "NQ fw version = %x.%x.%x\n",
-		nqx_dev->nqx_info.info.rom_version,
-		nqx_dev->nqx_info.info.fw_major,
-		nqx_dev->nqx_info.info.fw_minor);
-
-	switch (nqx_dev->nqx_info.info.chip_type) {
-	case NFCC_NQ_310:
-		dev_dbg(&client->dev,
-		"%s: ## NFCC == NQ310 ##\n", __func__);
-		break;
-	case NFCC_NQ_330:
-		dev_dbg(&client->dev,
-		"%s: ## NFCC == NQ330 ##\n", __func__);
-		break;
-	case NFCC_PN66T:
-		dev_dbg(&client->dev,
-		"%s: ## NFCC == PN66T ##\n", __func__);
-		break;
-	case NFCC_SN100_A:
-	case NFCC_SN100_B:
-		dev_dbg(&client->dev,
-		"%s: ## NFCC == SN100x ##\n", __func__);
-		break;
-	default:
-		dev_err(&client->dev,
-		"%s: - NFCC HW not Supported\n", __func__);
-		break;
-	}
-
-	ret = 0;
-	nqx_dev->nfc_ven_enabled = true;
-	goto done;
-
-err_nfcc_hw_check:
-	ret = -ENXIO;
-	dev_err(&client->dev,
-		"%s: - NFCC HW not available\n", __func__);
-
-done:
-	kfree(nci_reset_rsp);
-	kfree(nci_reset_ntf);
-	kfree(nci_reset_cmd);
-	kfree(nci_get_version_cmd);
-	kfree(nci_get_version_rsp);
-
-	return ret;
-}
 
 /*
  * Routine to enable clock.
@@ -1471,13 +1264,7 @@ static int nqx_probe(struct i2c_client *client,
 	 * present before attempting further hardware initialisation.
 	 *
 	 */
-	r = nfcc_hw_check(client, nqx_dev);
-	if (r) {
-		/* make sure NFCC is not enabled */
-		gpio_set_value(platform_data->en_gpio, 0);
-		/* We don't think there is hardware switch NFC OFF */
-		goto err_request_hw_check_failed;
-	}
+	dev_info(&client->dev, "%s: - Skip nfcc_hw_check i2c for FW recovery.\n", __func__);
 
 	/* Register reboot notifier here */
 	r = register_reboot_notifier(&nfcc_notifier);

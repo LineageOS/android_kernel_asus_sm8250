@@ -9,6 +9,9 @@ void snd_emuusb_set_samplerate(struct snd_usb_audio *chip,
 
 void snd_usb_mixer_rc_memory_change(struct usb_mixer_interface *mixer,
 				    int unitid);
+/* ASUS_BSP +++ */
+void set_asus_eu_type(int eu_type);
+/* ASUS_BSP --- */
 
 void snd_usb_mixer_fu_apply_quirk(struct usb_mixer_interface *mixer,
 				  struct usb_mixer_elem_info *cval, int unitid,

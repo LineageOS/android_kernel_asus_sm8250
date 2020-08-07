@@ -315,6 +315,12 @@ int security_get_permissions(struct selinux_state *state,
 int security_get_reject_unknown(struct selinux_state *state);
 int security_get_allow_unknown(struct selinux_state *state);
 
+/* ASUS BSP Debug */
+int security_set_aps(struct selinux_state *state, int nValue);
+int security_get_aps(struct selinux_state *state);
+int security_set_asus(struct selinux_state *state, int nValue);
+int security_get_asus(struct selinux_state *state);
+
 #define SECURITY_FS_USE_XATTR		1 /* use xattr */
 #define SECURITY_FS_USE_TRANS		2 /* use transition SIDs, e.g. devpts/tmpfs */
 #define SECURITY_FS_USE_TASK		3 /* use task SIDs, e.g. pipefs/sockfs */

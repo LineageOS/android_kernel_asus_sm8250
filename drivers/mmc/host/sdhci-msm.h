@@ -150,6 +150,13 @@ struct sdhci_msm_pltfm_data {
 	unsigned char sup_ice_clk_cnt;
 	u32 ice_clk_max;
 	u32 ice_clk_min;
+
+//ASUS_SZ_BSP  bevis: for zf7 sdcard power-off sequence +++
+#ifdef ZS670KS
+	struct mmc_host *mmc;
+#endif
+//ASUS_SZ_BSP  bevis: for zf7 sdcard power-off sequence ---
+
 };
 
 struct sdhci_msm_bus_vote {

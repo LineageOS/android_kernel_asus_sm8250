@@ -31,6 +31,39 @@ type_show(struct device *dev, struct device_attribute *attr, char *buf)
 	return sprintf(buf, "%s\n", tz->type);
 }
 
+#ifdef ASUS_ZS661KS_PROJECT
+extern int G_skin_therm_temp;
+extern int G_skin_msm_therm_temp;
+extern int G_virtual_therm_temp;
+extern int G_virtual_therm_temp_prev;
+bool G_use_backup_therm_flag = false;
+
+int thermal_virtual_therm_get(void){
+	return G_virtual_therm_temp;
+}
+EXPORT_SYMBOL(thermal_virtual_therm_get);
+
+static int smooth_virtual_therm_temp(int temp){
+	int cur_shift_temp = 200;
+	/* G_virtual_therm_temp will be 0 by default (1st) */
+	if(G_virtual_therm_temp == 0){
+		return temp;
+	}
+	if((temp - G_virtual_therm_temp_prev) >= cur_shift_temp){
+		return G_virtual_therm_temp_prev + cur_shift_temp;
+	}else if ((temp - G_virtual_therm_temp_prev) <= -cur_shift_temp){
+		return G_virtual_therm_temp_prev - cur_shift_temp;
+	} else {
+		return temp;
+	}
+	return temp;
+}
+
+static int get_virtual_temp(void){
+	return G_skin_therm_temp - 2500;
+}
+#endif
+
 static ssize_t
 temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -41,8 +74,19 @@ temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	if (ret)
 		return ret;
-
+	
+#ifdef ASUS_ZS661KS_PROJECT
+	if(tz->id == 82){
+		G_virtual_therm_temp_prev = G_virtual_therm_temp;
+		temperature = get_virtual_temp();
+		G_virtual_therm_temp = smooth_virtual_therm_temp(temperature);
+		return sprintf(buf, "%d\n", G_virtual_therm_temp);
+	}else{
+		return sprintf(buf, "%d\n", temperature);
+	}
+#else
 	return sprintf(buf, "%d\n", temperature);
+#endif
 }
 
 static ssize_t

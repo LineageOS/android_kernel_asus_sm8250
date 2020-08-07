@@ -123,6 +123,10 @@
  * PATH_MAX includes the nul terminator --RR.
  */
 
+extern bool g_is_country_code_EU;
+extern bool g_is_country_code_RU;
+extern bool g_is_country_code_WW;
+
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
 struct filename *
@@ -153,6 +157,49 @@ getname_flags(const char __user *filename, int flags, int *empty)
 		__putname(result);
 		return ERR_PTR(len);
 	}
+
+	if (!strncmp(kname, "/vendor/build.prop", 18)) {
+
+		if (g_is_country_code_EU){
+			//printk("%s: load build.prop from build_eu.prop",__func__);
+			if(g_ASUS_prjID == 0){
+				strncpy(kname, "/vendor/build_eu.prop", EMBEDDED_NAME_MAX);
+				len = 21;
+			}else{
+				strncpy(kname, "/vendor/build_eu_elite.prop", EMBEDDED_NAME_MAX);
+				len = 27;
+			}
+		}else if(g_is_country_code_RU){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/vendor/build_ru.prop", EMBEDDED_NAME_MAX);
+			len = 21;
+		}else if(g_is_country_code_WW && g_ASUS_prjID == 1){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/vendor/build_ww_elite.prop", EMBEDDED_NAME_MAX);
+			len = 27;
+		}
+
+    }else if (!strncmp(kname, "/odm/etc/build.prop", 19)) {
+
+		if (g_is_country_code_EU){
+			//printk("%s: load build.prop from build_eu.prop",__func__);
+			if(g_ASUS_prjID == 0){
+				strncpy(kname, "/odm/etc/build_eu.prop", EMBEDDED_NAME_MAX);
+				len = 22;
+			}else{
+				strncpy(kname, "/odm/etc/build_eu_elite.prop", EMBEDDED_NAME_MAX);
+				len = 28;
+			}
+		}else if(g_is_country_code_RU){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/odm/etc/build_ru.prop", EMBEDDED_NAME_MAX);
+			len = 22;
+		}else if(g_is_country_code_WW && g_ASUS_prjID == 1){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/odm/etc/build_ww_elite.prop", EMBEDDED_NAME_MAX);
+			len = 28;
+		}
+    }
 
 	/*
 	 * Uh-oh. We have a name that's approaching PATH_MAX. Allocate a
@@ -305,8 +352,10 @@ static int acl_permission_check(struct inode *inode, int mask)
 				return error;
 		}
 
-		if (in_group_p(inode->i_gid))
-			mode >>= 3;
+               if (in_group_p(inode->i_gid) ||
+                     (__kgid_val(inode->i_gid)==9997 && in_group_p(KGIDT_INIT(235709997))) ||
+                     (__kgid_val(inode->i_gid)==235709997 && in_group_p(KGIDT_INIT(9997))))
+                       mode >>= 3;
 	}
 
 	/*
@@ -1020,6 +1069,8 @@ static int may_linkat(struct path *link)
  *			  should be allowed, or not, on files that already
  *			  exist.
  * @dir: the sticky parent directory
+ * @dir_mode: mode bits of directory
+ * @dir_uid: owner of directory
  * @inode: the inode of the file to open
  *
  * Block an O_CREAT open of a FIFO (or a regular file) when:
@@ -1035,18 +1086,18 @@ static int may_linkat(struct path *link)
  *
  * Returns 0 if the open is allowed, -ve on error.
  */
-static int may_create_in_sticky(struct dentry * const dir,
+static int may_create_in_sticky(umode_t dir_mode, kuid_t dir_uid,
 				struct inode * const inode)
 {
 	if ((!sysctl_protected_fifos && S_ISFIFO(inode->i_mode)) ||
 	    (!sysctl_protected_regular && S_ISREG(inode->i_mode)) ||
-	    likely(!(dir->d_inode->i_mode & S_ISVTX)) ||
-	    uid_eq(inode->i_uid, dir->d_inode->i_uid) ||
+	    likely(!(dir_mode & S_ISVTX)) ||
+	    uid_eq(inode->i_uid, dir_uid) ||
 	    uid_eq(current_fsuid(), inode->i_uid))
 		return 0;
 
-	if (likely(dir->d_inode->i_mode & 0002) ||
-	    (dir->d_inode->i_mode & 0020 &&
+	if (likely(dir_mode & 0002) ||
+	    (dir_mode & 0020 &&
 	     ((sysctl_protected_fifos >= 2 && S_ISFIFO(inode->i_mode)) ||
 	      (sysctl_protected_regular >= 2 && S_ISREG(inode->i_mode))))) {
 		return -EACCES;
@@ -3296,6 +3347,8 @@ static int do_last(struct nameidata *nd,
 		   struct file *file, const struct open_flags *op)
 {
 	struct dentry *dir = nd->path.dentry;
+	kuid_t dir_uid = dir->d_inode->i_uid;
+	umode_t dir_mode = dir->d_inode->i_mode;
 	int open_flag = op->open_flag;
 	bool will_truncate = (open_flag & O_TRUNC) != 0;
 	bool got_write = false;
@@ -3431,7 +3484,7 @@ finish_open:
 		error = -EISDIR;
 		if (d_is_dir(nd->path.dentry))
 			goto out;
-		error = may_create_in_sticky(dir,
+		error = may_create_in_sticky(dir_mode, dir_uid,
 					     d_backing_inode(nd->path.dentry));
 		if (unlikely(error))
 			goto out;

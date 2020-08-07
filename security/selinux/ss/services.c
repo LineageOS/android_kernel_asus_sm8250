@@ -2805,6 +2805,100 @@ out:
 	return rc;
 }
 
+/* ASUS BSP Debug +++ */
+#define DAPS_TYPE "su"
+#define ADBD_DOMAIN "adbd"
+static int security_set_ps(struct selinux_state *state, char *rulestr, int value)
+{
+	int rc = 0;
+	struct type_datum *typedatum;
+	struct policydb *policydb = &state->ss->policydb;
+
+	write_lock_irq(&state->ss->policy_rwlock);
+	typedatum = hashtab_search(policydb->p_types.table, rulestr);
+	if (!typedatum){
+		printk("SELinux: unrecognized type %s \n", rulestr);
+		goto out;
+	}
+
+	rc = ebitmap_set_bit(&policydb->permissive_map, typedatum->value, value);
+	if (rc) {
+		printk("SELinux: unable to set bit in map %d \n", rc);
+		goto out;
+	}
+
+	avc_disable();
+
+out:
+	write_unlock_irq(&state->ss->policy_rwlock);
+	return rc;
+}
+
+int security_set_aps(struct selinux_state *state, int value)
+{
+	int rc = 0;
+
+	if(security_set_ps(state, DAPS_TYPE, value)){
+		printk("SELinux: unlocked\n");
+		rc = 1;
+	}
+
+	if(security_set_ps(state, ADBD_DOMAIN, value)){
+		printk("SELinux: unlocked\n");
+		rc = 1;
+	}
+
+
+	return rc;
+}
+
+static int security_get_ps(struct selinux_state *state, char *rulestr)
+{
+	int rc = 0;
+	struct type_datum *typedatum;
+	struct policydb *policydb = &state->ss->policydb;
+
+	write_lock_irq(&state->ss->policy_rwlock);
+
+	typedatum = hashtab_search(policydb->p_types.table, rulestr);
+
+	if (!typedatum) {
+		printk("SELinux: unrecognized type %s \n", rulestr);
+		goto out;
+	}
+
+	rc = ebitmap_get_bit(&policydb->permissive_map, typedatum->value);
+
+out:
+	write_unlock_irq(&state->ss->policy_rwlock);
+	return rc;
+}
+
+int security_get_aps(struct selinux_state *state)
+{
+	return security_get_ps(state, DAPS_TYPE);
+}
+
+#define SAVELOG_DOMAIN "savelogmtp"
+int security_set_asus(struct selinux_state *state, int value)
+{
+	int rc = 0;
+
+	printk("SELinux: set asus security %d\n", value );
+	if(security_set_ps(state, SAVELOG_DOMAIN, value)){
+		printk("SELinux: savelogmtp enable\n");
+		rc = 1;
+	}
+
+	return rc;
+}
+
+int security_get_asus(struct selinux_state *state)
+{
+	return security_get_ps(state, SAVELOG_DOMAIN);
+}
+/* ASUS BSP Debug --- */
+
 int security_get_bools(struct selinux_state *state,
 		       int *len, char ***names, int **values)
 {

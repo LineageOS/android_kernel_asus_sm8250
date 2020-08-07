@@ -21,6 +21,14 @@
 
 #define to_class_attr(_attr) container_of(_attr, struct class_attribute, attr)
 
+struct kobject* asus_class_get_kobj(struct class *cls)
+{
+       if (cls)
+               return &cls->p->subsys.kobj;
+       return NULL;
+}
+EXPORT_SYMBOL(asus_class_get_kobj);
+
 static ssize_t class_attr_show(struct kobject *kobj, struct attribute *attr,
 			       char *buf)
 {

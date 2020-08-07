@@ -95,6 +95,7 @@ struct usb_gsi_request {
 	u32 db_reg_phs_addr_msb;
 	struct sg_table sgt_trb_xfer_ring;
 	struct sg_table sgt_data_buff;
+	struct device *dev;
 };
 
 /*

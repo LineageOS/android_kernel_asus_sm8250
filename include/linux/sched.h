@@ -541,6 +541,9 @@ struct sched_entity {
 	 */
 	struct sched_avg		avg;
 #endif
+
+	int binder_sender_pid;
+	int binder_sender_tid;
 };
 
 struct sched_load {

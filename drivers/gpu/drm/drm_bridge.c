@@ -377,6 +377,23 @@ struct drm_bridge *of_drm_find_bridge(struct device_node *np)
 EXPORT_SYMBOL(of_drm_find_bridge);
 #endif
 
+#ifdef ASUS_ZS661KS_PROJECT
+/* ASUS BSP Display +++ */
+void drm_bridge_asus_dfps(struct drm_bridge *bridge, int type)
+{
+	if (!bridge)
+		return;
+
+	if (bridge->funcs->asus_dfps)
+		bridge->funcs->asus_dfps(bridge, type);
+
+	drm_bridge_asus_dfps(bridge->next, type);
+
+}
+EXPORT_SYMBOL(drm_bridge_asus_dfps);
+/* ASUS BSP Display --- */
+#endif
+
 MODULE_AUTHOR("Ajay Kumar <ajaykumar.rs@samsung.com>");
 MODULE_DESCRIPTION("DRM bridge infrastructure");
 MODULE_LICENSE("GPL and additional rights");

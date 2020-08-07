@@ -1293,6 +1293,7 @@ static int configfs_composite_bind(struct usb_gadget *gadget,
 	int				ret;
 
 	/* the gi->lock is hold by the caller */
+	pr_info("[USB][CONFIGFS] %s +++\n", __func__);
 	cdev->gadget = gadget;
 	set_gadget_data(gadget, cdev);
 	ret = composite_dev_prepare(composite, cdev);
@@ -1402,6 +1403,7 @@ static int configfs_composite_bind(struct usb_gadget *gadget,
 				list_add(&f->list, &cfg->func_list);
 				goto err_purge_funcs;
 			}
+			pr_info("[USB][CONFIGFS] Binding function: %s\n", f->name);
 		}
 		usb_ep_autoconfig_reset(cdev->gadget);
 	}

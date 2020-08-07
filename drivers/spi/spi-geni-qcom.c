@@ -748,7 +748,19 @@ static int spi_geni_unprepare_message(struct spi_master *spi_mas,
 		spi_geni_unmap_buf(mas, spi_msg);
 	return 0;
 }
-
+int asus_get_se_proto(struct spi_device *spi)
+{
+	struct spi_controller *ctlr = spi->controller;
+	struct spi_geni_master *mas = spi_master_get_devdata(ctlr);
+	int proto = -1;
+	
+	mutex_lock(&spi->controller->bus_lock_mutex);
+	mutex_lock(&spi->controller->io_mutex);
+	proto = get_se_proto(mas->base);
+	mutex_unlock(&spi->controller->io_mutex);
+	mutex_unlock(&spi->controller->bus_lock_mutex);
+	return proto;
+}
 static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);

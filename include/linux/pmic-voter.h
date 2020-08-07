@@ -45,4 +45,7 @@ void destroy_votable(struct votable *votable);
 void lock_votable(struct votable *votable);
 void unlock_votable(struct votable *votable);
 
+int asus_dump_voter(struct votable *votable);
+int asus_exclusive_vote(struct votable *votable, const char *client_str, bool enabled, int val);
+
 #endif /* __PMIC_VOTER_H */

@@ -70,8 +70,11 @@
 #define TEMP_BUFFER_OUTPUT_BIT		BIT(7)
 
 #define CORE_FTRIM_LVL_REG		0x1033
+#define CFG_INPUT_OV_LVL_BIT		BIT(6)
 #define CFG_WIN_HI_MASK			GENMASK(3, 2)
 #define WIN_OV_LVL_1000MV		0x08
+#define WIN_OV_LVL_800MV		0x04
+#define CFG_WIN_LO_MASK			GENMASK(1, 0)
 
 #define CORE_FTRIM_MISC_REG		0x1034
 #define TR_WIN_1P5X_BIT			BIT(0)
@@ -110,6 +113,9 @@
 #define CC_MODE_TAPER_DELTA_UA		200000
 #define DEFAULT_TAPER_DELTA_UA		100000
 #define CC_MODE_TAPER_MAIN_ICL_UA	500000
+#define ILIM_1500MA			1500000
+#define ILIM_2500MA			2500000
+
 
 #define smb1390_dbg(chip, reason, fmt, ...)				\
 	do {								\
@@ -864,6 +870,7 @@ static int smb1390_disable_vote_cb(struct votable *votable, void *data,
 		vote(chip->slave_disable_votable, MAIN_DISABLE_VOTER,
 					disable ? true : false, 0);
 
+	pr_err("[BAT][CHG]disable=%d smb1390\n", disable);
 	rc = smb1390_masked_write(chip, CORE_CONTROL1_REG, CMD_EN_SWITCHER_BIT,
 				  disable ? 0 : CMD_EN_SWITCHER_BIT);
 	if (rc < 0) {
@@ -2036,6 +2043,38 @@ static int smb1390_init_cps_psy(struct smb1390 *chip)
 	return 0;
 }
 
+struct smb1390 *chip_dev = NULL;
+void asus_charger_smb1390_setting(void)
+{
+	int rc;
+//1. CFG_ILIM = 1.5A  
+	vote(chip_dev->ilim_votable, ICL_VOTER, true, ILIM_2500MA);
+
+//2.CFG_INPUT_OV_LVL = 12V, 0x1033 bit[6]=0x1
+	rc = smb1390_masked_write(chip_dev, CORE_FTRIM_LVL_REG,
+			CFG_INPUT_OV_LVL_BIT, 0x01);
+	if (rc < 0){
+		pr_err("Couldn't set CFG_INPUT_OV_LVL to 12V\n");
+	}
+
+//3.CFG_WIN_HI = 800MV
+	rc = smb1390_masked_write(chip_dev, CORE_FTRIM_LVL_REG,
+			CFG_WIN_HI_MASK, WIN_OV_LVL_800MV);
+	if (rc < 0){
+		pr_err("Couldn't set CFG_WIN_HI to 800MV\n");
+	}
+
+//4.CFG_WIN_LO = 0MV
+	rc = smb1390_masked_write(chip_dev, CORE_FTRIM_LVL_REG,
+			CFG_WIN_LO_MASK, 0x0);
+	if (rc < 0){
+		pr_err("Couldn't set CFG_WIN_LO to 0MV\n");
+	}
+//5.QC4 Thermal balance = 6 ̊C < SMB1390_TEMP -PM8150B_TEMP < 10 ̊C
+//6. Input Maximum Voltage = 11V
+}
+EXPORT_SYMBOL(asus_charger_smb1390_setting);
+
 static int smb1390_slave_probe(struct smb1390 *chip)
 {
 	int stat, rc;
@@ -2085,7 +2124,7 @@ static int smb1390_probe(struct platform_device *pdev)
 		pr_err("Couldn't get regmap\n");
 		return -EINVAL;
 	}
-
+	chip_dev = chip;
 	platform_set_drvdata(pdev, chip);
 	chip->cp_role = (int)of_device_get_match_data(chip->dev);
 	switch (chip->cp_role) {

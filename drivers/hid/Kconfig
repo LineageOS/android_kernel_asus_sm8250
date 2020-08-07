@@ -1088,6 +1088,12 @@ config HID_QVR
 	Say 'Y' or 'M' if you want to connect an external device to
 	stream sensor data for QVR support.
 
+config USB_EC_DRIVER
+	tristate "USB_EC_DRIVER gDongleType support"
+	depends on HID
+	---help---
+	Say 'Y' if EC driver and gDongleType ready
+
 endmenu
 
 endif # HID

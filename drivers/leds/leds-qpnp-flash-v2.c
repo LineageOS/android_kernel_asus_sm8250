@@ -1317,6 +1317,8 @@ static void qpnp_flash_led_node_set(struct flash_node_data *fnode, int value)
 					fnode->ires_ua);
 	if (prgm_current_ma)
 		fnode->led_on = true;
+	else
+		fnode->led_on = false;
 
 	if (pmic_subtype != PMI632_SUBTYPE &&
 	       led->pdata->chgr_mitigation_sel == FLASH_SW_CHARGER_MITIGATION) {

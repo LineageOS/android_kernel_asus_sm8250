@@ -336,7 +336,9 @@ static struct limits_dcvs_hw *get_dcvsh_hw_from_cpu(int cpu)
 
 	return NULL;
 }
-
+#ifdef ASUS_ZS661KS_PROJECT
+u32 therm_cpu7_max_limit = 2841600;
+#endif
 static int lmh_set_max_limit(int cpu, u32 freq)
 {
 	struct limits_dcvs_hw *hw = get_dcvsh_hw_from_cpu(cpu);
@@ -348,7 +350,7 @@ static int lmh_set_max_limit(int cpu, u32 freq)
 
 	mutex_lock(&hw->access_lock);
 	for_each_cpu(cpu_idx, &hw->core_map) {
-		if (cpu_idx == cpu)
+		if (cpu_idx == cpu){
 		/*
 		 * If there is no limits restriction for CPU scaling max
 		 * frequency, vote for a very high value. This will allow
@@ -356,6 +358,13 @@ static int lmh_set_max_limit(int cpu, u32 freq)
 		 */
 			hw->cdev_data[idx].max_freq =
 				(freq == hw->max_freq[idx]) ? U32_MAX : freq;
+#ifdef ASUS_ZS661KS_PROJECT
+			if(cpu==7){
+			  therm_cpu7_max_limit = freq;
+			  pr_info("cpu=%d, therm_cpu7_max_limit=%u", cpu, therm_cpu7_max_limit);
+			}
+#endif
+	  	}
 		if (max_freq > hw->cdev_data[idx].max_freq)
 			max_freq = hw->cdev_data[idx].max_freq;
 		idx++;

@@ -712,6 +712,16 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 
 		switch (usage->hid) {
 		/* These usage IDs map directly to the usage codes. */
+        case HID_BTN_5:map_key_clear(BTN_5);break;
+        case HID_BTN_6:map_key_clear(BTN_6);break;
+        case HID_BTN_7:map_key_clear(BTN_7);break;
+
+        case HID_BTN_9:map_key_clear(GPBTN_M1);break;
+        case HID_BTN_10:map_key_clear(GPBTN_M2);break;
+        case HID_BTN_11:map_key_clear(GPBTN_M3);break;
+        case HID_BTN_12:map_key_clear(GPBTN_M4);break;
+
+        
 		case HID_GD_X: case HID_GD_Y: case HID_GD_Z:
 		case HID_GD_RX: case HID_GD_RY: case HID_GD_RZ:
 			if (field->flags & HID_MAIN_ITEM_RELATIVE)

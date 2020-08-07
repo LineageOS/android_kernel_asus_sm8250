@@ -63,6 +63,9 @@ obj-$(CONFIG_OCXL)		+= ocxl/
 obj-$(CONFIG_MISC_RTSX)		+= cardreader/
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
+obj-$(CONFIG_RT_REGMAP)		+= rt-regmap.o
+
+obj-$(CONFIG_AUDIO_GM_CDEV)	+= audio_gm_cdev.o
 
 obj-$(CONFIG_OKL4_USER_VIRQ)	+= okl4-virq.o
 obj-$(CONFIG_OKL4_RINGBUF)	+= okl4-ringbuf.o

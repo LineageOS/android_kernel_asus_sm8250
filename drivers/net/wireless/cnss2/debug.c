@@ -13,6 +13,10 @@
 
 void *cnss_ipc_log_context;
 void *cnss_ipc_log_long_context;
+#ifdef ASUS_ZS661KS_PROJECT
+extern int cnss_setAntennaSwitch(void);
+extern int cnss_setWifiAntenna(void);
+#endif
 
 static int cnss_pin_connect_show(struct seq_file *s, void *data)
 {
@@ -45,6 +49,7 @@ static const struct file_operations cnss_pin_connect_fops = {
 	.llseek		= seq_lseek,
 };
 
+#ifndef ASUS_ZS661KS_PROJECT
 static int cnss_stats_show_state(struct seq_file *s,
 				 struct cnss_plat_data *plat_priv)
 {
@@ -121,14 +126,24 @@ static int cnss_stats_show_state(struct seq_file *s,
 
 	return 0;
 }
+#endif
 
 static int cnss_stats_show(struct seq_file *s, void *data)
 {
+
+#ifdef ASUS_ZS661KS_PROJECT
+	cnss_setAntennaSwitch();
+	cnss_setWifiAntenna();
+	return 0;
+
+#else
+
 	struct cnss_plat_data *plat_priv = s->private;
 
 	cnss_stats_show_state(s, plat_priv);
 
 	return 0;
+#endif
 }
 
 static int cnss_stats_open(struct inode *inode, struct file *file)

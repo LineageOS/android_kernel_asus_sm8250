@@ -562,7 +562,7 @@ void __dynamic_pr_debug(struct _ddebug *descriptor, const char *fmt, ...)
 	vaf.fmt = fmt;
 	vaf.va = &args;
 
-	printk(KERN_DEBUG "%s%pV", dynamic_emit_prefix(descriptor, buf), &vaf);
+	printk(KERN_INFO "%s%pV", dynamic_emit_prefix(descriptor, buf), &vaf);
 
 	va_end(args);
 }
@@ -583,11 +583,11 @@ void __dynamic_dev_dbg(struct _ddebug *descriptor,
 	vaf.va = &args;
 
 	if (!dev) {
-		printk(KERN_DEBUG "(NULL device *): %pV", &vaf);
+		printk(KERN_INFO "(NULL device *): %pV", &vaf);
 	} else {
 		char buf[PREFIX_SIZE];
 
-		dev_printk_emit(LOGLEVEL_DEBUG, dev, "%s%s %s: %pV",
+		dev_printk_emit(LOGLEVEL_INFO, dev, "%s%s %s: %pV",
 				dynamic_emit_prefix(descriptor, buf),
 				dev_driver_string(dev), dev_name(dev),
 				&vaf);
@@ -616,7 +616,7 @@ void __dynamic_netdev_dbg(struct _ddebug *descriptor,
 	if (dev && dev->dev.parent) {
 		char buf[PREFIX_SIZE];
 
-		dev_printk_emit(LOGLEVEL_DEBUG, dev->dev.parent,
+		dev_printk_emit(LOGLEVEL_INFO, dev->dev.parent,
 				"%s%s %s %s%s: %pV",
 				dynamic_emit_prefix(descriptor, buf),
 				dev_driver_string(dev->dev.parent),
@@ -624,10 +624,10 @@ void __dynamic_netdev_dbg(struct _ddebug *descriptor,
 				netdev_name(dev), netdev_reg_state(dev),
 				&vaf);
 	} else if (dev) {
-		printk(KERN_DEBUG "%s%s: %pV", netdev_name(dev),
+		printk(KERN_INFO "%s%s: %pV", netdev_name(dev),
 		       netdev_reg_state(dev), &vaf);
 	} else {
-		printk(KERN_DEBUG "(NULL net_device): %pV", &vaf);
+		printk(KERN_INFO "(NULL net_device): %pV", &vaf);
 	}
 
 	va_end(args);

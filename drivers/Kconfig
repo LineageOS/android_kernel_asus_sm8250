@@ -230,4 +230,23 @@ source "drivers/sensors/Kconfig"
 source "drivers/gpu/msm/Kconfig"
 
 source "drivers/energy_model/Kconfig"
+
+# Awinic Vibrator
+source "drivers/motor/tspdrv_aw8697/Kconfig"
+
+#ASUS_BSP_Vibrator +++
+source "drivers/motor/tspdrv/Kconfig"
+#ASUS_BSP_Vibrator ---
+
+#ASUS_BSP GamePad driver
+source "drivers/gamepad_hid_driver/Kconfig"
+
+source "drivers/tuxera/zs661ks/exfat/user/Kconfig"
+
+source "drivers/tuxera/zs661ks/exfat/userdebug/Kconfig"
+
+source "drivers/tuxera/zs661ks/ntfs/user/Kconfig"
+
+source "drivers/tuxera/zs661ks/ntfs/userdebug/Kconfig"
+
 endmenu

@@ -47,8 +47,11 @@
 #define SCM_SET_REGSAVE_CMD	0x2
 #define SCM_SVC_SEC_WDOG_DIS	0x7
 #define MAX_CPU_CTX_SIZE	2048
-
+#ifdef ASUS_USER_BUILD
 static struct msm_watchdog_data *wdog_data;
+#else
+struct msm_watchdog_data *wdog_data;
+#endif
 
 static int cpu_idle_pc_state[NR_CPUS];
 
@@ -338,7 +341,7 @@ static ssize_t wdog_pet_time_get(struct device *dev,
 }
 
 static DEVICE_ATTR(pet_time, 0400, wdog_pet_time_get, NULL);
-
+#ifdef ASUS_USER_BUILD
 static void pet_watchdog(struct msm_watchdog_data *wdog_dd)
 {
 	int slack, i, count, prev_count = 0;
@@ -363,6 +366,32 @@ static void pet_watchdog(struct msm_watchdog_data *wdog_dd)
 		wdog_dd->min_slack_ns = slack_ns;
 	wdog_dd->last_pet = time_ns;
 }
+#else
+void pet_watchdog(struct msm_watchdog_data *wdog_dd)
+{
+	int slack, i, count, prev_count = 0;
+	unsigned long long time_ns;
+	unsigned long long slack_ns;
+	unsigned long long bark_time_ns = wdog_dd->bark_time * 1000000ULL;
+
+	for (i = 0; i < 2; i++) {
+		count = (__raw_readl(wdog_dd->base + WDT0_STS) >> 1) & 0xFFFFF;
+		if (count != prev_count) {
+			prev_count = count;
+			i = 0;
+		}
+	}
+	slack = ((wdog_dd->bark_time * WDT_HZ) / 1000) - count;
+	if (slack < wdog_dd->min_slack_ticks)
+		wdog_dd->min_slack_ticks = slack;
+	__raw_writel(1, wdog_dd->base + WDT0_RST);
+	time_ns = sched_clock();
+	slack_ns = (wdog_dd->last_pet + bark_time_ns) - time_ns;
+	if (slack_ns < wdog_dd->min_slack_ns)
+		wdog_dd->min_slack_ns = slack_ns;
+	wdog_dd->last_pet = time_ns;
+}
+#endif
 
 static void keep_alive_response(void *info)
 {

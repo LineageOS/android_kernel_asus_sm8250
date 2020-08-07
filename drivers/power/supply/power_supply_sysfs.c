@@ -54,9 +54,18 @@ static const char * const power_supply_usb_type_text[] = {
 	"PD", "PD_DRP", "PD_PPS", "BrickID"
 };
 
-static const char * const power_supply_status_text[] = {
-	"Unknown", "Charging", "Discharging", "Not charging", "Full"
+#ifdef ASUS_ZS661KS_PROJECT
+static const char * const power_supply_status_text[] = {  //ASUS BSP charger +++
+	"Unknown", "Charging", "Discharging", "Not charging", "Full",
+	"Quick charging", "Quick charging plus", "Hyper charging", "Quick full", "Quick full plus", "Hyper full",
+	"Thermal Alert", "Thermal Alert No Cable"
 };
+#else
+static const char * const power_supply_status_text[] = {  //ASUS BSP charger +++
+	"Unknown", "Charging", "Discharging", "Not charging", "Full",
+	"Quick charging", "Quick charging plus", "Thermal Alert"
+};
+#endif
 
 static const char * const power_supply_charge_type_text[] = {
 	"Unknown", "N/A", "Trickle", "Fast", "Taper"
@@ -94,6 +103,15 @@ static const char * const power_supply_usbc_text[] = {
 static const char * const power_supply_usbc_pr_text[] = {
 	"none", "dual power role", "sink", "source"
 };
+
+//[+++]ASUS : Add the interface for charging debug apk
+static char *adapter_id_text[] = {
+	"NONE", "ASUS_750K", "ASUS_200K", "PB", "OTHERS", "ADC_NOT_READY"
+};
+static char *apsd_result_text[] = {
+	"UNKNOWN", "SDP", "CDP", "DCP", "OCP", "FLOAT", "HVDCP2", "HVDCP3"
+};
+//[---]ASUS : Add the interface for charging debug apk
 
 static const char * const power_supply_typec_src_rp_text[] = {
 	"Rp-Default", "Rp-1.5A", "Rp-3A"
@@ -212,9 +230,26 @@ static ssize_t power_supply_show_property(struct device *dev,
 		ret = sprintf(buf, "%s\n",
 			      power_supply_health_text[value.intval]);
 		break;
+	//[+++]ASUS : Add the interface for charging debug apk
+	case POWER_SUPPLY_PROP_ASUS_ADAPTER_ID:
+		ret = sprintf(buf, "%s\n", adapter_id_text[value.intval]);
+		break;
+	case POWER_SUPPLY_PROP_ASUS_APSD_RESULT:
+		ret = sprintf(buf, "%s\n", apsd_result_text[value.intval]);
+		break;
+	//[---]ASUS : Add the interface for charging debug apk_done
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT:
 		ret = sprintf(buf, "%lld\n", value.int64val);
 		break;
+/* ASUS BSP : Add for NXP +++ */
+#ifdef ASUS_ZS661KS_PROJECT
+#ifdef CONFIG_DUAL_PD_PORT
+	case POWER_SUPPLY_PROP_PD_PORT:
+		ret = sprintf(buf, "%lld\n", value.int64val);
+		break;	
+#endif
+#endif
+/* ASUS BSP : Add for NXP --- */
 	case POWER_SUPPLY_PROP_MODEL_NAME ... POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		ret = sprintf(buf, "%s\n", value.strval);
 		break;
@@ -409,6 +444,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(pd_in_hard_reset),
 	POWER_SUPPLY_ATTR(pd_current_max),
 	POWER_SUPPLY_ATTR(pd_usb_suspend_supported),
+	POWER_SUPPLY_ATTR(conn_temp),
 	POWER_SUPPLY_ATTR(charger_temp),
 	POWER_SUPPLY_ATTR(charger_temp_max),
 	POWER_SUPPLY_ATTR(parallel_disable),
@@ -429,6 +465,13 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(pd_voltage_max),
 	POWER_SUPPLY_ATTR(pd_voltage_min),
 	POWER_SUPPLY_ATTR(sdp_current_max),
+	//[+++]ASUS : Add the interface for charging debug apk
+	POWER_SUPPLY_ATTR(asus_apsd_result),
+	POWER_SUPPLY_ATTR(asus_adapter_id),
+	POWER_SUPPLY_ATTR(asus_is_legacy_cable),
+	POWER_SUPPLY_ATTR(asus_icl_setting),
+	POWER_SUPPLY_ATTR(asus_total_fcc),
+	//[---]ASUS : Add the interface for charging debug apk
 	POWER_SUPPLY_ATTR(connector_type),
 	POWER_SUPPLY_ATTR(parallel_batfet_mode),
 	POWER_SUPPLY_ATTR(parallel_fcc_max),
@@ -483,6 +526,17 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(parallel_output_mode),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
+	/* ASUS BSP : Add for NXP +++ */
+#ifdef ASUS_ZS661KS_PROJECT
+#ifdef CONFIG_DUAL_PD_PORT
+	POWER_SUPPLY_ATTR(nxp_pd_port),
+	POWER_SUPPLY_ATTR(nxp_pd_cap),
+#endif
+	/* ASUS BSP Add +++ */
+	POWER_SUPPLY_ATTR(pd2_active),
+	/* ASUS BSP Add --- */
+#endif
+	/* ASUS BSP : Add for NXP --- */
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),

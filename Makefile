@@ -696,6 +696,12 @@ ifeq ($(call shell-cached,$(CONFIG_SHELL) $(srctree)/scripts/gcc-goto.sh $(CC) $
 	KBUILD_AFLAGS += -DCC_HAVE_ASM_GOTO
 endif
 
+ifneq ($(BUILD_NUMBER),)
+	KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(TARGET_SKU)-$(BUILD_NUMBER)\"
+else
+	KBUILD_CPPFLAGS += -DASUS_SW_VER=\"$(TARGET_SKU)-$(ASUS_BUILD_PROJECT)_ENG\"
+endif
+
 include scripts/Makefile.kcov
 include scripts/Makefile.gcc-plugins
 
@@ -775,7 +781,7 @@ endif
 
 KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
 
-KBUILD_CFLAGS   += $(call cc-option, -Wvla)
+#KBUILD_CFLAGS   += $(call cc-option, -Wvla)
 
 ifdef CONFIG_DEBUG_INFO
 ifdef CONFIG_DEBUG_INFO_SPLIT
@@ -937,6 +943,32 @@ include scripts/Makefile.ubsan
 KBUILD_CPPFLAGS += $(ARCH_CPPFLAGS) $(KCPPFLAGS)
 KBUILD_AFLAGS   += $(ARCH_AFLAGS)   $(KAFLAGS)
 KBUILD_CFLAGS   += $(ARCH_CFLAGS)   $(KCFLAGS)
+
+#ASUS_SZ_BSP 2019/11/15 Cassie:add ZS670KS for kernel+++
+ifneq (,$(filter ZS670KS,$(ASUS_BUILD_PROJECT)))
+KBUILD_CPPFLAGS += -DZS670KS=1
+endif
+#ASUS_SZ_BSP 2019/11/15 Cassie:add ZS670KS for kernel---
+
+# Add ASUS build option to KBUILD_CPPFLAGS
+ifneq ($(TARGET_BUILD_VARIANT),user)
+ifeq ($(ASUS_FTM),y)
+KBUILD_CPPFLAGS += -DASUS_FTM_BUILD=1
+else
+KBUILD_CPPFLAGS += -DASUS_USERDEBUG_BUILD=1
+endif
+else
+KBUILD_CPPFLAGS += -DASUS_USER_BUILD=1
+endif
+
+ifeq ($(ASUS_DXO),y)
+KBUILD_CPPFLAGS += -DASUS_DXO=1
+endif
+
+# Add ASUS build Project to KBUILD_CPPFLAGS
+ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+KBUILD_CPPFLAGS += -DASUS_ZS661KS_PROJECT=1
+endif
 
 # Use --build-id when available.
 LDFLAGS_BUILD_ID := $(call ld-option, --build-id)

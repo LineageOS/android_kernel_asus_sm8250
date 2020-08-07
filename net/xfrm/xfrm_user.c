@@ -1494,6 +1494,9 @@ static int validate_tmpl(int nr, struct xfrm_user_tmpl *ut, u16 family)
 	if (nr > XFRM_MAX_DEPTH)
 		return -EINVAL;
 
+	if (ut[i].mode >= XFRM_MODE_MAX)
+		return -EINVAL;
+
 	prev_family = family;
 
 	for (i = 0; i < nr; i++) {

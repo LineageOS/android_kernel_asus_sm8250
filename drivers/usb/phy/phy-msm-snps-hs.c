@@ -424,7 +424,7 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 			PARAM_OVRD_MASK, phy->param_ovrd3);
 	}
 
-	dev_dbg(uphy->dev, "x0:%08x x1:%08x x2:%08x x3:%08x\n",
+	dev_info(uphy->dev, "x0:%08x x1:%08x x2:%08x x3:%08x\n",
 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0),
 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1),
 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2),
@@ -592,6 +592,13 @@ static int msm_hsphy_dpdm_regulator_enable(struct regulator_dev *rdev)
 
 	mutex_lock(&phy->phy_lock);
 	if (!phy->dpdm_enable) {
+
+		/* skip reset phy if power already on and usb in use */
+		if (phy->power_enabled && phy->cable_connected) {
+			phy->dpdm_enable = true;
+			mutex_unlock(&phy->phy_lock);
+			return 0;
+		}
 		ret = msm_hsphy_enable_power(phy, true);
 		if (ret) {
 			mutex_unlock(&phy->phy_lock);

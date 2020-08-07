@@ -15,6 +15,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/extcon-provider.h>
 #include "storm-watch.h"
+//#include <linux/qpnp/qpnp-adc.h>  //ASUS BSP +++
 #include "battery.h"
 
 enum print_reason {
@@ -80,6 +81,8 @@ enum print_reason {
 #define ICL_CHANGE_VOTER		"ICL_CHANGE_VOTER"
 #define OVERHEAT_LIMIT_VOTER		"OVERHEAT_LIMIT_VOTER"
 
+#define ASUS_DISABLE_CP_VOTER		"ASUS_DISABLE_CP_VOTER"
+
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
 
@@ -100,6 +103,31 @@ enum print_reason {
 #define DCIN_ICL_MIN_UA			100000
 #define DCIN_ICL_MAX_UA			1500000
 #define DCIN_ICL_STEP_UA		100000
+
+//[+++]ASUS : Add asus define
+#define ASUS_ICL_VOTER "ASUS_ICL_VOTER"
+#define ASUS_SLOW_FCC_VOTER "ASUS_SLOW_FCC_VOTER"
+#define CHARGER_TAG "[BAT][CHG]"
+#define ERROR_TAG "[ERR]"
+#define AUTO_TAG "[AUTO]"
+#define CHG_DBG(fmt, ...) printk(KERN_INFO CHARGER_TAG " %s: " fmt, __func__, ##__VA_ARGS__)
+#define CHG_DBG_E(fmt, ...)  printk(KERN_ERR CHARGER_TAG ERROR_TAG " %s: " fmt, __func__, ##__VA_ARGS__)
+#define CHG_DBG_AT(fmt, ...)  printk(KERN_WARNING CHARGER_TAG AUTO_TAG " %s: " fmt, __func__, ##__VA_ARGS__)
+#define THERMAL_ALERT_NONE	0
+#define THERMAL_ALERT_NO_AC	1
+#define THERMAL_ALERT_WITH_AC	2
+#define THERMAL_ALERT_CYCLE	60000
+#define ADF_PATH "/ADF/ADF"
+//[---]ASUS : Add asus define
+
+#ifdef ASUS_ZS661KS_PROJECT
+#define ASUS_CHG_VOTER			"ASUS_CHG_VOTER"
+#define ASUS_ATM_VOTER			"ASUS_ATM_VOTER"
+#ifdef CONFIG_USBPD_PHY_QCOM
+#define DIRECT_CHARGE_VOTER		"DIRECT_CHARGE_VOTER"
+#define PD_DIRECT_CHARGE_VOTER		"PD_DIRECT_CHARGE_VOTER"
+#endif
+#endif
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -258,6 +286,10 @@ static const unsigned int smblib_extcon_cable[] = {
 	EXTCON_NONE,
 };
 
+static const unsigned int asus_extcon_cable[] = {
+	EXTCON_NONE,
+};
+
 enum lpd_reason {
 	LPD_NONE,
 	LPD_MOISTURE_DETECTED,
@@ -367,6 +399,9 @@ struct smb_iio {
 	struct iio_channel	*die_temp_chan;
 	struct iio_channel	*skin_temp_chan;
 	struct iio_channel	*smb_temp_chan;
+	struct iio_channel	*asus_adapter_vadc_chan;
+	struct iio_channel	*side_connector_temp_chan;
+	struct iio_channel	*btm_connector_temp_chan;
 };
 
 struct smb_charger {
@@ -402,6 +437,9 @@ struct smb_charger {
 	struct power_supply		*usb_port_psy;
 	struct power_supply		*wls_psy;
 	struct power_supply		*cp_psy;
+#ifdef ASUS_ZS661KS_PROJECT
+	struct power_supply		*pca_psy;	// ASUS BSP +++
+#endif
 	enum power_supply_type		real_charger_type;
 
 	/* notifiers */
@@ -418,7 +456,10 @@ struct smb_charger {
 	struct smb_regulator	*vbus_vreg;
 	struct smb_regulator	*vconn_vreg;
 	struct regulator	*dpdm_reg;
-
+#ifdef ASUS_ZS661KS_PROJECT
+	struct regulator	*dpdm2_reg;// This is added for USB2 controller
+	struct regulator	*pm8150l_bob_reg;// BOB for audio
+#endif
 	/* votables */
 	struct votable		*dc_suspend_votable;
 	struct votable		*fcc_votable;
@@ -464,9 +505,44 @@ struct smb_charger {
 	struct alarm		chg_termination_alarm;
 	struct alarm		dcin_aicl_alarm;
 
+	/* asus work +++ */
+	struct delayed_work	asus_chg_flow_work;
+	struct delayed_work	asus_adapter_adc_work;
+	struct delayed_work	asus_min_monitor_work;
+	struct delayed_work	asus_batt_RTC_work;
+	struct delayed_work	asus_set_flow_flag_work;
+	struct delayed_work	asus_usb_thermal_work;
+	struct delayed_work	asus_usb_water_work;
+	struct delayed_work	asus_reverse_charge_work;
+	struct delayed_work	asus_cable_capability_check_work;
+	struct delayed_work	asus_reverse_charge_check_camera;
+	struct delayed_work	asus_enable_inov_work;
+	struct work_struct	read_vendor_id_work;
+
+#ifdef ASUS_ZS661KS_PROJECT
+	struct delayed_work	asus_mux_setting_1_work;
+	struct delayed_work asus_write_mux_setting_3;
+	struct delayed_work asus_cable_check_work;
+	struct delayed_work asus_slow_insertion_work;
+	struct delayed_work asus_cos_pd_hard_reset_work;
+	struct delayed_work asus_thermal_btm_work;
+	struct delayed_work asus_thermal_pogo_work;
+	struct delayed_work asus_thermal_accy_work;
+	struct delayed_work asus_call_rt_reset_work;
+	struct delayed_work asus_30W_Dual_chg_work;
+	struct delayed_work asus_set_usb_extcon_work;
+	struct delayed_work	asus_check_vbus_work;//WA for aohai adapter
+#endif
+	/* asus work --- */
+
+
+	/* asus variables */
+	bool asus_print_usb_src_change;  //Trim the log of usb_source_change_irq
+
 	struct timer_list	apsd_timer;
 
 	struct charger_param	chg_param;
+
 	/* secondary charger config */
 	bool			sec_pl_present;
 	bool			sec_cp_present;
@@ -567,6 +643,15 @@ struct smb_charger {
 	bool			dpdm_enabled;
 	bool			apsd_ext_timeout;
 	bool			qc3p5_detected;
+	bool			dpdm2_enabled;
+
+#ifdef ASUS_ZS661KS_PROJECT
+#ifdef CONFIG_USBPD_PHY_QCOM
+	bool		micro_usb_mode;
+#endif
+	/* ASUS Add PD2 ACTIVE +++ */
+	int 		pd2_active;
+#endif
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -577,6 +662,16 @@ struct smb_charger {
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
+
+	/* asus extcon */
+	struct extcon_dev	*thermal_extcon;
+	struct extcon_dev	*water_extcon;
+	struct extcon_dev	*quickchg_extcon;
+	struct extcon_dev	*reversechg_extcon;
+	struct extcon_dev	*pmsp_extcon;
+	struct extcon_dev	*invalid_audiodongle_extcon;
+	
+
 
 	/* battery profile */
 	int			batt_profile_fcc_ua;
@@ -601,6 +696,71 @@ struct smb_charger {
 	ktime_t			dcin_uv_last_time;
 	int			last_wls_vout;
 };
+
+//[+++]ASUS : Add gpio control struct
+#ifdef ASUS_ZS661KS_PROJECT
+struct gpio_control {
+	u32 POGO_OTG_EN;		//soc_11
+	u32 BTM_OTG_EN;			//soc_71
+	u32 BTM_OVP_ACOK;		//soc_13
+	u32 POGO_OVP_ACOK;		//soc_60
+	u32 USB2_MUX1_EN;		//pm8150_gpio9
+	u32 PMI_MUX_EN;			//pm8150b_gpio10
+	u32 PCA9468_EN;			//pm8150b_gpio5
+	u32 POGO_TEMP_INT;		//soc_84
+	u32 ADC_SW_EN;			//soc_98
+	u32 ADC_VH_EN_5;		//soc_117
+};
+#else
+struct gpio_control {
+	u32 ADC_SW_EN;		//soc_101, init L
+	u32 ADCPWREN_PMI_GP1;	//soc_120, init L
+};
+#endif
+//[---]ASUS : Add gpio control struct
+
+#ifdef ASUS_ZS661KS_PROJECT
+//ASUS BSP : Add for ROG ACCY +++
+enum POGO_ID {
+	NO_INSERT = 0,
+	INBOX,
+	STATION,
+	DT,
+	PCIE,
+	ERROR_1,
+	OTHER,
+	STATION_1ST_UNLOCK = 100,
+	STATION_UNLOCK = 200,
+};
+
+static char *pogo_id_str[] = {
+	[NO_INSERT] = 			"NO_INSERT",
+	[INBOX] = 				"INBOX",
+	[STATION] = 			"STATION",
+	[DT] = 					"DT",
+	[PCIE] = 				"PCIE",
+	[ERROR_1] = 			"ERROR",
+	[OTHER] = 				"OTHERS",
+	[STATION_1ST_UNLOCK] = 	"STATION_1ST_UNLOCK",
+	[STATION_UNLOCK] = 		"STATION_UNLOCK"
+};
+//ASUS BSP : Add for ROG ACCY ---
+#endif
+
+#ifdef ASUS_ZS661KS_PROJECT
+enum QC_BATT_STATUS {
+	NORMAL = 0,
+	QC,
+	QC_PLUS,
+	NXP,
+};
+#else
+enum QC_BATT_STATUS {
+	NORMAL = 0,
+	QC,
+	QC_PLUS,
+};
+#endif
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
 int smblib_masked_write(struct smb_charger *chg, u16 addr, u8 mask, u8 val);
@@ -818,6 +978,26 @@ int smblib_get_irq_status(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_qc3_main_icl_offset(struct smb_charger *chg, int *offset_ua);
 
+#ifdef ASUS_ZS661KS_PROJECT
+#ifdef CONFIG_USBPD_PHY_QCOM
+int smblib_set_prop_usb_current_max(struct smb_charger *chg,
+				    const union power_supply_propval *val);
+int smblib_get_prop_charging_enabled(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_set_prop_charging_enabled(struct smb_charger *chg,
+				const union power_supply_propval *val);
+#endif
+/* ASUS Add POWER SUPPLY PROPERTY +++ */
+int smblib_set_prop_pd2_active(struct smb_charger *chg,
+				const union power_supply_propval *val);
+/* ASUS Add POWER SUPPLY PROPERTY --- */
+#endif
+
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+#ifndef ASUS_ZS661KS_PROJECT
+int ADF_check_status(void);
+void jeita_rule(void);
+void CHG_TYPE_judge(void);
+#endif
 #endif /* __SMB5_CHARGER_H */

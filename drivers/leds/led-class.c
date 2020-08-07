@@ -25,6 +25,36 @@
 
 static struct class *leds_class;
 
+struct led_classdev* g_led_debug_cdev;
+bool g_LED_debug = false;
+bool g_LED_state = false;
+static ssize_t LED_debug_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	ssize_t ret;
+	u32 val;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	ret = kstrtou32(buf, 10, &val);
+	if (ret)
+		return ret;
+
+	if(val>0) {
+		g_led_debug_cdev = led_cdev;
+		printk("[LED] LED_debug set true\n");
+		g_LED_debug = true;
+	}else {
+		printk("[LED] LED_debug set false\n");
+		g_LED_debug = false;
+	}
+
+	return count;
+}
+
+static ssize_t LED_debug_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	return snprintf(buf, PAGE_SIZE,"g_LED_debug = %d\n", g_LED_debug);
+}
+static DEVICE_ATTR_RW(LED_debug);
+
 static ssize_t brightness_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -35,6 +65,25 @@ static ssize_t brightness_show(struct device *dev,
 
 	return sprintf(buf, "%u\n", led_cdev->brightness);
 }
+
+
+void asus_debug_led_on(void)
+{
+	if(!g_LED_state){
+		led_set_brightness(g_led_debug_cdev, LED_FULL);
+		g_LED_state = 1;
+	}
+}
+EXPORT_SYMBOL(asus_debug_led_on);
+
+void asus_debug_led_off(void)
+{
+	if(g_LED_state){
+		led_set_brightness(g_led_debug_cdev, LED_OFF);
+		g_LED_state = 0;
+	}
+}
+EXPORT_SYMBOL(asus_debug_led_off);
 
 static ssize_t brightness_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
@@ -56,6 +105,7 @@ static ssize_t brightness_store(struct device *dev,
 
 	if (state == LED_OFF && !(led_cdev->flags & LED_KEEP_TRIGGER))
 		led_trigger_remove(led_cdev);
+
 	led_set_brightness(led_cdev, state);
 
 	ret = size;
@@ -88,6 +138,7 @@ static const struct attribute_group led_trigger_group = {
 static struct attribute *led_class_attrs[] = {
 	&dev_attr_brightness.attr,
 	&dev_attr_max_brightness.attr,
+	&dev_attr_LED_debug.attr,
 	NULL,
 };
 

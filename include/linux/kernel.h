@@ -15,6 +15,143 @@
 #include <linux/build_bug.h>
 #include <asm/byteorder.h>
 #include <uapi/linux/kernel.h>
+#include <linux/asusdebug.h>
+
+#ifdef ASUS_ZS661KS_PROJECT
+enum DEVICE_HWID
+{
+       HW_REV_INVALID = -1,
+       HW_REV_EVB   = 0,
+       HW_REV_SR    = 1,
+       HW_REV_ER    = 3,
+       HW_REV_ER2   = 4,
+       HW_REV_PR    = 5,
+       HW_REV_PR2   = 6,
+       HW_REV_MP    = 7
+};
+extern enum DEVICE_HWID g_ASUS_hwID;
+
+enum DEVICE_PROJID
+{
+       PROJECT_INVALID = -1,
+       PROJECT_OBIWAN_ENTRY = 0,
+       PROJECT_OBIWAN_ELITE = 1
+};
+extern enum DEVICE_PROJID g_ASUS_prjID;
+
+enum DEVICE_SKUID
+{
+       SKU_ID_INVALID = -1,
+       SKU_ID_0  = 0,
+       SKU_ID_1  = 1,
+       SKU_ID_2  = 2,
+       SKU_ID_3  = 3,
+       SKU_ID_4  = 4,
+       SKU_ID_5  = 5,
+       SKU_ID_6  = 6,
+       SKU_ID_7  = 7
+};
+extern enum DEVICE_SKUID g_ASUS_skuID;
+/*
+enum DEVICE_RFSKU
+{
+        RF_SKU_UNKNOWN = -1,
+        NA_SKU = 5,
+        WW_SKU = 6,
+        TW_SKU = 7
+};
+extern enum DEVICE_RFSKU g_ASUS_rfSKU;
+
+
+enum DEVICE_LCMID
+{
+        LCM_VENDOR_INVALID = -1,
+        LCM_VENDOR1 = 0,
+        LCM_VENDOR2 = 1
+};
+extern enum DEVICE_LCMID g_ASUS_lcmID;
+*/
+enum DEVICE_FPID
+{
+        FP_VENDOR_INVALID = -1,
+        FP_VENDOR1 = 0,
+        FP_VENDOR2 = 1
+};
+extern enum DEVICE_FPID g_ASUS_fpID;
+
+enum DEVICE_NFCID
+{
+        NFC_VENDOR_INVALID = -1,
+        NFC_NOT_SUPPORT = 0,
+        NFC_SUPPORT = 1
+};
+extern enum DEVICE_NFCID g_ASUS_nfcID;
+
+enum DEVICE_DDRID
+{
+        DDR_VENDOR_INVALID = -1,
+        DDR_HYNIX = 0,
+        DDR_SAMSUNG = 1
+};
+extern enum DEVICE_DDRID g_ASUS_ddrID;
+#endif //ASUS_ZS661KS_PROJECT
+
+//ASUS_SZ_BSP 2019/11/19 Cassie : Add for zs670ks id +++
+#ifdef ZS670KS
+enum DEVICE_HWID
+{
+       HW_REV_INVALID = -1,
+       HW_REV_EVB   = 0,
+       HW_REV_SR    = 1,
+       HW_REV_Reserved1    = 2,
+       HW_REV_SR2   = 3,
+       HW_REV_SR3 = 4,
+       HW_REV_ER   = 5,
+       HW_REV_PR   = 6,
+       HW_REV_MP    = 7
+};
+extern enum DEVICE_HWID g_ASUS_hwID;
+
+enum DEVICE_PROJID
+{
+       PROJECT_INVALID = -1,
+       PROJECT_ZF7_DXO = 4,
+       PROJECT_ZF7_8250_PLUS = 6,
+       PROJECT_ZF7_8250 = 7
+
+};
+extern enum DEVICE_PROJID g_ASUS_prjID;
+
+enum DEVICE_SKUID
+{
+       SKU_ID_INVALID = -1,
+       SKU_ID_0  = 0,
+       SKU_ID_1  = 1,
+       SKU_ID_2  = 2,
+       SKU_ID_3  = 3,
+       SKU_ID_4  = 4, //ufs3.0/128g
+       SKU_ID_5  = 5, //ufs3.0/256g
+       SKU_ID_6  = 6,
+       SKU_ID_7  = 7
+};
+extern enum DEVICE_SKUID g_ASUS_skuID;
+
+enum DEVICE_NFCID
+{
+        NFC_VENDOR_INVALID = -1,
+        NFC_NOT_SUPPORT = 0,
+        NFC_SUPPORT = 1
+};
+extern enum DEVICE_NFCID g_ASUS_nfcID;
+
+#endif //ZS670KS
+//ASUS_SZ_BSP 2019/11/19 Cassie : Add for zs670ks id ---
+
+// ASUS_BSP +++ get permissive status
+extern int permissive_enable;
+// ASUS_BSP --- get permissive status
+
+#define FORCE_RAMDUMP_FEATURE 1
 
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))
