@@ -202,19 +202,6 @@ static uint16_t Slide_sense_reset_data[3] = {
 		0x0000,
 		0x804b 
 };
-
-static uint16_t Swipe_sense_data1[3] = { 
-		0x0400,
-		0x0000,
-		0x8057 
-};
-
-static uint16_t Swipe_sense_data2[3] = { 
-		0x3E80,
-		0x0000,
-		0x8058 
-};
-
 static uint16_t sys_param_addr[3] = { 
 		0x42, 
 		0x43, 
@@ -666,13 +653,6 @@ static void grip_set_sys_param(const char *buf){
 	int ret;
 	PRINT_INFO("buf=%s, size=%d", buf, l);
 	
-#ifdef DYNAMIC_PWR_CTL
-	if (snt_activity_request() != 0) {
-		PRINT_CRIT("snt_activity_request() failed");
-		return;
-	}
-#endif
-
 	status  = ReadNumFromBuf((const uint8_t**)&buf, &l, &id);
 	if (status != 0) {
 		PRINT_CRIT("Could not parse param_id %d", status);
@@ -692,6 +672,7 @@ static void grip_set_sys_param(const char *buf){
 	// wait for response from driver irpt thread
 	PRINT_DEBUG("SetSysParam Rsp -- wait");
 	do {
+		//ret= down_timeout(&snt8100fsr_g->sc_wf_rsp, msecs_to_jiffies(3*MSEC_PER_SEC);
 		ret = down_interruptible(&snt8100fsr_g->sc_wf_rsp);
 		PRINT_DEBUG("SetSysParam Rsp -- acquired %d", ret);
 	} while (ret == -EINTR);
@@ -706,36 +687,47 @@ static void grip_slide_swipe_status_check(void){
 	uint16_t enable_sensitive_boost = 0x84;
 	uint16_t disable_sensitive_boost = 0x4;
 	uint16_t boost_addr = 0x3d;
-	const char *buf = "86 4000000";
+	static int swipe_status = 0, gesture_status = 0;
+	const char *buf_on = "110 1\n";
+	const char *buf_off = "110 0\n";
+	
 	if(grip_status_g->G_SLIDE_EN[0] == 1 || grip_status_g->G_SLIDE_EN[1] == 1
-		|| grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){	
-		for(i = 0; i < 3; i++){
-			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_data[i]);
-			write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_data[i]);
+		|| grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){
+		if(gesture_status != 1){
+			gesture_status = 1;
+			for(i = 0; i < 3; i++){
+				PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_data[i]);
+				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_data[i]);
+			}
 		}
-	}else if(grip_status_g->G_SLIDE_EN[0] <= 0 && grip_status_g->G_SLIDE_EN[1] <= 0
-		&& grip_status_g->G_SWIPE_EN[0] <= 0 && grip_status_g->G_SWIPE_EN[1] <= 0){
-		for(i = 0; i < 3; i++){
-			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_reset_data[i]);
-			write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_reset_data[i]);
+	}else{
+		if(gesture_status != 0){
+			gesture_status = 0;
+			for(i = 0; i < 3; i++){
+				PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_reset_data[i]);
+				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_reset_data[i]);
+			}
 		}
 	}
 
+	//ASUS BSP Clay+++ only Swipe should write 110 0/1 and 0x3d 0x84/0x4
 	if(grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){
-		grip_set_sys_param(buf);
-		write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
-		for(i = 0; i < 3; i++){
-			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Swipe_sense_data1[i]);
-			write_register(snt8100fsr_g, sys_param_addr[i], &Swipe_sense_data1[i]);
+		if(swipe_status != 1){
+			swipe_status = 1;
+			write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
+			msleep(50);
+			grip_set_sys_param(buf_on);
 		}
-		for(i = 0; i < 3; i++){
-			PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Swipe_sense_data2[i]);
-			write_register(snt8100fsr_g, sys_param_addr[i], &Swipe_sense_data2[i]);
-		}
-		write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
 	}else{
-		write_register(snt8100fsr_g, boost_addr, &disable_sensitive_boost);
+		if(swipe_status != 0){
+			swipe_status = 0;
+			write_register(snt8100fsr_g, boost_addr, &disable_sensitive_boost);
+			msleep(50);
+			grip_set_sys_param(buf_off);
+		}
 	}
+	//ASUS BSP Clay---
+	PRINT_INFO("Done");
 }
 /**************** +++ wrtie DPC & Frame function +++ **************/
 void grip_frame_rate_func(int val){

@@ -3663,12 +3663,36 @@ static int pca9468_mains_set_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 #ifdef CONFIG_DUAL_PD_PORT
-		if (!gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK) && rt_chg_check_asus_vid()) {
-			CHG_DBG("POGO_OVP is exist and bottom is nxp, disable nxp\n");
-			pca9468_set_property_charging_enable(pca9468, 0);
-		}
-		else
+		if (val->intval == POWER_SUPPLY_CHARGING_ENABLED_PMI) {
+			CHG_DBG("POWER_SUPPLY_CHARGING_ENABLED_PMI\n");
+			if (PE_check_asus_vid())
+				g_panel_off_iin = 2900000;
+			else
+				g_panel_off_iin = 2000000;
+
 			pca9468_set_property_charging_enable(pca9468, val->intval);
+		}
+		else if (val->intval == POWER_SUPPLY_CHARGING_ENABLED_RT) {
+			CHG_DBG("POWER_SUPPLY_CHARGING_ENABLED_RT\n");
+			if (!gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK)) {
+				CHG_DBG("POGO_OVP is exist, skip POWER_SUPPLY_CHARGING_ENABLED_RT\n");
+			} else {
+				if (rt_chg_check_asus_vid())
+					g_panel_off_iin = 2900000;
+				else
+					g_panel_off_iin = 2000000;
+
+				pca9468_set_property_charging_enable(pca9468, val->intval);
+			}
+		}
+		else if (val->intval == POWER_SUPPLY_CHARGING_DISABLED_PMI) {
+			CHG_DBG("POWER_SUPPLY_CHARGING_DISABLED_PMI\n");
+			pca9468_set_property_charging_enable(pca9468, val->intval);
+		}
+		else if (val->intval == POWER_SUPPLY_CHARGING_DISABLED_RT) {
+			CHG_DBG("POWER_SUPPLY_CHARGING_DISABLED_RT\n");
+			pca9468_set_property_charging_enable(pca9468, val->intval);
+		}
 #else
 		if (val->intval == 0) 
 		{
@@ -4221,7 +4245,10 @@ void pca9468_enable_slow_charging(bool enable) {
 		g_inov_overtemp_iin_low = 1000000;
 	} else {
 		printk("pca9468_enable_slow_charging: disable slow charging\n");
-		g_panel_off_iin = 2900000;
+		if (PE_check_asus_vid() || rt_chg_check_asus_vid())
+			g_panel_off_iin = 2900000;
+		else
+			g_panel_off_iin = 2000000;
 		g_panel_on_iin = 2000000;
 		g_high_volt_4P25_iin = 2000000;
 		g_inov_overtemp_iin = 2000000;

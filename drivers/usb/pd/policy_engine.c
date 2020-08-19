@@ -30,7 +30,7 @@ static bool allowed_pps = false;
 module_param(allowed_pps, bool, 0644);
 MODULE_PARM_DESC(allowed_pps, "allowed pps for qc4 charging");
 
-static bool others_dierct_charger = false;
+static bool others_dierct_charger = true;
 module_param(others_dierct_charger, bool, 0644);
 MODULE_PARM_DESC(others_dierct_charger, "allowed others adapter for direct charging");
 
@@ -5023,6 +5023,9 @@ static DEVICE_ATTR_WO(hard_reset);
 static int trigger_tx_msg(struct usbpd *pd, bool *msg_tx_flag)
 {
 	int ret = 0;
+
+	if (msg_tx_flag == &pd->send_get_src_cap_ext)
+		msleep(100);
 
 	/* Only allowed if we are already in explicit sink contract */
 	if (pd->current_state != PE_SNK_READY) {

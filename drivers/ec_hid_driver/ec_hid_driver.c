@@ -1714,7 +1714,7 @@ int ec_hid_display_notifier_call(struct notifier_block *self, unsigned long even
 			// panel is power down notify
 			printk("[EC_HID] Panel Off: Power Saving %d, DP Disconnect %d, Lid status %d\n", g_station_sleep, g_station_dp_disconnect, lid_status);
 			hid_switch_usb_autosuspend(true);
-			block_hid_input = true;
+			//block_hid_input = true;
 			hid_to_set_phone_panel_state(0);
 
 			if (g_station_sleep && g_station_dp_disconnect && lid_status && !ec_i2c_ultra_mode){
@@ -1728,7 +1728,7 @@ int ec_hid_display_notifier_call(struct notifier_block *self, unsigned long even
 			// panel is power on notify
 			printk("[EC_HID] Panel On: Ultra Low Power mode %d\n", ec_i2c_ultra_mode);
 			hid_switch_usb_autosuspend(false);
-			block_hid_input = false;
+			//block_hid_input = false;
 			hid_to_set_phone_panel_state(1);
 
 			if (ec_i2c_ultra_mode == 1)
