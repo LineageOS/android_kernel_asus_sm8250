@@ -64,6 +64,8 @@ static int HVDCP_FLAG = 0;
 static int UFP_FLAG = 0;
 static int LEGACY_CABLE_FLAG = 1;
 static int NXP_FLAG = 0;
+bool side_pps_flag = 0;
+bool btm_pps_flag = 0;
 static volatile bool asus_flow_processing = 0;
 int asus_CHG_TYPE = 0;
 int g_adapter_id_vadc = 0;
@@ -2353,8 +2355,12 @@ int asus_get_batt_status (void)
 			return NORMAL;
 	}
 
-	if (NXP_FLAG)
-		return NXP;
+	if (NXP_FLAG) {
+		if (rt_chg_check_asus_vid() || PE_check_asus_vid())
+			return NXP;
+		else
+			return QC_PLUS;
+	}
 	if (HVDCP_FLAG == 3)
 		return QC_PLUS;
 	else if ((ASUS_ADAPTER_ID == OTHERS || ASUS_ADAPTER_ID == PB) && UFP_FLAG == 3 && !LEGACY_CABLE_FLAG)
@@ -4798,6 +4804,7 @@ int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 {
 	int rc, icl;
 
+	
 	//[+++]Set the Station as Power Bank when the PD current is 1.21 A
 	if (ASUS_POGO_ID == STATION && (val->intval == 1210000)) {
 		CHG_DBG("Station is in PB mode\n");
@@ -5258,6 +5265,11 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 	CHG_DBG("chg->pd_active : %d\r\n", val->intval);
 	chg->pd_active = val->intval;
 
+	if (chg->pd_active == POWER_SUPPLY_PD_PPS_ACTIVE)
+		side_pps_flag = 1;
+	else
+		side_pps_flag = 0;
+
 	//[+++]By default, APSD will be disabled for pd_active = 1(No matter VBUS is 0 or 1)
 	//This will cause APSD UNKNOWN for BTM charger plug-in
 	pogo_ovp_stat = gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK);
@@ -5342,6 +5354,12 @@ int smblib_set_prop_pd2_active(struct smb_charger *chg,
 			      const union power_supply_propval *val)
 {
 	chg->pd2_active = val->intval;
+
+	if (chg->pd2_active == POWER_SUPPLY_PD_PPS_ACTIVE)
+		btm_pps_flag = 1;
+	else
+		btm_pps_flag = 0;
+
 	//[+++]WA for 45W adapter. Disable BC 1.2 if the port is PD and has VBUS HIGH
 	if (chg->pd2_active && !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK)) {
 		CHG_DBG("disable BC 1.2 for PD2_ACTIVE");
@@ -6735,8 +6753,6 @@ void asus_chg_flow_work(struct work_struct *work)
 	u8 legacy_cable_reg = TYPEC_LEGACY_CABLE_STATUS_BIT;
 	bool btm_ovp_stats;
 	bool pogo_ovp_stats;
-	bool btm_pca_vid;
-	bool side_pca_vid;
 	u8 ICL_reg = 0;
 
 	if (!asus_get_prop_usb_present(smbchg_dev)) {
@@ -6780,13 +6796,11 @@ void asus_chg_flow_work(struct work_struct *work)
 		CHG_DBG("Retry %s detected\n", apsd_result->name);
 	}
 
-	side_pca_vid = PE_check_asus_vid();
-	btm_pca_vid = rt_chg_check_asus_vid();
-	if (side_pca_vid && btm_pca_vid)
+	if (side_pps_flag && btm_pps_flag)
 		NXP_FLAG = NXP_BOTH;
-	else if (side_pca_vid && !gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK))
+	else if (side_pps_flag)
 		NXP_FLAG = NXP_SIDE;
-	else if (btm_pca_vid && !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK))
+	else if (btm_pps_flag)
 		NXP_FLAG = NXP_BTM;
 	else
 		NXP_FLAG = NXP_NONE;
@@ -7495,9 +7509,6 @@ void asus_insertion_initial_settings(struct smb_charger *chg)
 
 void asus_set_flow_flag_work(struct work_struct *work)
 {
-	bool btm_pca_vid;
-	bool side_pca_vid;
-
 	//[+++]Check the VBUS status againg before runing the work
 	if (!asus_get_prop_usb_present(smbchg_dev)) {
 		CHG_DBG_E("Try to run, but VBUS_IN is low\n");
@@ -7508,13 +7519,11 @@ void asus_set_flow_flag_work(struct work_struct *work)
 	if (asus_flow_processing)
 		asus_adapter_detecting_flag = 1;
 
-	side_pca_vid = PE_check_asus_vid();
-	btm_pca_vid = rt_chg_check_asus_vid();
-	if (side_pca_vid && btm_pca_vid)
+	if (side_pps_flag && btm_pps_flag)
 		NXP_FLAG = NXP_BOTH;
-	else if (side_pca_vid && !gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK))
+	else if (side_pps_flag)
 		NXP_FLAG = NXP_SIDE;
-	else if (btm_pca_vid && !gpio_get_value_cansleep(global_gpio->BTM_OVP_ACOK))
+	else if (btm_pps_flag)
 		NXP_FLAG = NXP_BTM;
 	else
 		NXP_FLAG = NXP_NONE;

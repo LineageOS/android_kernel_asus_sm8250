@@ -1310,12 +1310,14 @@ static const struct power_supply_desc usb_psy_desc = {
 	.property_is_writeable = smb5_usb_prop_is_writeable,
 };
 
+extern int asus_get_prop_pca_enable(struct smb_charger *chg);
 int rt_charger_set_usb_property_notifier(enum power_supply_property psp, int value)
 {
 	union power_supply_propval val = {0};
 	bool pogo_ovp_stats = gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK);
 	int rc = 0;
 	int rt_ufp = asus_get_bottom_ufp_mode();
+	int pca_enable;	
 
 	if (!pogo_ovp_stats && rt_ufp != 0) {
 		CHG_DBG_E("Set dual_port_once_flag = 1\n");
@@ -1330,7 +1332,9 @@ int rt_charger_set_usb_property_notifier(enum power_supply_property psp, int val
 	mutex_lock(&smbchg_dev->smb_lock);
 
 	if (psp == POWER_SUPPLY_PROP_PD_CURRENT_MAX) {
-		if (rt_chg_check_asus_vid()) {
+		pca_enable = asus_get_prop_pca_enable(smbchg_dev);
+		CHG_DBG("pca_enable = %d\n", pca_enable);
+		if (pca_enable > 1) {
 			CHG_DBG_E("BTM PCA working, do not set PD_CURRENT_MAX property from BTM\n");
 			mutex_unlock(&smbchg_dev->smb_lock);
 			return 0;

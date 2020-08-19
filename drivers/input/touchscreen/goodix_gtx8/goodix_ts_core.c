@@ -69,6 +69,8 @@ static int FPArea = 6;
 static bool aod_press = false;
 static int key_i = -1;
 static bool key_o_sync = false;
+static int fp_status = -1;
+static bool process_resume = false;
 bool enable_touch_debug = false;
 bool enable_touch_time_debug = false;
 
@@ -973,6 +975,12 @@ static ssize_t goodix_aod_test_mode_store(struct device *dev,
 
 	core_data->aod_test_mode = en;
 
+	if(((core_data->aod_test_mode == 0) || (core_data->aod_test_mode == 2)) && ((process_resume == false) || (fp_status == 2))) {
+		ts_info("touch resume : vendor.asus.touch_control_fod = %d", core_data->aod_test_mode);
+		process_resume = true;
+		wake_up_interruptible(&core_data->fp_queue);
+	}
+
 	return count;
 }
 
@@ -1528,7 +1536,6 @@ static ssize_t dfps_store(struct device *dev,
 		return -EINVAL;
 	}
 	core_data->dfps = value;
-	
 	goodix_ts_switch_sample_rate(gts_core_data);
 
 	return count;
@@ -1704,6 +1711,30 @@ static ssize_t enable_touch_time_debug_show(struct device *dev,
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", enable_touch_time_debug);
 }
+
+static ssize_t FP_status_store(struct device *dev,
+				      struct device_attribute *attr, const char *buf, size_t count)
+{
+	int en;
+	
+	if (!((sscanf(buf, "%d", &en) == 0) || (sscanf(buf, "%d", &en) == 1) || (sscanf(buf, "%d", &en) == 2)))
+		return -EINVAL;
+	ts_info("FP status %d",en);
+
+	fp_status = en;
+	if((fp_status == 1) && (process_resume == false)) {
+		ts_info("touch resume : vendor.goodix.sensor.status = 1");
+		process_resume = true;
+		wake_up_interruptible(&gts_core_data->fp_queue);
+	}
+	return count;
+}
+
+static ssize_t FP_status_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", fp_status);
+}
 // ASUS_BSP --- Touch
 
 static DEVICE_ATTR(extmod_info, S_IRUGO, goodix_ts_extmod_show, NULL);
@@ -1745,6 +1776,7 @@ static DEVICE_ATTR(phone_state_on,S_IRUGO|S_IWUSR, NULL, phone_state_store);
 static DEVICE_ATTR(chip_debug,S_IRUGO|S_IWUSR, chip_debug_show, NULL);
 static DEVICE_ATTR(enable_touch_debug,S_IRUGO|S_IWUSR, enable_touch_debug_show, enable_touch_debug_store);
 static DEVICE_ATTR(enable_touch_time_debug,S_IRUGO|S_IWUSR, enable_touch_time_debug_show, enable_touch_time_debug_store);
+static DEVICE_ATTR(FP_status,S_IRUGO|S_IWUSR, FP_status_show, FP_status_store);
 // ASUS_BSP --- Touch
 
 static struct attribute *sysfs_attrs[] = {
@@ -1783,6 +1815,7 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_chip_debug.attr,
 	&dev_attr_enable_touch_debug.attr,
 	&dev_attr_enable_touch_time_debug.attr,
+	&dev_attr_FP_status.attr,
 // ASUS_BSP --- Touch
 	NULL,
 };
@@ -2138,16 +2171,18 @@ int read_chip_cmd(struct goodix_ts_core *core_data, u16 cmd_addr, int buf_len, u
 static void goodix_resume_work(struct work_struct *work)
 {
 	static bool wait_dclick_enable = true;
+	int retval;
 
-	ts_info("resume_work +++ AOD(%d) PanelOff(%d)", gts_core_data->aod_test_mode, asus_display_in_normal_off());
+	ts_info("resume_work +++ AOD(%d) PanelOff(%d) FP(%d)", gts_core_data->aod_test_mode, asus_display_in_normal_off(), fp_status);
 
 	if (gts_core_data->aod_test_mode == 1){
-		if (asus_display_in_normal_off() == false) {
-			ts_info("resume wait 0.5 sec for FP");
-			schedule_delayed_work(&gts_core_data->gts_resume_work, msecs_to_jiffies(500)); // 0.5 sec
+		if((fp_status == 0) || (fp_status == 2)) {
+			ts_info("resume +++ wait sec for FP status(%d)", fp_status);
+			retval = wait_event_interruptible(gts_core_data->fp_queue, ((fp_status == 1) || (process_resume == true)));
+			ts_info("resume --- wait sec for FP status(%d)", fp_status);
 		}
-		return;
 	}
+
 	if((wait_dclick() == true) && (wait_dclick_enable == true)) {
 		ts_info("resume wait 0.3 sec for dclick");
 		wait_dclick_enable = false;
@@ -2170,11 +2205,13 @@ static void goodix_resume_work(struct work_struct *work)
 	mutex_lock(&gts_core_data->gts_suspend_mutex);
 	goodix_ts_resume(gts_core_data);
 	gts_core_data->disable_fod = true;
-	
+
 	goodix_ts_switch_sample_rate(gts_core_data);
 	goodix_ts_rotation(gts_core_data, gts_core_data->rotation);
 
 	mutex_unlock(&gts_core_data->gts_suspend_mutex);
+	
+	process_resume = false;
 	ts_info("resume_work ---");
 }
 
@@ -3781,6 +3818,7 @@ out:
 	atomic_set(&core_data->glove_mode, 0);
 	core_data->game_mode = false;
 	core_data->atr_enable = false;
+	init_waitqueue_head(&core_data->fp_queue);
 
 	if (asus_var_panel_stage[0]!='B'){
 		fod_position = ts_9886_fod_position;

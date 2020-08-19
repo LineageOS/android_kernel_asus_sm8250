@@ -2424,7 +2424,7 @@ static int ms51_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int err = 0;
 	struct ms51_platform_data *platform_data;
-
+	int count=1;
 	unsigned char data[4] = {0};
 	unsigned char *buf_cmd;
 	struct i2c_msg msgs[2];
@@ -2534,8 +2534,8 @@ static int ms51_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	mutex_unlock(&platform_data->ms51_mutex);
 
-	if(data[0]!=1 && data[0]!=2){
-		printk("[AURA_MS51_INBOX] get fw_mode in probe failed for the first time, we will reset and retry\n");
+	while(data[0]!=1 && data[0]!=2){
+		printk("[AURA_MS51_INBOX] get fw_mode in probe failed for the %d time, we will reset and retry\n",count);
 		if ( gpio_is_valid(platform_data->ms51_enable_pin) ) {
 			gpio_set_value(platform_data->ms51_enable_pin, 0);
 		}else {
@@ -2546,7 +2546,7 @@ static int ms51_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		}else {
 			printk("[AURA_MS51_INBOX] ms51_on is not vaild\n");
 		}
-		msleep(350); //sleep 350ms for waiting ic power on.
+		msleep(500); //sleep 350ms for waiting ic power on.
 		memset(buf_cmd,0,sizeof(unsigned char)*48);
 		buf_cmd[0] = 0xCA;
 		mutex_lock(&platform_data->ms51_mutex);
@@ -2564,12 +2564,14 @@ static int ms51_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		msgs[1].buf = data;
 		i2c_transfer(client->adapter,&msgs[1], 1);
 		mutex_unlock(&platform_data->ms51_mutex);
-		if(data[0]!=1 && data[0]!=2){
+		count=count+1;
+		if(count==10)
+			break;
+	}
+	if(data[0]!=1 && data[0]!=2){
 			printk("[AURA_MS51_INBOX] get fw_mode in probe failed for the second time, we will return\n");
 			goto aura_en_remove;
 		}
-	}
-
 // Register sys class  
 	err = aura_sync_register(&client->dev, platform_data);
 	if (err) {

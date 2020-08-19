@@ -38,6 +38,7 @@ char evtlog_poweroff_reason[50];
 
 #ifdef CONFIG_PON_EVT_LOG
 char evtlog_pon_dump[100]; 
+extern char *evtlog_pm8250_dump[17];
 #endif
 
 extern int ASUSEvt_poweroff_reason;
@@ -983,6 +984,9 @@ static struct mutex mA_erc;//Record the important power event
 static void do_write_event_worker(struct work_struct *work)
 {
 	char buffer[256];
+#ifdef CONFIG_PON_EVT_LOG
+	int i;
+#endif
 
 	memset(buffer, 0, sizeof(char) * 256);
 	
@@ -1018,10 +1022,39 @@ static void do_write_event_worker(struct work_struct *work)
 		ksys_write(g_hfileEvtlog, buffer, strlen(buffer));
 
 	#ifdef CONFIG_PON_EVT_LOG 
+		if(evtlog_pm8250_dump[0]!=0) {
+			//printk("===================pm8250 dump begin==========================\n");
+			sprintf(buffer,"%s","===================pm8250 dump begin==========================\n");
+			ksys_write(g_hfileEvtlog, buffer, strlen(buffer));
+		}
+		for(i=0;i<17;i++) {
+			if(evtlog_pm8250_dump[i]!=0) {
+				//printk(evtlog_pm8250_dump[i]);
+				sprintf(buffer,"%s",evtlog_pm8250_dump[i]);
+				ksys_write(g_hfileEvtlog, buffer, strlen(buffer));
+			}
+		}
+		if(evtlog_pm8250_dump[0]!=0) {
+			//printk("===================pm8250 dump end==========================\n");
+			sprintf(buffer,"%s","===================pm8250 dump dump end==========================\n");
+			ksys_write(g_hfileEvtlog, buffer, strlen(buffer));
+
+		}
+
 		//sys_fsync(g_hfileEvtlog);
 		snprintf(buffer, sizeof(buffer),
 		        "[PON Dump] %s \n",evtlog_pon_dump);
 		ksys_write(g_hfileEvtlog, buffer, strlen(buffer));
+
+		/*
+		for(i=0;i<17;i++) {
+			if(evtlog_pm8250_dump[i]!=0) {
+				kfree(evtlog_pm8250_dump[i]);
+				evtlog_pm8250_dump[i] = 0;
+			}
+		}
+		*/
+
 	#endif
 
 		ksys_close(g_hfileEvtlog);
