@@ -2584,6 +2584,29 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 #endif
 // Jiunhau_Test_1 ---
 		if (core_data->aod_test_mode == 0) {
+			if (fod_position[0] < touch_data->coords[i].x && touch_data->coords[i].x < fod_position[1] &&
+				fod_position[2] < touch_data->coords[i].y && touch_data->coords[i].y < fod_position[3]) {
+				key_i = i;
+				if(TouchArea >= FPArea) {
+					if (key_o_sync == true) {
+						key_o_sync = false;
+						ts_info("release KEY_O");
+					}
+					data_x = touch_data->coords[i].x;
+					data_y = touch_data->coords[i].y;
+					ts_info("KEY_F X = %d, Y = %d", data_x, data_y);
+					input_switch_key(dev, KEY_F);
+					ts_info("KEY_F");
+				} else {
+					if (key_o_sync == false) {
+						input_switch_key(dev, KEY_O);
+						key_o_sync = true;
+						ts_info("KEY_O");
+					}
+					ts_info("FPArea %d < %d", TouchArea, FPArea);
+				}
+			}
+
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
 			input_report_abs(dev, ABS_MT_POSITION_X,
