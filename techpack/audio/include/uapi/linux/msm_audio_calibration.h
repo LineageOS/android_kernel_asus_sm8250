@@ -49,6 +49,13 @@
 							221, void *)
 #define SW_AUDIOWIZARD_RINGTONE		0x0b
 /* ASUS_BSP --- */
+//Jessy +++ send mic intent
+#define AUDIO_SET_AUDIORECORD_MIC_USING	_IOWR(CAL_IOCTL_MAGIC, \
+							223, void *)
+
+#define SW_AUDIORECORD_START 0x0c
+#define SW_AUDIORECORD_STOP 0x0e
+//Jessy ---
 /* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 #define AUDIO_SET_ACTIVEINPUT_PID	_IOWR(CAL_IOCTL_MAGIC, \
 							232, void *)
@@ -124,6 +131,9 @@ enum {
 	/* ASUS_BSP +++ AudioWizard hifi & ringtone mode */
 	AUDIOWIZARD_FORCE_PRESET_TYPE,
 	/* ASUS_BSP --- */
+        //Jessy +++ send mic intent
+        AUDIORECORD_MIC_USING_TYPE,
+        //Jessy ---
 	/* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 	AUDIO_SET_ACTIVEINPUT_PID_TYPE,
 	/* ASUS_BSP --- */

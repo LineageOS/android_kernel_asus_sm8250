@@ -1084,14 +1084,7 @@ static int vcnl36866_light_hw_turn_onoff(bool bOn)
 			log("Light Sensor power on (CS_CONF1 : 0x%x -> 0x%x)\n", 
 				power_state_data_origin[0], power_state_data_buf[0]);
 		}		
-	}else{ /* power off */	
-		ret = vcnl36866_proximity_hw_set_cs_standby_config(~VCNL36866_CS_STANDBY);
-		if(ret < 0)		
-			return ret;
-		ret = vcnl36866_proximity_hw_set_cs_config(~VCNL36866_CS_START);
-		if(ret < 0)		
-			return ret;
-		
+	}else{ /* power off */
 		power_state_data_buf[0] |= VCNL36866_CS_SD;
 		
 		ret = i2c_write_reg_u16(g_i2c_client, CS_CONF1, power_state_data_buf);

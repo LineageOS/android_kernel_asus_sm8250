@@ -22,5 +22,12 @@
 
 #define ASUS_GAMEPAD_REPORT_ID              0x00
 #define ASUS_GAMEPAD_REPORT_TYPE            0x01
+
+// For Read FW
+#define ASUS_GAMEPAD_FW_REPORT_ID           0xA1
+#define ASUS_GAMEPAD_GET_MIDDLE_FW_VERSION  0x0C
+#define ASUS_GAMEPAD_GET_RIGHT_FW_VERSION   0x0D
+#define ASUS_GAMEPAD_GET_BT_FW_VERSION      0x0E
+
 #endif
 

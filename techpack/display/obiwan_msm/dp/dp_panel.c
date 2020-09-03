@@ -2202,7 +2202,7 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 		min_supported_bpp = 24;
 
 	/* ASUS BSP DP, to limit output with 8bit@24bpp +++ */
-	dt_hdmi = dp_display_is_hdmi_bridge(dp_panel);
+	//dt_hdmi = dp_display_is_hdmi_bridge(dp_panel);
 	if ((asus_vendor && !strncmp(asus_vendor, "ACR", 3)) || (gDongleType ==  3 && dt_hdmi))
 		bpp = min_t(u32, mode_edid_bpp, DP_PANEL_DEFAULT_BPP);
 	else

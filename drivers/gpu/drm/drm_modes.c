@@ -41,6 +41,8 @@
 
 #include "drm_crtc_internal.h"
 
+extern bool dt_hdmi; /* ASUS BSP DP +++ */
+
 /**
  * drm_mode_debug_printmodeline - print a mode to dmesg
  * @mode: mode to print
@@ -1323,6 +1325,15 @@ static int drm_mode_compare(void *priv, struct list_head *lh_a, struct list_head
 	struct drm_display_mode *a = list_entry(lh_a, struct drm_display_mode, head);
 	struct drm_display_mode *b = list_entry(lh_b, struct drm_display_mode, head);
 	int diff;
+	/* ASUS BSP DP +++ */
+	int vref = 1080;
+
+	if (dt_hdmi && (a->vdisplay >= vref) && (b->vdisplay >= vref)) {
+		diff = b->vrefresh - a->vrefresh;
+		if (diff)
+			return diff;
+	}
+	/* ASUS BSP DP --- */
 
 	diff = ((b->type & DRM_MODE_TYPE_PREFERRED) != 0) -
 		((a->type & DRM_MODE_TYPE_PREFERRED) != 0);

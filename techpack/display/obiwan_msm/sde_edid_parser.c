@@ -16,6 +16,7 @@
 char *asus_vendor = NULL;
 bool force_hdcp1x = false;
 bool force_dp_version = false;
+bool force_60hz = false;
 /* ASUS BSP DP --- */
 
 enum data_block_types {
@@ -237,6 +238,14 @@ static void sde_edid_extract_vendor_id(struct sde_edid_ctrl *edid_ctrl)
 		force_dp_version = true;
 	else
 		force_dp_version = false;
+
+	// for C27G2
+	if (!strncmp(asus_vendor, "AOC", 3) && proc_codes == 0x270)
+		force_60hz = true;
+	else
+		force_60hz = false;
+
+	pr_err("[msm-dp] vendor id=%s, proc codes=%x +++\n", vendor_id, proc_codes);
 	/* ASUS BSP DP --- */
 
 	SDE_EDID_DEBUG("vendor id is %s ", vendor_id);

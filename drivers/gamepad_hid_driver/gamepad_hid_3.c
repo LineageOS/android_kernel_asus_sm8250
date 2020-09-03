@@ -44,42 +44,36 @@ static int asus_usb_hid_write(u8 vlaues,char asus_gp_command_id)
 	int len = 0;
 	char *buffer;
 
-	pr_debug("[GAMEPAD_III] asus_usb_hid_write asus_gp_command_id: %d,value: %d\n", asus_gp_command_id,vlaues);
-
+	//printk("[GAMEPAD_III] asus_usb_hid_write asus_gp_command_id: %d,value: %d\n", asus_gp_command_id,vlaues);
 	if (gamepad_hidraw == NULL) {
-		pr_err("[GAMEPAD_III] gamepad_hidraw is NULL !\n");
+		printk("[GAMEPAD_III] gamepad_hidraw is NULL !\n");
 		return -1;
 	}
 
 	if(asus_gp_command_id < 0x80)
 	{
-		pr_err("[GAMEPAD_III] error asus gamepad set command : 0x%x\n", asus_gp_command_id);
+		printk("[GAMEPAD_III] error asus gamepad set command : 0x%x\n", asus_gp_command_id);
 		return -1;
 	}
 	
 	buffer = kzalloc(0x08, GFP_KERNEL);
-
 	memset(buffer,0,8);
-
 	hdev = gamepad_hidraw->hid;
-
 	hid_hw_power(hdev, PM_HINT_FULLON);
-
 	report_number = ASUS_GAMEPAD_REPORT_ID;
+
 	buffer[0] = report_number;
 	buffer[1] = asus_gp_command_id; // ASUSCmdID
 	buffer[2] = vlaues; 
 	len = 8;
-	report_type = ASUS_GAMEPAD_REPORT_TYPE;
 
+	report_type = ASUS_GAMEPAD_REPORT_TYPE;
 	ret = asus_usbhid_set_raw_report(hdev,report_number,buffer,len,report_type);
 
 	hid_hw_power(hdev, PM_HINT_NORMAL);
-
 	kfree(buffer);
 
 	return ret;
-
 }
 
 static int asus_usb_hid_read(u8 *data,char asus_gp_command_id)
@@ -91,27 +85,22 @@ static int asus_usb_hid_read(u8 *data,char asus_gp_command_id)
 	char *buffer;
 	int count = 0;
 
-	pr_debug("[GAMEPAD_III] asus_usb_hid_read asus_gp_command_id=%d\n",asus_gp_command_id);
-
+	//printk("[GAMEPAD_III] asus_usb_hid_read asus_gp_command_id=%d\n",asus_gp_command_id);
 	if (gamepad_hidraw == NULL) {
-		pr_err("[GAMEPAD_III] gamepad_hidraw is NULL !\n");
+		printk("[GAMEPAD_III] gamepad_hidraw is NULL !\n");
 		return -1;
 	}
 	
 	if(asus_gp_command_id > 0x80)
 	{
-		pr_err("[GAMEPAD_III] error asus gamepad set command : 0x%x\n", asus_gp_command_id);
+		printk("[GAMEPAD_III] error asus gamepad set command : 0x%x\n", asus_gp_command_id);
 		return -1;
 	}
 	
 	buffer = kzalloc(0x02, GFP_KERNEL);
-
 	memset(buffer,0,2);
-
 	hdev = gamepad_hidraw->hid;
-
 	hid_hw_power(hdev, PM_HINT_FULLON);
-
 	report_number = ASUS_GAMEPAD_REPORT_ID;
 	count = 0x2;
 	report_type = asus_gp_command_id-1;
@@ -120,11 +109,45 @@ static int asus_usb_hid_read(u8 *data,char asus_gp_command_id)
 				 HID_REQ_GET_REPORT);
 	
 	(*data) = buffer[1];
-
 	//printk("[GAMEPAD_III] asus_usb_hid_read : %d\n", (*data));
 
 	hid_hw_power(hdev, PM_HINT_NORMAL);
-	
+	kfree(buffer);
+
+	return ret;
+}
+
+static int asus_usb_hid_read_fw(u8 *data, char cmd)
+{
+	int ret = 0;
+	struct hid_device *hdev;
+	unsigned char report_type;
+	unsigned char report_number;
+	u8 *buffer;
+	int count = 0;
+
+	//printk("[GAMEPAD_III] asus_usb_hid_read_fw, cmd=%d\n",cmd);
+	if (gamepad_hidraw == NULL) {
+		printk("[GAMEPAD_III] gamepad_hidraw is NULL !\n");
+		return -1;
+	}
+
+	buffer = kzalloc(0x4, GFP_KERNEL);
+	memset(buffer,0,4);
+	hdev = gamepad_hidraw->hid;
+	hid_hw_power(hdev, PM_HINT_FULLON);
+	report_number = ASUS_GAMEPAD_FW_REPORT_ID;
+	count = 0x3;
+	report_type = cmd-1;
+
+	ret = hid_hw_raw_request(hdev, report_number, buffer, count, report_type, HID_REQ_GET_REPORT);
+
+	data[0] = buffer[0];
+	data[1] = buffer[1];
+	data[2] = buffer[2];
+	//printk("[GAMEPAD_III] asus_usb_hid_read_fw : %x,%x,%x\n", buffer[0], buffer[1], buffer[2]);
+
+	hid_hw_power(hdev, PM_HINT_NORMAL);
 	kfree(buffer);
 
 	return ret;
@@ -132,7 +155,6 @@ static int asus_usb_hid_read(u8 *data,char asus_gp_command_id)
 
 static ssize_t red_pwm_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
@@ -140,14 +162,12 @@ static ssize_t red_pwm_store(struct device *dev, struct device_attribute *attr, 
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	//printk("[GAMEPAD_III] red reg_val %d\n", reg_val);
-	pr_debug("[GAMEPAD_III] %s reg_val %d\n", __func__,reg_val);
 
+	//printk("[GAMEPAD_III] %s, reg_val %d\n", __func__,reg_val);
 	g_red=reg_val;
-
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_RED_PWM);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
@@ -157,11 +177,12 @@ static ssize_t red_pwm_show(struct device *dev, struct device_attribute *attr,ch
 
 	unsigned char data= 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_RED_PWM);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] red_pwm_show:err %d\n", err);
+		printk("[GAMEPAD_III] red_pwm_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] %s, %d\n", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n", data);
 }
 
@@ -172,87 +193,81 @@ static ssize_t green_pwm_store(struct device *dev, struct device_attribute *attr
 	int err = 0;
 	ssize_t ret;
 
-	pr_debug("[GAMEPAD_III] %s reg_val %d\n", __func__,reg_val);
-
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	//printk("[GAMEPAD_III] green reg_val %d\n", reg_val);
+
+	//printk("[GAMEPAD_III] %s, reg_val %d\n", __func__, reg_val);
 	g_green=reg_val;
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_GREEN_PWM);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
 
 static ssize_t green_pwm_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
-
 	unsigned char data= 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_GREEN_PWM);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] green_pwm_show:err %d\n", err);
+		printk("[GAMEPAD_III] green_pwm_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] %s, %d\n", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n", data);
 }
 
 static ssize_t blue_pwm_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
 
-	pr_debug("[GAMEPAD_III] %s reg_val %d\n", __func__,reg_val);
-
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	//printk("[GAMEPAD_III] blue reg_val %d\n", reg_val);
+
+	//printk("[GAMEPAD_III] %s, reg_val %d\n", __func__, reg_val);
 	g_blue=reg_val;
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_BLUE_PWM);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
 
 static ssize_t blue_pwm_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
-
 	unsigned char data= 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_BLUE_PWM);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] blue_pwm_show:err %d\n", err);
+		printk("[GAMEPAD_III] blue_pwm_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] %s, %d\n", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n", data);
 }
 
 static ssize_t apply_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
-
-	pr_debug("[GAMEPAD_III] apply_store.\n");
 
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret){
 		apply_state=-1;
 		return count;
 	}
-	//printk("[GAMEPAD_III] apply reg_val %d\n", reg_val);
+
 	pr_info("[GAMEPAD_III] Send apply. RGB:%d %d %d, mode:%d, speed:%d, led_on:%d\n", g_red, g_green, g_blue, g_mode, g_speed, g_led_on);
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_APPLY);
 	if (err < 0){
 		apply_state=-1;
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 	}
 
 	return count;
@@ -260,41 +275,38 @@ static ssize_t apply_store(struct device *dev, struct device_attribute *attr, co
 
 static ssize_t apply_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
-
 	return snprintf(buf, PAGE_SIZE,"%d\n", apply_state);
 }
 
 static ssize_t mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
 
-	//printk("[GAMEPAD_III] mode_store.\n");
-
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	pr_debug("[GAMEPAD_III] %s reg_val %d\n", __func__,reg_val);
+
+	//printk("[GAMEPAD_III] %s reg_val %d\n", __func__,reg_val);
 	g_mode=reg_val;
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_MODE);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
 
 static ssize_t mode_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
-
 	unsigned char data = 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_MODE);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] mode_show:err %d\n", err);
+		printk("[GAMEPAD_III] mode_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] %s, %d\n", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n",data);
 }
 
@@ -302,45 +314,82 @@ static ssize_t fw_ver_show(struct device *dev, struct device_attribute *attr,cha
 {
 	unsigned char data= 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_FW_VERSION);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] fw_ver_show:err %d\n", err);
+		printk("[GAMEPAD_III] fw_ver_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] FW version : 0x%x\n", data);
 	return snprintf(buf, PAGE_SIZE,"0x%x\n", data);
+}
+
+static ssize_t middle_fw_ver_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	unsigned char data[3] = {0};
+	int err = 0;
+
+	err = asus_usb_hid_read_fw(data, ASUS_GAMEPAD_GET_MIDDLE_FW_VERSION);
+	if (err < 0)
+		printk("[GAMEPAD_III] middle_fw_ver_show:err %d\n", err);
+
+	printk("[GAMEPAD_III] Middle FW version : V%x.%x.%x\n", data[0], data[1], data[2]);
+	return snprintf(buf, PAGE_SIZE,"V%x.%x.%x\n", data[0], data[1], data[2]);
+}
+
+static ssize_t right_fw_ver_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	unsigned char data[3] = {0};
+	int err = 0;
+
+	err = asus_usb_hid_read_fw(data, ASUS_GAMEPAD_GET_RIGHT_FW_VERSION);
+	if (err < 0)
+		printk("[GAMEPAD_III] right_fw_ver_show:err %d\n", err);
+
+	printk("[GAMEPAD_III] Right FW version : V%x.%x.%x\n", data[0], data[1], data[2]);
+	return snprintf(buf, PAGE_SIZE,"V%x.%x.%x\n", data[0], data[1], data[2]);
+}
+
+static ssize_t bt_fw_ver_show(struct device *dev, struct device_attribute *attr,char *buf)
+{
+	unsigned char data[3] = {0};
+	int err = 0;
+
+	err = asus_usb_hid_read_fw(data, ASUS_GAMEPAD_GET_BT_FW_VERSION);
+	if (err < 0)
+		printk("[GAMEPAD_III] bt_fw_ver_show:err %d\n", err);
+
+	printk("[GAMEPAD_III] BT FW version : V%x.%x.%x\n", data[0], data[1], data[2]);
+	return snprintf(buf, PAGE_SIZE,"V%x.%x.%x\n", data[0], data[1], data[2]);
 }
 
 static ssize_t fw_mode_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
 	unsigned char data= 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_FWMODE);
 	if (err < 0){
-		pr_err("[GAMEPAD_III] fw_mode_show:err %d\n", err);
+		printk("[GAMEPAD_III] fw_mode_show:err %d\n", err);
 	}
 
+	printk("[GAMEPAD_III] FW version : 0x%x\n", data);
 	return snprintf(buf, PAGE_SIZE,"0x%x\n", data);
 }
 
-
 static ssize_t frame_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
 
-	//printk("[GAMEPAD_III] frame_store.\n");
-
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	pr_info("[GAMEPAD_III] frame_store  reg_val %d\n", reg_val);
 
+	//printk("[GAMEPAD_III] %s, reg_val %d\n", __func__, reg_val);
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_FRAME);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
@@ -350,11 +399,12 @@ static ssize_t frame_show(struct device *dev, struct device_attribute *attr,char
 
 	unsigned char data= 0;
 	int err = 0;
-	pr_debug("[GAMEPAD_III] %s\n",__func__);
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_FRAME);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] frame_show:err %d\n", err);
-	pr_info("[GAMEPAD_III] %s\n data=%d",__func__,data);
+		printk("[GAMEPAD_III] frame_show:err %d\n", err);
+
+	printk("[GAMEPAD_III] %s, %d", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n", data);
 }
 
@@ -381,7 +431,7 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 	pr_info("[GAMEPAD_III] mode2_store mode2 = 0x%x buf=%s ntokens=%d .\n",mode2,buf,ntokens);
 	if(ntokens > 6)
 	{
-		pr_err("[AURA_ML51_INBOX] mode2_store,wrong input,too many ntokens\n");
+		printk("[AURA_ML51_INBOX] mode2_store,wrong input,too many ntokens\n");
 		mode2_state=-1;
 		return count;
 	}
@@ -406,7 +456,7 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 	}
 
 	if(rgb_num != ntokens*3){
-		pr_err("[AURA_ML51_INBOX] mode2_store,wrong input,rgb_num != ntokens*3\n");
+		printk("[AURA_ML51_INBOX] mode2_store,wrong input,rgb_num != ntokens*3\n");
 		mode2_state=-1;
 		return count;
 	}
@@ -422,12 +472,12 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 1: //6 color rainbow
 			if(ntokens != 6){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -436,19 +486,19 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 				err = asus_usb_hid_write(rgb[i],0x90+i);
 				if (err < 0){
 					mode2_state=-1;
-					pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+					printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 				}
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 10: //6 color rainbow in the different direction
 			if(ntokens != 6){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -457,19 +507,19 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 				err = asus_usb_hid_write(rgb[i],0x90+i);
 				if (err < 0){
 					mode2_state=-1;
-					pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+					printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 				}
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 2: //static
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -477,28 +527,28 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 3: //breath at the same time
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -506,28 +556,28 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 4: //breath at different time
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -535,29 +585,29 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 5: //breath only one led
 		case 11: //breath only one led
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -565,28 +615,28 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 6: //commet
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -594,28 +644,28 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 8: //commet
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -623,28 +673,28 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 7: //flash and dash
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -652,28 +702,28 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		case 9: //flash and dash
 			if(ntokens != 1){
-				pr_err("[GAMEPAD_III] mode2_store,wrong input.\n");
+				printk("[GAMEPAD_III] mode2_store,wrong input.\n");
 				mode2_state=-1;
 				return count;
 			}
@@ -681,23 +731,23 @@ static ssize_t mode2_store(struct device *dev, struct device_attribute *attr, co
 			err = asus_usb_hid_write(rgb[0],ASUS_GAMEPAD_SET_RED_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[1],ASUS_GAMEPAD_SET_GREEN_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			err = asus_usb_hid_write(rgb[2],ASUS_GAMEPAD_SET_BLUE_PWM);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 
 			err = asus_usb_hid_write(rainbow_mode,ASUS_GAMEPAD_SET_MODE);
 			if (err < 0){
 				mode2_state=-1;
-				pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+				printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 			}
 			break;
 		default:
@@ -714,54 +764,51 @@ static ssize_t mode2_show(struct device *dev, struct device_attribute *attr,char
 
 static ssize_t led_on_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
 
-	//printk("[GAMEPAD_III] led_on_store.\n");
-
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	pr_debug("[GAMEPAD_III] led_on_store reg_val %d\n", reg_val);
+
+	//printk("[GAMEPAD_III] %s, reg_val %d\n", __func__, reg_val);
 	g_led_on=reg_val;
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_LED_ON);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
 
 static ssize_t led_on_show(struct device *dev, struct device_attribute *attr,char *buf)
 {
-
 	unsigned char data= 0;
 	int err = 0;
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_LED_ON);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] led_on_show:err %d\n", err);
+		printk("[GAMEPAD_III] led_on_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] %s, %d\n", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n", data);
 }
 
 static ssize_t speed_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-
 	u32 reg_val;
 	int err = 0;
 	ssize_t ret;
 
-	//printk("[GAMEPAD_III] speed_store.\n");
-
 	ret = kstrtou32(buf, 10, &reg_val);
 	if (ret)
 		return count;
-	pr_debug("[GAMEPAD_III] speed_store reg_val %d\n", reg_val);
+
+	//printk("[GAMEPAD_III] %s, reg_val %d\n", __func__, reg_val);
 	g_speed=reg_val;
 	err = asus_usb_hid_write(reg_val,ASUS_GAMEPAD_SET_SPEED);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
+		printk("[GAMEPAD_III] asus_usb_hid_write:err %d\n", err);
 
 	return count;
 }
@@ -771,10 +818,12 @@ static ssize_t speed_show(struct device *dev, struct device_attribute *attr,char
 
 	unsigned char data= 0;
 	int err = 0;
+
 	err = asus_usb_hid_read(&data,ASUS_GAMEPAD_GET_SPEED);
 	if (err < 0)
-		pr_err("[GAMEPAD_III] speed_show:err %d\n", err);
+		printk("[GAMEPAD_III] speed_show:err %d\n", err);
 
+	printk("[GAMEPAD_III] %s, %d\n", __func__, data);
 	return snprintf(buf, PAGE_SIZE,"%d\n", data);
 }
 
@@ -789,8 +838,9 @@ static DEVICE_ATTR(frame, 0664, frame_show, frame_store);
 static DEVICE_ATTR(mode2, 0664, mode2_show, mode2_store);
 static DEVICE_ATTR(led_on, 0664, led_on_show, led_on_store);
 static DEVICE_ATTR(speed, 0664, speed_show, speed_store);
-
-
+static DEVICE_ATTR(middle_fw_ver, 0664, middle_fw_ver_show, NULL);
+static DEVICE_ATTR(right_fw_ver, 0664, right_fw_ver_show, NULL);
+static DEVICE_ATTR(bt_fw_ver, 0664, bt_fw_ver_show, NULL);
 
 static struct attribute *pwm_attrs[] = {
 	&dev_attr_red_pwm.attr,
@@ -804,6 +854,9 @@ static struct attribute *pwm_attrs[] = {
 	&dev_attr_mode2.attr,
 	&dev_attr_led_on.attr,
 	&dev_attr_speed.attr,
+	&dev_attr_middle_fw_ver.attr,
+	&dev_attr_right_fw_ver.attr,
+	&dev_attr_bt_fw_ver.attr,
 	NULL
 };
 
@@ -815,14 +868,14 @@ static const struct attribute_group pwm_attr_group = {
 static void aura_sync_set(struct led_classdev *led,
 			      enum led_brightness brightness)
 {
-	pr_info("[GAMEPAD_III] aura_sync_set : %d.\n", brightness);
+	//printk("[GAMEPAD_III] aura_sync_set : %d.\n", brightness);
 }
 
 static enum led_brightness aura_sync_get(struct led_classdev *led_cdev)
 {
 	struct gamepad_drvdata *data;
 
-	pr_info("[GAMEPAD_III] aura_sync_get.\n");
+	//printk("[GAMEPAD_III] aura_sync_get.\n");
 	data = container_of(led_cdev, struct gamepad_drvdata, led);
 
 	return data->led.brightness;
@@ -870,9 +923,9 @@ static int gamepad_usb_probe(struct hid_device *hdev, const struct hid_device_id
 	unsigned int cmask = HID_CONNECT_DEFAULT;
 	struct gamepad_drvdata *drvdata;
 
-	pr_info("[GAMEPAD_III] hid->name : %s\n", hdev->name);
-	pr_info("[GAMEPAD_III] hid->vendor  : 0x%x\n", hdev->vendor);
-	pr_info("[GAMEPAD_III] hid->product : 0x%x\n", hdev->product);
+	printk("[GAMEPAD_III] hid->name : %s\n", hdev->name);
+	printk("[GAMEPAD_III] hid->vendor  : 0x%x\n", hdev->vendor);
+	printk("[GAMEPAD_III] hid->product : 0x%x\n", hdev->product);
 	ASUSEvtlog("[GAMEPAD_III] GamePad connect\n");
 
 	drvdata = devm_kzalloc(&hdev->dev, sizeof(*drvdata), GFP_KERNEL);
@@ -918,7 +971,7 @@ static int gamepad_usb_probe(struct hid_device *hdev, const struct hid_device_id
 unregister:
 	aura_sync_unregister(drvdata);
 err_free:
-	pr_err("[GAMEPAD_III] gamepad_usb_probe fail.\n");
+	printk("[GAMEPAD_III] gamepad_usb_probe fail.\n");
 	hid_hw_stop(hdev);
 	return ret;
 }
@@ -926,7 +979,7 @@ err_free:
 static void gamepad_usb_remove(struct hid_device *hdev)
 {
 	struct gamepad_drvdata *drvdata = dev_get_drvdata(&hdev->dev);;
-	pr_info("[GAMEPAD_III] gamepad_usb_remove .\n");
+
 	ASUSEvtlog("[GAMEPAD_III] GamePad disconnect!!!\n");
 
 	sysfs_remove_group(&drvdata->led.dev->kobj, &pwm_attr_group);
@@ -960,15 +1013,13 @@ static struct hid_driver gamepad_hid_driver = {
 
 static int __init gamepad_usb_init(void)
 {
-	pr_info("[GAMEPAD_III] gamepad_usb_init\n");
-
+	//printk("[GAMEPAD_III] gamepad_usb_init\n");
 	return hid_register_driver(&gamepad_hid_driver);
 }
 
 static void __exit gamepad_usb_exit(void)
 {
-	pr_info("[GAMEPAD_III] gamepad_usb_exit\n");
-
+	//printk("[GAMEPAD_III] gamepad_usb_exit\n");
 	hid_unregister_driver(&gamepad_hid_driver);
 }
 
@@ -976,7 +1027,7 @@ module_init(gamepad_usb_init);
 module_exit(gamepad_usb_exit);
 
 
-MODULE_AUTHOR("ASUS Lotta Lu");
-MODULE_DESCRIPTION("GamePad III HID Interface");
+MODULE_AUTHOR("ASUS Deeo");
+MODULE_DESCRIPTION("GamePad Kunai III HID Interface");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("asus:gamepad III hid");
+MODULE_ALIAS("asus:gamepad Kunai III HID");

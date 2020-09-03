@@ -326,9 +326,9 @@ void dp_panel_resume(void) {
 	g_panel_suspend = false;
 }
 
-bool dp_display_is_hdmi_bridge(struct dp_panel *panel)
+static bool dp_display_is_hdmi_bridge(struct dp_display_private *dp)
 {
-	return (panel->dpcd[DP_DOWNSTREAMPORT_PRESENT] &
+	return (dp->panel->dpcd[DP_DOWNSTREAMPORT_PRESENT] &
 		0x15);
 }
 /* ASUS BSP DP --- */
@@ -2492,6 +2492,8 @@ static enum drm_mode_status dp_display_validate_mode(
 	bool dsc_en;
 	u32 num_lm = 0;
 	int rc = 0, tmds_max_clock = 0;
+	// ASUS BSP DP +++
+	int max_hdmi_supported_fps = 120;
 
 	if (!dp_display || !mode || !panel ||
 			!avail_res || !avail_res->max_mixer_width) {
@@ -2525,6 +2527,13 @@ static enum drm_mode_status dp_display_validate_mode(
 	rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
 	supported_rate_khz = link_info->num_lanes * rate * 8;
 	tmds_max_clock = dp_panel->connector->display_info.max_tmds_clock;
+
+	/* ASUS BSP DP +++ */
+	dt_hdmi = dp_display_is_hdmi_bridge(dp);
+	if ((mode->vrefresh > max_hdmi_supported_fps) && dt_hdmi) {
+		goto end;
+	}
+	/* ASUS BSP DP --- */
 
 	if (mode_rate_khz > supported_rate_khz) {
 		DP_MST_DEBUG("pclk:%d, supported_rate:%d\n",

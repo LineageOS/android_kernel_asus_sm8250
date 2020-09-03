@@ -28,6 +28,7 @@
 #include <linux/reboot.h>
 #ifdef CONFIG_PON_EVT_LOG
 extern char evtlog_pon_dump[100];
+char *evtlog_pm8250_dump[17] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 #endif
 
 #ifdef FORCE_RAMDUMP_FEATURE
@@ -2460,6 +2461,66 @@ static int qpnp_pon_configure_s3_reset(struct qpnp_pon *pon)
 //===============================================================
 #ifdef CONFIG_PON_EVT_LOG
 
+static void dump_pm8250_to_evt_log(struct device *dev,struct qpnp_pon *pon)
+{
+	int i;
+	int rc;
+	u8 bufdump[0x10];
+	char *p_evtlog;
+
+	for(i=0;i<17;i++) {
+		if(evtlog_pm8250_dump[i] != 0)
+			kfree(evtlog_pm8250_dump[i]);
+		evtlog_pm8250_dump[i] = (char *)kmalloc(256, GFP_KERNEL);
+		memset(evtlog_pm8250_dump[i], 0, 256);
+		if(evtlog_pm8250_dump[i] == 0) {
+			dev_err(dev, "Allocate memory for pm8250 dump is failed.\n");
+			return;
+		}
+	}
+
+	p_evtlog = evtlog_pm8250_dump[0];
+	dev_info(dev, "PMIC@SID%d:\n",to_spmi_device(dev->parent)->usid);
+	sprintf(p_evtlog,"EVENTLOG: PMIC@SID%d: \n",to_spmi_device(dev->parent)->usid);
+	// dump 0x800-0x8ff
+	for(i=0;i<16;i++) {
+		p_evtlog = evtlog_pm8250_dump[i+1];
+		rc = regmap_bulk_read(pon->regmap, ((pon)->base + i*0x10), bufdump, 0x10);
+		if (rc) {
+			sprintf(p_evtlog,
+				"Register read failed, addr=0x%04X, length=16, rc=%d\n",
+				((pon)->base + i*0x10), rc);
+			dev_err(dev, "Register read failed, addr=0x%04X, length=16, rc=%d\n",
+				((pon)->base + i*0x10), rc);
+		} else {
+			sprintf(p_evtlog,
+				"addr=0x%04X: "
+				"0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X,"
+				"0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X \n",
+				((pon)->base + i*0x10),
+				bufdump[0],bufdump[1],bufdump[2],bufdump[3],
+				bufdump[4],bufdump[5],bufdump[6],bufdump[7],
+				bufdump[8],bufdump[9],bufdump[10],bufdump[11],
+				bufdump[12],bufdump[13],bufdump[14],bufdump[15]);
+		#if 1
+			dev_info(dev, "addr=0x%04X: "
+				"0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X,"
+				"0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X, 0x%04X \n",
+				((pon)->base + i*0x10),
+				bufdump[0],bufdump[1],bufdump[2],bufdump[3],
+				bufdump[4],bufdump[5],bufdump[6],bufdump[7],
+				bufdump[8],bufdump[9],bufdump[10],bufdump[11],
+				bufdump[12],bufdump[13],bufdump[14],bufdump[15]);
+		#endif
+		}
+	}
+/*
+	for(i=0;i<17;i++) {
+		dev_info(dev, evtlog_pm8250_dump[i]);
+	}
+*/
+}
+
 static int read_pon_reg_1(struct qpnp_pon *pon,u8 *pon_pon_reason1_8c0, u8 *pon_warm_reset_8c2,u8 *pon_on_reason_8c4,u8 *pon_poff_reason1_8c5)
 {
 	int rc;
@@ -2660,8 +2721,12 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 					index < reason_index_offset) {
 		dev_info(dev, "PMIC@SID%d: Unknown power-off reason\n",
 			 to_spmi_device(dev->parent)->usid);
-		if (to_spmi_device(dev->parent)->usid == 0)
-			 ASUSEvt_poweroff_reason = -1;
+		if (to_spmi_device(dev->parent)->usid == 0) {
+			ASUSEvt_poweroff_reason = -1;
+		#ifdef CONFIG_PON_EVT_LOG
+			dump_pm8250_to_evt_log(dev,pon);
+		#endif
+		}
 	} else {
 		pon->pon_power_off_reason = index;
 		dev_info(dev, "PMIC@SID%d: Power-off reason: %s\n",
@@ -2669,6 +2734,16 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 			 qpnp_poff_reason[index]);
 		if (to_spmi_device(dev->parent)->usid == 0)
 			 ASUSEvt_poweroff_reason = index;
+
+	#ifdef FORCE_RAMDUMP_FEATURE
+		if(g_force_ramdump) {
+			if (to_spmi_device(dev->parent)->usid == 0) {
+			#ifdef CONFIG_PON_EVT_LOG
+				dump_pm8250_to_evt_log(dev,pon);
+			#endif
+			}
+		}
+	#endif
 	}
 
 #ifdef CONFIG_PON_EVT_LOG

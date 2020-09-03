@@ -22,6 +22,7 @@
 #include <linux/usb/pd_dpm_core.h>
 #include <linux/usb/pd_dpm_pdo_select.h>
 #include <linux/usb/pd_core.h>
+#include <linux/power_supply.h>
 #include "pd_dpm_prv.h"
 
 #ifdef CONFIG_ASUS_PD_CHARGER
@@ -294,6 +295,7 @@ static bool dpm_build_request_info_pdo(
 		struct pd_port_power_caps *src_cap, uint8_t charging_policy)
 {
 	bool find_cap = false;
+	bool pps_found = false;
 	int i, max_uw = -1;
 
 	struct pd_port_power_caps *snk_cap = &pd_port->local_snk_cap;
@@ -344,8 +346,19 @@ static bool dpm_build_request_info_pdo(
 				pd_port->pe_data.local_selected_cap = j + 1;
 		}
 	}
-	if (max_uw > 0)
-		set_pd2_active(1);
+	if (max_uw > 0) {
+		/* Check for PPS APDOs */
+		for (j = 0; j < src_cap->nr ; j++) {
+			if ((PDO_TYPE(src_cap->pdos[j]) ==
+					PDO_TYPE_APDO) &&
+				!APDO_TYPE_VAL(src_cap->pdos[j])){
+				pps_found = true;
+				break;
+			}
+		}
+		set_pd2_active(pps_found ? POWER_SUPPLY_PD_PPS_ACTIVE : POWER_SUPPLY_PD_ACTIVE);
+	}
+
 #endif
 	pr_info("[Bottom_PD] %s Find SrcCap%d(%s):%d mw, charging_policy = %d\n", __func__,
 	req_info->pos, req_info->mismatch ? "Mismatch" : "Match", max_uw/1000, (charging_policy & DPM_CHARGING_POLICY_MASK));

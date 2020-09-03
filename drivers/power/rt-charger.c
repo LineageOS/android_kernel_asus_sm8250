@@ -390,7 +390,7 @@ static int chg_set_prop(struct power_supply *psy,
 		break;
 #ifdef CONFIG_DUAL_PD_PORT
 	case POWER_SUPPLY_PROP_PD_CAP:
-		if(rt_chg_check_asus_vid()){
+		//if(rt_chg_check_asus_vid()){
 			 /* call tcpm*/
 			 mv = ((val->intval)>>16) & 0xFFFF;
 			 ma = (val->intval) & 0x7FFF;
@@ -410,7 +410,7 @@ static int chg_set_prop(struct power_supply *psy,
 				/* request APDO */
 				ret = tcpm_set_apdo_charging_policy(info->tcpc, DPM_CHARGING_POLICY_PPS, mv, ma, NULL);
 			}
-		}
+		//}
 		break;
 #endif
            default:
@@ -501,9 +501,9 @@ static int chg_tcp_notifer_call(struct notifier_block *nb,
 			BTM_a2c_cable = false;
 			pr_info("%s tcpc_pd_state = PD_CONNECT_PE_READY_SNK_APDO\n", __func__);
 			rt_chg_get_vid();
-			if(rt_chg_check_asus_vid()){
+			//if(rt_chg_check_asus_vid()){
 				rt_chg_ready_snk_apdo(nb);
-			}
+			//}
 			/* TODO: pps event */
 			break;
 		case PD_CONNECT_NONE:
@@ -513,9 +513,9 @@ static int chg_tcp_notifer_call(struct notifier_block *nb,
 				rt_charger_set_usb_property_notifier(POWER_SUPPLY_PROP_PD_CURRENT_MAX, 0);
 				set_pd2_active(0);
 			}
-			if(rt_chg_check_asus_vid()){
+			//if(rt_chg_check_asus_vid()){
 				rt_chg_connect_none(nb);
-			}
+			//}
 			vid = 0;
 			vid_ext = 0;
 			break;
@@ -526,9 +526,9 @@ static int chg_tcp_notifer_call(struct notifier_block *nb,
 				rt_charger_set_usb_property_notifier(POWER_SUPPLY_PROP_PD_CURRENT_MAX, 0);
 				set_pd2_active(0);
 			}
-			if(rt_chg_check_asus_vid()){
+			//if(rt_chg_check_asus_vid()){
 				rt_chg_hard_reset(nb);
-			}
+			//}
 			vid = 0;
 			vid_ext = 0;
 			break;

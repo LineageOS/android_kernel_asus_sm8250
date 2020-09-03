@@ -404,7 +404,9 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			} else {
 				printk("[keypad][gpio_keys.c] keycode=%d, state=%s\n", button->code, state?"press":"release");
 				if (state > 0) {
-					vol_up_press = 1;
+					if (enable_touch_debug == true) {
+						vol_up_press = 1;
+					}
 				}
 				else {
 					vol_up_press = 0;
