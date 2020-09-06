@@ -33,6 +33,10 @@
 #define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
 
+#ifdef ASUS_ZS661KS_PROJECT
+extern bool g_Recovery_mode;
+#endif
+
 static int goodix_ts_remove(struct platform_device *pdev);
 int goodix_start_later_init(struct goodix_ts_core *ts_core);
 void goodix_ts_dev_release(void);
@@ -4231,6 +4235,12 @@ static struct platform_driver goodix_ts_driver = {
 
 int goodix_ts_core_init(void)
 {
+#ifdef ASUS_ZS661KS_PROJECT
+	if(g_Recovery_mode) {
+		ts_info("Core layer init: Set default lcd stage value for recovery");
+		scnprintf(asus_var_panel_stage, sizeof(asus_var_panel_stage), "B3");
+	}
+#endif
 	ts_info("Core layer init");
 	if (!goodix_modules.initilized) {
 		/* this may init by outer modules register event */
