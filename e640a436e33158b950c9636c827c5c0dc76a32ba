@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "937ebd1a_98a93b31",
+        "filename": "arch/arm64/configs/vendor/obiwan_defconfig",
+        "patchSetId": 2
+      },
+      "lineNbr": 697,
+      "author": {
+        "id": 18205
+      },
+      "writtenOn": "2020-09-19T22:30:39Z",
+      "side": 1,
+      "message": "I couldn\u0027t get a readable dmesg after a panic without this..",
+      "range": {
+        "startLine": 697,
+        "startChar": 0,
+        "endLine": 697,
+        "endChar": 24
+      },
+      "revId": "e640a436e33158b950c9636c827c5c0dc76a32ba",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    }
+  ]
+}
