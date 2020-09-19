@@ -526,7 +526,7 @@ void wait_for_power_key_6s_work(struct work_struct *work)
 			msleep(200);
 
 			printk("force reset device!!\n");
-			kernel_restart(NULL);
+			kernel_restart("recovery");
 		}
 
 		if ((i < TIMEOUT_COUNT) && (i >= TIMEOUT_CLEAR)) {
@@ -3037,7 +3037,7 @@ void pwr_press_workqueue(struct work_struct *work)
 				msleep(200);
 
 				printk("force reset device!!\n");
-				kernel_restart(NULL);
+				kernel_restart("recovery");
 		}
 	}
 	
@@ -3066,7 +3066,7 @@ void volDown_press_workqueue(struct work_struct *work)
 				msleep(200);
 
 				printk("force reset device!!\n");
-				kernel_restart(NULL);
+				kernel_restart("recovery");
 		}
 	}
 
