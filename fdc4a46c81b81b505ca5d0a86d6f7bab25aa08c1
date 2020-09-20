@@ -25,6 +25,30 @@
     },
     {
       "key": {
+        "uuid": "66e1a2fc_b229cfcf",
+        "filename": "arch/arm64/boot/dts/vendor/qcom/kona.dtsi",
+        "patchSetId": 2
+      },
+      "lineNbr": 420,
+      "author": {
+        "id": 11883
+      },
+      "writtenOn": "2020-09-20T08:51:57Z",
+      "side": 1,
+      "message": "nvm, this is fine, just move it before smem_mem.",
+      "parentUuid": "5d3243fb_67f83467",
+      "range": {
+        "startLine": 420,
+        "startChar": 12,
+        "endLine": 420,
+        "endChar": 22
+      },
+      "revId": "fdc4a46c81b81b505ca5d0a86d6f7bab25aa08c1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "dcc51923_de0db9e5",
         "filename": "arch/arm64/boot/dts/vendor/qcom/kona.dtsi",
         "patchSetId": 2
