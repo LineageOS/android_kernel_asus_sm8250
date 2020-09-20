@@ -1,0 +1,44 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5d3243fb_67f83467",
+        "filename": "arch/arm64/boot/dts/vendor/qcom/kona.dtsi",
+        "patchSetId": 2
+      },
+      "lineNbr": 420,
+      "author": {
+        "id": 11883
+      },
+      "writtenOn": "2020-09-20T08:20:31Z",
+      "side": 1,
+      "message": "Is within the range of the smem_region, will be overwritten with garbage data",
+      "range": {
+        "startLine": 420,
+        "startChar": 12,
+        "endLine": 420,
+        "endChar": 22
+      },
+      "revId": "fdc4a46c81b81b505ca5d0a86d6f7bab25aa08c1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "dcc51923_de0db9e5",
+        "filename": "arch/arm64/boot/dts/vendor/qcom/kona.dtsi",
+        "patchSetId": 2
+      },
+      "lineNbr": 515,
+      "author": {
+        "id": 11883
+      },
+      "writtenOn": "2020-09-20T08:20:31Z",
+      "side": 1,
+      "message": "ramoops: ramoops@97400000 {\n\t\t\tcompatible \u003d \"removed-dma-pool\", \"ramoops\";\n\t\t\treg \u003d \u003c0 0x97400000 0 0x00080000\u003e;\n\t\t\trecord-size \u003d \u003c0x10000\u003e;\n\t\t\tconsole-size \u003d \u003c0x60000\u003e;\n\t\t\tpmsg-size \u003d \u003c0x10000\u003e;\n\t\t\tno-map;\n\t\t};",
+      "revId": "fdc4a46c81b81b505ca5d0a86d6f7bab25aa08c1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    }
+  ]
+}
