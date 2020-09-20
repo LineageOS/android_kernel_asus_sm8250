@@ -49,6 +49,30 @@
     },
     {
       "key": {
+        "uuid": "acab8875_b00ded60",
+        "filename": "arch/arm64/boot/dts/vendor/qcom/kona.dtsi",
+        "patchSetId": 2
+      },
+      "lineNbr": 420,
+      "author": {
+        "id": 18205
+      },
+      "writtenOn": "2020-09-20T08:58:56Z",
+      "side": 1,
+      "message": "Ah oops",
+      "parentUuid": "66e1a2fc_b229cfcf",
+      "range": {
+        "startLine": 420,
+        "startChar": 12,
+        "endLine": 420,
+        "endChar": 22
+      },
+      "revId": "fdc4a46c81b81b505ca5d0a86d6f7bab25aa08c1",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "dcc51923_de0db9e5",
         "filename": "arch/arm64/boot/dts/vendor/qcom/kona.dtsi",
         "patchSetId": 2
