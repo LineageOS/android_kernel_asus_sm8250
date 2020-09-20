@@ -46,6 +46,30 @@
       "revId": "e640a436e33158b950c9636c827c5c0dc76a32ba",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "63102ccf_51aea290",
+        "filename": "arch/arm64/configs/vendor/obiwan_defconfig",
+        "patchSetId": 2
+      },
+      "lineNbr": 697,
+      "author": {
+        "id": 11883
+      },
+      "writtenOn": "2020-09-20T08:21:45Z",
+      "side": 1,
+      "message": "compressed pstore has a special format\nYou need to skip first line as it contains plain ASCII data, then uze zlib to decompress it",
+      "parentUuid": "8a4daae2_aa6228a9",
+      "range": {
+        "startLine": 697,
+        "startChar": 0,
+        "endLine": 697,
+        "endChar": 24
+      },
+      "revId": "e640a436e33158b950c9636c827c5c0dc76a32ba",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
     }
   ]
 }
