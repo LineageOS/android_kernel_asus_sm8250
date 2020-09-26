@@ -1930,6 +1930,14 @@ wake_lock(&g_alsps_wake_lock);
 	adc_value = ALSPS_hw_client->mpsensor_hw->proximity_hw_get_adc();
 	threshold_high = g_ps_data->g_ps_factory_cal_hi;
 
+	//ASUS BSP Clay +++: use previous autok crosstalk
+	if(g_ps_data->crosstalk_diff > g_ps_data->g_ps_autok_max){
+		threshold_high = g_ps_data->g_ps_factory_cal_hi + g_ps_data->g_ps_autok_max;
+	}else {
+		threshold_high = g_ps_data->g_ps_factory_cal_hi + g_ps_data->crosstalk_diff;
+	}
+	//ASUS BSP Clay ---
+
 	if (adc_value >= threshold_high) {
 		status = true;
 	}else{ 

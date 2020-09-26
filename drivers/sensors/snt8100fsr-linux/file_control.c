@@ -191,13 +191,13 @@ static uint16_t Tap_sense_reset_data2[3] = {
 		0x8053 
 };
 
-static uint16_t Slide_sense_data[3] = { 
+static uint16_t Slide_Swipe_sense_data[3] = { 
 		0x0014,
 		0x0000,
 		0x804b 
 };
 
-static uint16_t Slide_sense_reset_data[3] = { 
+static uint16_t Slide_Swipe_sense_reset_data[3] = { 
 		0x0032,
 		0x0000,
 		0x804b 
@@ -687,8 +687,9 @@ static void grip_slide_swipe_status_check(void){
 	uint16_t enable_sensitive_boost = 0x84;
 	uint16_t disable_sensitive_boost = 0x4;
 	uint16_t boost_addr = 0x3d;
-	static int swipe_status = 0, gesture_status = 0;
-	const char *buf_on = "110 1\n";
+	static int swipe_status = 0, gesture_status = 0, slide_status = 0;
+	const char *swipe_buf_on = "110 1\n";
+	const char *slide_buf_on = "110 5\n";
 	const char *buf_off = "110 0\n";
 	
 	if(grip_status_g->G_SLIDE_EN[0] == 1 || grip_status_g->G_SLIDE_EN[1] == 1
@@ -696,37 +697,70 @@ static void grip_slide_swipe_status_check(void){
 		if(gesture_status != 1){
 			gesture_status = 1;
 			for(i = 0; i < 3; i++){
-				PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_data[i]);
-				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_data[i]);
+				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_Swipe_sense_data[i]);
+			}
+			PRINT_INFO("write 0x%x=0x%x, 0x%x, 0x%x", 
+				sys_param_addr[0], Slide_Swipe_sense_data[0],
+				Slide_Swipe_sense_data[1], Slide_Swipe_sense_data[2]);
+		}
+		/* Slide priority > Swipe */
+		if(grip_status_g->G_SLIDE_EN[0] == 1 || grip_status_g->G_SLIDE_EN[1] == 1){
+			if(0 == slide_status){
+				slide_status = 1;
+				write_register(snt8100fsr_g, boost_addr, &disable_sensitive_boost);
+				msleep(50);
+				grip_set_sys_param(slide_buf_on);
+			}
+		}else{
+			if(1 == slide_status){
+				slide_status = 0;
+			}
+			if(grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){
+				write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
+				if(0 == swipe_status){
+					swipe_status = 1;
+					msleep(50);
+					grip_set_sys_param(swipe_buf_on);
+				}
 			}
 		}
 	}else{
 		if(gesture_status != 0){
 			gesture_status = 0;
 			for(i = 0; i < 3; i++){
-				PRINT_INFO("write 0x%x=0x%x", sys_param_addr[i], Slide_sense_reset_data[i]);
-				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_sense_reset_data[i]);
+				write_register(snt8100fsr_g, sys_param_addr[i], &Slide_Swipe_sense_reset_data[i]);
 			}
-		}
-	}
-
-	//ASUS BSP Clay+++ only Swipe should write 110 0/1 and 0x3d 0x84/0x4
-	if(grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){
-		if(swipe_status != 1){
-			swipe_status = 1;
-			write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
-			msleep(50);
-			grip_set_sys_param(buf_on);
-		}
-	}else{
-		if(swipe_status != 0){
+			PRINT_INFO("write 0x%x=0x%x, 0x%x, 0x%x", 
+				sys_param_addr[0], Slide_Swipe_sense_reset_data[0],
+				Slide_Swipe_sense_reset_data[1], Slide_Swipe_sense_reset_data[2]);
 			swipe_status = 0;
+			slide_status = 0;
 			write_register(snt8100fsr_g, boost_addr, &disable_sensitive_boost);
 			msleep(50);
 			grip_set_sys_param(buf_off);
 		}
 	}
-	//ASUS BSP Clay---
+/*
+	if(grip_status_g->G_SLIDE_EN[0] == 1 || grip_status_g->G_SLIDE_EN[1] == 1){
+		if(0 == slide_status){
+			slide_status = 1;
+			write_register(snt8100fsr_g, boost_addr, &disable_sensitive_boost);
+			msleep(50);
+			grip_set_sys_param(slide_buf_on);
+		}
+	}else { //If  all slide gestures are disabled
+		slide_status = 0;
+		if(grip_status_g->G_SWIPE_EN[0] == 1 || grip_status_g->G_SWIPE_EN[1] == 1){
+			if(swipe_status != 1){
+				swipe_status = 1;
+				write_register(snt8100fsr_g, boost_addr, &enable_sensitive_boost);
+				msleep(50);
+				grip_set_sys_param(swipe_buf_on);
+			}
+		}else{
+		}
+	}
+*/
 	PRINT_INFO("Done");
 }
 /**************** +++ wrtie DPC & Frame function +++ **************/
@@ -780,7 +814,6 @@ void grip_enable_func_noLock(int val){
 		return;
 	}
 //	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	if(snt8100fsr_g->chip_reset_flag != GRIP_FW_DL_END){ //reseting
 		//mutex_unlock(&snt8100fsr_g->ap_lock);
 		grip_status_g->G_EN= val;
@@ -840,7 +873,6 @@ void grip_raw_enable_func(int val){
 	}
 	
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	if(grip_status_g->G_RAW_EN == val){
 		mutex_unlock(&snt8100fsr_g->ap_lock);
 		return;
@@ -953,7 +985,6 @@ void set_tap_gesture(uint16_t tap_id, uint16_t reg_val, int index){
 
 void grip_tap_enable_func(int tap_id, int val, uint16_t* reg ) {
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 
 	if( val==1 ) {
 		grip_enable_func_noLock(1);
@@ -1019,7 +1050,6 @@ void grip_tap_force_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_FORCE[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1065,7 +1095,6 @@ void grip_tap_min_position_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_MIN_POS[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1110,7 +1139,6 @@ void grip_tap_max_position_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_MAX_POS[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1154,7 +1182,6 @@ void grip_tap_sense_enable_func(int val){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SENSE_SET= val;
 
 	if(Grip_Check_FW_Status()){return;}
@@ -1169,7 +1196,6 @@ void grip_tap_slope_window_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SLOPE_WINDOW[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1214,7 +1240,6 @@ void grip_tap_slope_release_force_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SLOPE_RELEASE_FORCE[tap_id] = val;
 
 	if(Grip_Check_FW_Status()){return;}
@@ -1259,7 +1284,6 @@ void grip_tap_slope_tap_force_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_SLOPE_TAP_FORCE[tap_id] = val;
 	
 
@@ -1305,7 +1329,6 @@ void grip_tap_delta_tap_force_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_DELTA_TAP_FORCE[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1350,7 +1373,6 @@ void grip_tap_delta_release_force_func(int tap_id, int val, uint16_t* reg ) {
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP_DELTA_RELEASE_FORCE[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1455,7 +1477,7 @@ void grip_tapX_vibrator_enable_func(int val, int tap_id){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
+	PRINT_INFO("val = %d, tap_id=%d", val, tap_id);
 	grip_status_g->G_TAP_VIB_EN[tap_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1472,7 +1494,6 @@ void grip_tap1_vibrator_enable_func(int val){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP1_VIB_EN = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1495,7 +1516,6 @@ void grip_tap2_vibrator_enable_func(int val){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP2_VIB_EN = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1535,7 +1555,6 @@ void grip_tap1_finger_reseting_enable_func(int val){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP1_REST_EN = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1557,7 +1576,6 @@ void grip_tap2_finger_reseting_enable_func(int val){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_TAP2_REST_EN = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1603,7 +1621,6 @@ void set_sq_gesture(uint16_t sq_id, uint16_t reg_val, int index){
 }
 void grip_squeeze_enable_func(int sq_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("id=%d, val = %d", sq_id, val);
 
 	if( val==1) {
 		grip_enable_func_noLock(1);
@@ -1656,7 +1673,6 @@ void grip_squeeze_force_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	
 	grip_status_g->G_SQUEEZE_FORCE[sq_id] = val;
 	
@@ -1693,7 +1709,6 @@ void grip_squeeze_short_dur_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	
 	grip_status_g->G_SQUEEZE_SHORT[sq_id]= val;
 	
@@ -1729,7 +1744,6 @@ void grip_squeeze_long_dur_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	
 	if(sq_id == 0){
 		grip_status_g->G_SQUEEZE_LONG[sq_id]= val;
@@ -1781,7 +1795,6 @@ void grip_squeeze_up_rate_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_UP_RATE[sq_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1816,7 +1829,6 @@ void grip_squeeze_up_total_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_UP_TOTAL[sq_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1850,7 +1862,6 @@ void grip_squeeze_drop_rate_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_DROP_RATE[sq_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1884,7 +1895,6 @@ void grip_squeeze_drop_total_func(int sq_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SQUEEZE_DROP_TOTAL[sq_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -1938,7 +1948,6 @@ void set_slide_gesture(uint16_t slide_id, uint16_t reg_val, int index){
 
 void grip_slide_enable_func(int slide_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 
 	if( val==1) {
 		grip_enable_func_noLock(1);
@@ -1989,7 +1998,6 @@ void grip_slide_dist_func(int slide_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_DIST[slide_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2023,7 +2031,6 @@ void grip_slide_force_func(int slide_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_FORCE[slide_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2056,7 +2063,6 @@ void grip_slide_2nd_dist_func(int slide_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_2ND_DIST[slide_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2089,7 +2095,6 @@ void grip_slide_vibrator_enable_func(int slide_id, int val){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_VIB_EN[slide_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2119,7 +2124,6 @@ void grip_slide_min_position_func(int slide_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_MIN_POS[slide_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2152,7 +2156,6 @@ void grip_slide_max_position_func(int slide_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SLIDE_MAX_POS[slide_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2203,7 +2206,6 @@ void set_swipe_gesture(uint16_t swipe_id, uint16_t reg_val, int index){
 
 void grip_swipe_enable_func(int swipe_id, int val, uint16_t* reg){
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	
 	if( val==1) {
 		grip_enable_func_noLock(1);
@@ -2255,7 +2257,6 @@ void grip_swipe_velocity_func(int swipe_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_VELOCITY[swipe_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2288,7 +2289,6 @@ void grip_swipe_len_func(int swipe_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_LEN[swipe_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2320,7 +2320,6 @@ void grip_swipe_min_position_func(int swipe_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_MIN_POS[swipe_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -2351,7 +2350,6 @@ void grip_swipe_max_position_func(int swipe_id, int val, uint16_t* reg){
 		return;
 	}
 	MUTEX_LOCK(&snt8100fsr_g->ap_lock);
-	PRINT_INFO("val = %d", val);
 	grip_status_g->G_SWIPE_MAX_POS[swipe_id] = val;
 	
 	if(Grip_Check_FW_Status()){return;}
@@ -6451,12 +6449,12 @@ static int Grip_node_parse_string(const char __user *buff, size_t len, int *reg_
 	
 	if(count ==2){
 		if(reg_val[val[0]]==val[1]){
-			PRINT_INFO("repeat, skip it, input1=%d, input2=%d", val[0], val[1]);
+			PRINT_DEBUG("repeat, skip it, input1=%d, input2=%d", val[0], val[1]);
 			goto Final;
 		}else
 			result = 1;
 		
-		PRINT_INFO("val=%d, %d", val[0], val[1]);
+		PRINT_DEBUG("val=%d, %d", val[0], val[1]);
 		parse_result[0] = val[0];
 		parse_result[1] = val[1];
 	}else{
@@ -6482,9 +6480,6 @@ ssize_t Grip_Tap_En_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_EN) > 0)
 		grip_tapX_enable_func(parse_result[1], parse_result[0], &TAP_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
-	
 	return len;
 }
 
@@ -6525,8 +6520,6 @@ ssize_t Grip_Tap_Force_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_FORCE) > 0)
 		grip_tapX_force_func(parse_result[1], parse_result[0], &TAP_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6568,8 +6561,6 @@ ssize_t Grip_Tap_min_pos_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_MIN_POS) > 0)
 		grip_tapX_min_position_func(parse_result[1], parse_result[0], &TAP_BIT2[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6610,8 +6601,6 @@ ssize_t Grip_Tap_max_pos_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_MAX_POS) > 0)
 		grip_tapX_max_position_func(parse_result[1], parse_result[0], &TAP_BIT3[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6652,8 +6641,6 @@ ssize_t Grip_Tap_slope_window_proc_write(struct file *filp, const char __user *b
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_SLOPE_WINDOW) > 0)
 		grip_tapX_slope_window_func(parse_result[1], parse_result[0], &TAP_BIT1[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6694,8 +6681,6 @@ ssize_t Grip_Tap_slope_tap_force_proc_write(struct file *filp, const char __user
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_SLOPE_TAP_FORCE) > 0)
 		grip_tapX_slope_tap_force_func(parse_result[1], parse_result[0], &TAP_BIT5[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6736,8 +6721,6 @@ ssize_t Grip_Tap_slope_release_force_proc_write(struct file *filp, const char __
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_SLOPE_RELEASE_FORCE) > 0)
 		grip_tapX_slope_release_force_func(parse_result[1], parse_result[0], &TAP_BIT5[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6778,8 +6761,6 @@ ssize_t Grip_Tap_delta_tap_force_proc_write(struct file *filp, const char __user
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_DELTA_TAP_FORCE) > 0)
 		grip_tapX_delta_tap_force_func(parse_result[1], parse_result[0], &TAP_BIT4[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6820,8 +6801,6 @@ ssize_t Grip_Tap_delta_release_force_proc_write(struct file *filp, const char __
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_DELTA_RELEASE_FORCE) > 0)
 		grip_tapX_delta_release_force_func(parse_result[1], parse_result[0], &TAP_BIT4[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6862,8 +6841,6 @@ ssize_t Grip_Tap_vib_en_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_TAP_VIB_EN) > 0)
 		grip_tapX_vibrator_enable_func(parse_result[1], parse_result[0]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6905,8 +6882,6 @@ ssize_t Grip_Squeeze_en_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_EN) > 0)
 		grip_squeezeX_enable_func(parse_result[1], parse_result[0], &SQ_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6945,8 +6920,6 @@ ssize_t Grip_Squeeze_force_proc_write(struct file *filp, const char __user *buff
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_FORCE) > 0)
 		grip_squeezeX_force_func(parse_result[1], parse_result[0], &SQ_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -6985,8 +6958,6 @@ ssize_t Grip_Squeeze_short_dur_proc_write(struct file *filp, const char __user *
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_SHORT) > 0)
 		grip_squeezeX_short_dur_func(parse_result[1], parse_result[0], &SQ_BIT5[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7025,8 +6996,6 @@ ssize_t Grip_Squeeze_long_dur_proc_write(struct file *filp, const char __user *b
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_LONG) > 0)
 		grip_squeezeX_long_dur_func(parse_result[1], parse_result[0], &SQ_BIT5[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7065,8 +7034,6 @@ ssize_t Grip_Squeeze_drop_rate_proc_write(struct file *filp, const char __user *
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_DROP_RATE) > 0)
 		grip_squeezeX_drop_rate_func(parse_result[1], parse_result[0], &SQ_BIT7[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7105,8 +7072,6 @@ ssize_t Grip_Squeeze_drop_total_proc_write(struct file *filp, const char __user 
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_DROP_TOTAL) > 0)
 		grip_squeezeX_drop_total_func(parse_result[1], parse_result[0], &SQ_BIT7[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7145,8 +7110,6 @@ ssize_t Grip_Squeeze_up_rate_proc_write(struct file *filp, const char __user *bu
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_UP_RATE) > 0)
 		grip_squeezeX_up_rate_func(parse_result[1], parse_result[0], &SQ_BIT6[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7185,8 +7148,6 @@ ssize_t Grip_Squeeze_up_total_proc_write(struct file *filp, const char __user *b
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SQUEEZE_UP_TOTAL) > 0)
 		grip_squeezeX_up_total_func(parse_result[1], parse_result[0], &SQ_BIT6[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7227,8 +7188,6 @@ ssize_t Grip_Slide_en_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_EN) > 0)
 		grip_slideX_enable_func(parse_result[1], parse_result[0], &SLIDE_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7267,9 +7226,6 @@ ssize_t Grip_Slide_dist_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_DIST) > 0)
 		grip_slideX_dist_func(parse_result[1], parse_result[0], &SLIDE_BIT3[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
-	
 	return len;
 }
 
@@ -7308,8 +7264,6 @@ ssize_t Grip_Slide_2nd_dist_proc_write(struct file *filp, const char __user *buf
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_2ND_DIST) > 0)
 		grip_slideX_2nd_dist_func(parse_result[1], parse_result[0], &SLIDE_BIT4[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	
 	return len;
 }
@@ -7349,8 +7303,6 @@ ssize_t Grip_Slide_force_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_FORCE) > 0)
 		grip_slideX_force_func(parse_result[1], parse_result[0], &SLIDE_BIT3[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	
 	return len;
 }
@@ -7390,8 +7342,6 @@ ssize_t Grip_Slide_min_pos_proc_write(struct file *filp, const char __user *buff
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_MIN_POS) > 0)
 		grip_slideX_min_position_func(parse_result[1], parse_result[0], &SLIDE_BIT1[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	
 	return len;
 }
@@ -7431,8 +7381,6 @@ ssize_t Grip_Slide_max_pos_proc_write(struct file *filp, const char __user *buff
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_MAX_POS) > 0)
 		grip_slideX_max_position_func(parse_result[1], parse_result[0], &SLIDE_BIT2[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	
 	return len;
 }
@@ -7472,8 +7420,6 @@ ssize_t Grip_Slide_vib_en_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SLIDE_VIB_EN) > 0)
 		grip_slideX_vibrator_enable_func(parse_result[1], parse_result[0]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7516,8 +7462,6 @@ ssize_t Grip_Swipe_en_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SWIPE_EN) > 0)
 		grip_swipeX_enable_func(parse_result[1], parse_result[0], &SWIPE_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7555,8 +7499,6 @@ ssize_t Grip_Swipe_velocity_proc_write(struct file *filp, const char __user *buf
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SWIPE_VELOCITY) > 0)
 		grip_swipeX_velocity_func(parse_result[1], parse_result[0], &SWIPE_BIT0[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7595,8 +7537,6 @@ ssize_t Grip_Swipe_len_proc_write(struct file *filp, const char __user *buff,
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SWIPE_LEN) > 0)
 		grip_swipeX_len_func(parse_result[1], parse_result[0], &SWIPE_BIT3[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7635,8 +7575,6 @@ ssize_t Grip_Swipe_min_pos_proc_write(struct file *filp, const char __user *buff
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SWIPE_MIN_POS) > 0)
 		grip_swipeX_min_position_func(parse_result[1], parse_result[0], &SWIPE_BIT1[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 
@@ -7675,8 +7613,6 @@ ssize_t Grip_Swipe_max_pos_proc_write(struct file *filp, const char __user *buff
 {
 	if(Grip_node_parse_string(buff, len, grip_status_g->G_SWIPE_MAX_POS) > 0)
 		grip_swipeX_max_position_func(parse_result[1], parse_result[0], &SWIPE_BIT2[parse_result[0]]);
-	else
-		PRINT_INFO("Do Nothing");
 	return len;
 }
 

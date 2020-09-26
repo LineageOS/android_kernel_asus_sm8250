@@ -2839,12 +2839,10 @@ int security_set_aps(struct selinux_state *state, int value)
 	int rc = 0;
 
 	if(security_set_ps(state, DAPS_TYPE, value)){
-		printk("SELinux: unlocked\n");
 		rc = 1;
 	}
 
 	if(security_set_ps(state, ADBD_DOMAIN, value)){
-		printk("SELinux: unlocked\n");
 		rc = 1;
 	}
 
@@ -2884,9 +2882,7 @@ int security_set_asus(struct selinux_state *state, int value)
 {
 	int rc = 0;
 
-	printk("SELinux: set asus security %d\n", value );
 	if(security_set_ps(state, SAVELOG_DOMAIN, value)){
-		printk("SELinux: savelogmtp enable\n");
 		rc = 1;
 	}
 

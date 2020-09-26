@@ -209,7 +209,7 @@
 #define PCA9468_REG_ADC_MODE			0x3F
 #define PCA9468_BIT_ADC_MODE			BIT(4)
 
-#define PCA9468_MAX_REGISTER			PCA9468_REG_ADC_MODE
+#define PCA9468_MAX_REGISTER			0x4F
 
 
 #define PCA9468_IIN_CFG(_input_current)	(_input_current/100000)			// input current, unit - uA
@@ -222,8 +222,8 @@ extern int g_fv_setting;//Add for battery safety upgrade
 /* VIN Overvoltage setting from 2*VOUT */
 enum {
 	OV_DELTA_10P,
-	OV_DELTA_20P,
 	OV_DELTA_30P,
+	OV_DELTA_20P,
 	OV_DELTA_40P,
 };
 
@@ -284,14 +284,14 @@ static int adc_gain[16] = { 0, 1, 2, 3, 4, 5, 6, 7, -8, -7, -6, -5, -4, -3, -2, 
 
 /* Timer definition */
 #define PCA9468_VBATMIN_CHECK_T	1000	// 1000ms
-#define PCA9468_CCMODE_CHECK1_T	60000	// 60000ms
+#define PCA9468_CCMODE_CHECK1_T	30000	// 30000ms
 #define PCA9468_CCMODE_CHECK2_T	10000	// 10000ms
 #define PCA9468_CCMODE_CHECK3_T	5000	// 5000ms
 #define PCA9468_CVMODE_CHECK_T 	10000	// 10000ms
 #define PCA9468_PDMSG_WAIT_T	300		// 200ms-->300ms
 #define PCA4968_ADJCC_DELAY_T	150		// 150ms
 #define PCA9468_PPS_PERIODIC_T	7000	// 10000ms-->7000ms
-#define PCA9468_JEITA_CHECK_T	60000	// 60000ms
+#define PCA9468_JEITA_CHECK_T	30000	// 30000ms
 #define PCA9468_ADJCC_WAIT_T	1000	// 1000ms
 
 /* Battery Threshold */
@@ -492,6 +492,7 @@ int g_PanelOnOff = 0;
  * @dev: pointer to device
  * @regmap: pointer to driver regmap
  * @mains: power_supply instance for AC/DC power
+ * @dc_wq: work queue for the algorithm and pps periodic timer
  * @timer_work: timer work for charging
  * @timer_id: timer id for timer_work
  * @timer_period: timer period for timer_work
@@ -522,6 +523,9 @@ struct pca9468_charger {
 	struct regmap		*regmap;
 	struct power_supply	*mains;
 	struct power_supply *bat_psy;
+
+	struct workqueue_struct *dc_wq;
+	
 	struct delayed_work timer_work;
 	unsigned int		timer_id;
 	unsigned long      	timer_period;
@@ -871,12 +875,16 @@ static int pca9468_send_pd_message(struct pca9468_charger *pca9468, unsigned int
 		if ((ret == 0) && (pca9468->pd_port == POWER_SUPPLY_PD_PORT_PMI)) {
 			/* Start pps request timer for PMI */
 			/* RT PD phy has its own PPS periodic timer */
-			schedule_delayed_work(&pca9468->pps_work, msecs_to_jiffies(PCA9468_PPS_PERIODIC_T));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->pps_work,
+								msecs_to_jiffies(PCA9468_PPS_PERIODIC_T));
 		}
 #else
 		/* Start pps request timer */
 		if (ret == 0) {
-			schedule_delayed_work(&pca9468->pps_work, msecs_to_jiffies(PCA9468_PPS_PERIODIC_T));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->pps_work,
+								msecs_to_jiffies(PCA9468_PPS_PERIODIC_T));
 		}
 #endif
 		/* Workaround for PS_RDY time */
@@ -1029,6 +1037,8 @@ static int pca9468_read_adc(struct pca9468_charger *pca9468, u8 adc_ch)
 		// Convert ADC - iin = rawadc*4.89 + (rawadc*4.89 - 900)*adc_comp_gain/100, unit - mA
 		raw_adc = ((reg_data[1] & PCA9468_BIT_ADC_IIN9_8)<<8) | ((reg_data[0] & PCA9468_BIT_ADC_IIN7_0)>>0);
 		conv_adc = raw_adc * IIN_STEP + (raw_adc * IIN_STEP - ADC_IIN_OFFSET)*pca9468->adc_comp_gain/100;		// unit - uV
+		if (conv_adc < 0)
+			conv_adc = 0;	// If ADC raw value is 0, convert value will be minus value because of compensation gain, so in this case conv_adc is 0
 		break;
 
 	
@@ -1180,6 +1190,15 @@ static int pca9468_set_charging(struct pca9468_charger *pca9468, bool enable)
 	pr_info("[PCA] %s: enable=%d\n", __func__, enable);
 
 	if (enable == true) {
+		/* If PCA9468 is already enabled, we should set it to disable first */ 
+		/* Disable PCA9468 */
+		val = (PCA9468_EN_ACTIVE_H | PCA9468_STANDBY_FORCED);
+		ret = regmap_update_bits(pca9468->regmap, PCA9468_REG_START_CTRL, PCA9468_BIT_EN_CFG | PCA9468_BIT_STANDBY_EN, val);
+		if (ret < 0)
+			goto error;
+		/* wait 5ms */
+		mdelay(5);
+		
 		/* Enable Reverse current detection */
 		val = PCA9468_RCP_DET_ENABLE;
 		ret = regmap_update_bits(pca9468->regmap, PCA9468_REG_START_CTRL, PCA9468_BIT_REV_IIN_DET, val);
@@ -1195,26 +1214,25 @@ static int pca9468_set_charging(struct pca9468_charger *pca9468, bool enable)
 		if (ret < 0)
 			goto error;
 
-		/* overwrite test registers to the default value */
 		/* For fixing input current error */
-		/* Overwrite 0x00 in 0x41 register */
-		//val = 0x00;
-		//ret = regmap_write(pca9468->regmap, 0x41, val);
-		//if (ret < 0)
-		//	goto error;
+		/* Overwrite 0x08(bit3) in 0x41 register */
+		/* Disable OCP-AVG. It is the software workaround for OCP-AVG issue */
+		val = 0x08;
+		ret = regmap_write(pca9468->regmap, 0x41, val);
+		if (ret < 0)
+			goto error;
 		/* Overwrite 0x01 in 0x43 register */
-		//val = 0x01;
-		//ret = regmap_write(pca9468->regmap, 0x43, val);
-		//if (ret < 0)
-		//	goto error;
-		/* Overwrite 0x00 in 0x4B register */
-		//val = 0x00;
-		//ret = regmap_write(pca9468->regmap, 0x4B, val);
-		//if (ret < 0)
-		//	goto error;
-		/* End for fixing input current error */	
-	//} else {
+		val = 0x01;
+		ret = regmap_write(pca9468->regmap, 0x43, val);
+		if (ret < 0)
+			goto error;
 
+		/* Overwrite 0x00 in 0x4B register */
+		val = 0x00;
+		ret = regmap_write(pca9468->regmap, 0x4B, val);
+		if (ret < 0)
+			goto error;
+		/* End for fixing input current error */	
 	}
 	
 	/* Enable PCA9468 */
@@ -1224,17 +1242,26 @@ static int pca9468_set_charging(struct pca9468_charger *pca9468, bool enable)
 		goto error;
 	
 	if (enable == true) {
-		/* Wait 50ms */
-		msleep(50);
+		/* Wait 50ms, first to keep the start-up sequence */
+		mdelay(50);
+		/* Wait 150ms */
+		msleep(150);
 		ret = regmap_update_bits(pca9468->regmap, PCA9468_REG_ADC_IMPROVE, PCA9468_BIT_ADC_IIN_IMP, PCA9468_BIT_ADC_IIN_IMP);
 		if (ret  < 0)
 			goto error;
-		
+
+		/* Clear bit3 to 0x41 register */
+		/* Enable OCP-AVG. It is the software workaround for OCP-AVG issue */
+		ret = regmap_update_bits(pca9468->regmap, 0x41, BIT(3), 0);
+		if (ret  < 0)
+			goto error;
+
+		/* Lock test mode */
 		val = 0x00;
 		ret = regmap_write(pca9468->regmap, PCA9468_REG_ADC_ACCESS, val);
-	//} else {
+	} else {
 		/* Wait 5ms */
-	//	msleep(5);
+		mdelay(5);
 	}
 
 error:
@@ -1309,6 +1336,217 @@ static int pca9468_stop_charging(struct pca9468_charger *pca9468)
 	
 	return ret;
 }
+
+/* Check Active status */
+static int pca9468_check_error(struct pca9468_charger *pca9468)
+{
+	int ret;
+	unsigned int reg_val;
+	int vbatt;
+	
+	/* Read STS_B */
+	ret = regmap_read(pca9468->regmap, PCA9468_REG_STS_B, &reg_val);
+	if (ret < 0)
+		goto error;
+
+	/* Read VBAT_ADC */
+	vbatt = pca9468_read_adc(pca9468, ADCCH_VBAT);
+	
+	/* Check Active status */
+	if (reg_val & PCA9468_BIT_ACTIVE_STATE_STS) {
+		/* PCA9468 is active state */
+		/* PCA9468 is in charging */
+		/* Check whether the battery voltage is over the minimum voltage level or not */
+		if (vbatt > PCA9468_DC_VBAT_MIN) {
+			/* Normal charging battery level */
+			/* Check temperature regulation loop */
+			/* Read INT1_STS register */
+			ret = regmap_read(pca9468->regmap, PCA9468_REG_INT1_STS, &reg_val);
+			if (reg_val & PCA9468_BIT_TEMP_REG_STS) {				
+				/* Over temperature protection */
+				pr_err("%s: Device is in temperature regulation", __func__);
+				ret = -EINVAL;
+			} else {
+				/* Normal temperature */
+				ret = 0;
+			}
+		} else {
+			/* Abnormal battery level */
+			pr_err("%s: Error abnormal battery voltage=%d\n", __func__, vbatt);
+			ret = -EINVAL;
+		}
+	} else {
+		/* PCA9468 is not active state  - standby or shutdown */
+		/* Stop charging in timer_work */
+		
+		/* Read all status register for debugging */
+		u8 val[8];
+		u8 test_val[16];	/* Dump for test register */
+		ret = regmap_bulk_read(pca9468->regmap, PCA9468_REG_INT1, &val[PCA9468_REG_INT1], 7);
+		pr_err("%s: Error reg[1]=0x%x,[2]=0x%x,[3]=0x%x,[4]=0x%x,[5]=0x%x,[6]=0x%x,[7]=0x%x\n",
+			__func__, val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+		/* Read test register for debugging */
+		ret = regmap_bulk_read(pca9468->regmap, 0x40, test_val, 16);
+		pr_err("%s: Error reg[0x40]=0x%x,[0x41]=0x%x,[0x42]=0x%x,[0x43]=0x%x,[0x44]=0x%x,[0x45]=0x%x,[0x46]=0x%x,[0x47]=0x%x\n",
+			__func__, test_val[0], test_val[1], test_val[2], test_val[3], test_val[4], test_val[5], test_val[6], test_val[7]);
+		pr_err("%s: Error reg[0x48]=0x%x,[0x49]=0x%x,[0x4A]=0x%x,[0x4B]=0x%x,[0x4C]=0x%x,[0x4D]=0x%x,[0x4E]=0x%x,[0x4F]=0x%x\n",
+			__func__, test_val[8], test_val[9], test_val[10], test_val[11], test_val[12], test_val[13], test_val[14], test_val[15]);
+
+		/* Check INT1_STS first */
+		if ((val[PCA9468_REG_INT1_STS] & PCA9468_BIT_V_OK_STS) != PCA9468_BIT_V_OK_STS) {
+			/* VBUS is invalid */
+			pr_err("%s: VOK is invalid", __func__);
+			/* Check STS_A */
+			if (val[PCA9468_REG_STS_A] & PCA9468_BIT_CFLY_SHORT_STS)
+				pr_err("%s: Flying Cap is shorted to GND", __func__);	/* Flying cap is short to GND */
+			else if (val[PCA9468_REG_STS_A] & PCA9468_BIT_VOUT_UV_STS)
+				pr_err("%s: VOUT UV", __func__);	/* VOUT < VOUT_OK */
+			else if (val[PCA9468_REG_STS_A] & PCA9468_BIT_VBAT_OV_STS)
+				pr_err("%s: VBAT OV", __func__);	/* VBAT > VBAT_OV */
+			else if (val[PCA9468_REG_STS_A] & PCA9468_BIT_VIN_OV_STS)
+				pr_err("%s: VIN OV", __func__);		/* VIN > V_OV_FIXED or V_OV_TRACKING */
+			else if (val[PCA9468_REG_STS_A] & PCA9468_BIT_VIN_UV_STS)
+				pr_err("%s: VIN UV", __func__);		/* VIN < V_UVTH */
+			else
+				pr_err("%s: Invalid VIN or VOUT", __func__);
+
+			ret = -EINVAL;
+		} else if (val[PCA9468_REG_INT1_STS] & PCA9468_BIT_NTC_TEMP_STS) {
+			/* NTC protection */
+			int ntc_adc, ntc_th;
+			/* NTC threshold */
+			u8 reg_data[2];
+			regmap_bulk_read(pca9468->regmap, PCA9468_REG_NTC_TH_1, reg_data, 2);
+			ntc_th = ((reg_data[1] & PCA9468_BIT_NTC_THRESHOLD9_8)<<8) | reg_data[0];	/* uV unit */
+			/* Read NTC ADC */
+			ntc_adc = pca9468_read_adc(pca9468, ADCCH_NTC);	/* uV unit */
+			pr_err("%s: NTC Protection, NTC_TH=%d(uV), NTC_ADC=%d(uV)", __func__, ntc_th, ntc_adc);
+			
+			ret = -EINVAL;
+		} else if (val[PCA9468_REG_INT1_STS] & PCA9468_BIT_CTRL_LIMIT_STS) {
+			/* OCP event happens */
+			/* Check STS_B */
+			if (val[PCA9468_REG_STS_B] & PCA9468_BIT_OCP_FAST_STS)
+				pr_err("%s: IIN is over OCP_FAST", __func__); 	/* OCP_FAST happened */
+			else if (val[PCA9468_REG_STS_B] & PCA9468_BIT_OCP_AVG_STS)
+				pr_err("%s: IIN is over OCP_AVG", __func__);	/* OCP_AVG happened */
+			else
+				pr_err("%s: No Loop active", __func__);
+
+			ret = -EINVAL;
+		} else if (val[PCA9468_REG_INT1_STS] & PCA9468_BIT_TEMP_REG_STS) {
+			/* Over temperature protection */
+			pr_err("%s: Device is in temperature regulation", __func__);
+			
+			ret = -EINVAL;
+		} else if (val[PCA9468_REG_INT1_STS] & PCA9468_BIT_TIMER_STS) {
+			/* Check STS_B */
+			if (val[PCA9468_REG_STS_B] & PCA9468_BIT_CHARGE_TIMER_STS)
+				pr_err("%s: Charger timer is expired", __func__);
+			else if (val[PCA9468_REG_STS_B] & PCA9468_BIT_WATCHDOG_TIMER_STS)
+				pr_err("%s: Watchdog timer is expired", __func__);
+			else
+				pr_err("%s: Timer INT, but no timer STS", __func__);
+
+			ret = -EINVAL;
+		}
+		else if (val[PCA9468_REG_STS_A] & PCA9468_BIT_CFLY_SHORT_STS) {
+			/* Flying cap short */
+			pr_err("%s: Flying Cap is shorted to GND", __func__);	/* Flying cap is short to GND */
+			ret = -EINVAL;
+		} else {
+			/* There is no error, but not active state */
+			if (reg_val & PCA9468_BIT_STANDBY_STATE_STS) {
+				/* Standby state */
+				/* Check the RCP condition, T_REVI_DET is 300ms */
+				/* Wait 200ms */
+				msleep(200);
+
+				/* Check the charging state */
+				/* Sometimes battery driver might call set_property function to stop charging during msleep
+				    At this case, charging state would change DC_STATE_NO_CHARGING.
+				    PCA9468 should stop checking RCP condition and exit timer_work
+				*/
+				if (pca9468->charging_state == DC_STATE_NO_CHARGING) {
+					pr_err("%s: other driver forced to stop direct charging\n", __func__);
+					ret = -EINVAL;
+				} else {
+					/* Keep the current charging state */
+					/* Check PCA948 state again */
+					/* Read STS_B */
+					ret = regmap_read(pca9468->regmap, PCA9468_REG_STS_B, &reg_val);
+					if (ret < 0)
+						goto error;
+
+					pr_info("%s:RCP check, STS_B=0x%x\n",	__func__, reg_val);
+
+					/* Check Active status */
+					if (reg_val & PCA9468_BIT_ACTIVE_STATE_STS) {
+						/* RCP condition happened, but VIN is still valid */
+						/* If VIN is increased, input current will increase over IIN_LOW level */
+						/* Normal charging */
+						pr_info("%s: RCP happened before, but VIN is valid\n", __func__);
+						ret = 0;
+					} else if (reg_val & PCA9468_BIT_STANDBY_STATE_STS) {
+						/* It is not RCP condition */
+						/* Need to retry if DC is in starting state */
+						pr_err("%s: Any abnormal condition, retry\n", __func__);
+						/* Dump register */
+						ret = regmap_bulk_read(pca9468->regmap, PCA9468_REG_INT1, &val[PCA9468_REG_INT1], 7);
+						pr_err("%s: Error reg[1]=0x%x,[2]=0x%x,[3]=0x%x,[4]=0x%x,[5]=0x%x,[6]=0x%x,[7]=0x%x\n",
+								__func__, val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+						ret = regmap_bulk_read(pca9468->regmap, 0x48, test_val, 3);
+						pr_err("%s: Error reg[0x48]=0x%x,[0x49]=0x%x,[0x4a]=0x%x\n",
+								__func__, test_val[0], test_val[1], test_val[2]);
+						ret = -EAGAIN;
+					} else if (reg_val & PCA9468_BIT_SHUTDOWN_STATE_STS) {
+						/* Shutdown State */
+						pr_err("%s: Shutdown state\n", __func__);
+						/* Dump register */
+						ret = regmap_bulk_read(pca9468->regmap, PCA9468_REG_INT1, &val[PCA9468_REG_INT1], 7);
+						pr_err("%s: Error reg[1]=0x%x,[2]=0x%x,[3]=0x%x,[4]=0x%x,[5]=0x%x,[6]=0x%x,[7]=0x%x\n",
+								__func__, val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+						ret = regmap_bulk_read(pca9468->regmap, 0x48, test_val, 3);
+						pr_err("%s: Error reg[0x48]=0x%x,[0x49]=0x%x,[0x4a]=0x%x\n",
+								__func__, test_val[0], test_val[1], test_val[2]);
+						ret = -EINVAL;
+					} else {
+						/* Power State Error - Retry */
+						pr_err("%s: No Power state\n", __func__);
+						/* Dump register */
+						ret = regmap_bulk_read(pca9468->regmap, PCA9468_REG_INT1, &val[PCA9468_REG_INT1], 7);
+						pr_err("%s: Error reg[1]=0x%x,[2]=0x%x,[3]=0x%x,[4]=0x%x,[5]=0x%x,[6]=0x%x,[7]=0x%x\n",
+								__func__, val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+						ret = regmap_bulk_read(pca9468->regmap, 0x48, test_val, 3);
+						pr_err("%s: Error reg[0x48]=0x%x,[0x49]=0x%x,[0x4a]=0x%x\n",
+								__func__, test_val[0], test_val[1], test_val[2]);
+						ret = -EAGAIN;
+					}
+				}
+			} else if (reg_val & PCA9468_BIT_SHUTDOWN_STATE_STS) {
+				/* PCA9468 is in shutdown state */
+				pr_err("%s: PCA9468 is in shutdown state\n", __func__);
+				ret = -EINVAL;
+			} else {
+				/* Power State Error - Retry */
+				pr_err("%s: No Power state\n", __func__);
+				/* Dump register */
+				ret = regmap_bulk_read(pca9468->regmap, PCA9468_REG_INT1, &val[PCA9468_REG_INT1], 7);
+				pr_err("%s: Error reg[1]=0x%x,[2]=0x%x,[3]=0x%x,[4]=0x%x,[5]=0x%x,[6]=0x%x,[7]=0x%x\n",
+						__func__, val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+				ret = regmap_bulk_read(pca9468->regmap, 0x48, test_val, 3);
+				pr_err("%s: Error reg[0x48]=0x%x,[0x49]=0x%x,[0x4a]=0x%x\n",
+						__func__, test_val[0], test_val[1], test_val[2]);
+				ret = -EAGAIN;
+			}
+		}
+	}
+
+error:
+	pr_info("%s: Active Status=%d\n", __func__, ret);
+	return ret;
+}
+
 
 /* Check CC Mode status */
 static int pca9468_check_ccmode_status(struct pca9468_charger *pca9468)
@@ -1625,7 +1863,9 @@ static int pca9468_charge_jeita_mode(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 			break;
 			
 		case JEITA_STAGE3:
@@ -1649,7 +1889,9 @@ static int pca9468_charge_jeita_mode(struct pca9468_charger *pca9468)
 				pca9468->timer_id = TIMER_VBATMIN_CHECK;
 				pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 				mutex_unlock(&pca9468->lock);
-				schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+				queue_delayed_work(pca9468->dc_wq,
+									&pca9468->timer_work,
+									msecs_to_jiffies(pca9468->timer_period));
 			} else {
 				/* The previous stage is JEITA_STAGE2 */
 				/* Save the current stage */
@@ -1666,7 +1908,9 @@ static int pca9468_charge_jeita_mode(struct pca9468_charger *pca9468)
 					pca9468->timer_id = TIMER_VBATMIN_CHECK;
 					pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 					mutex_unlock(&pca9468->lock);
-					schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+					queue_delayed_work(pca9468->dc_wq,
+									&pca9468->timer_work,
+									msecs_to_jiffies(pca9468->timer_period));
 				} else {
 					/* the current charging stage is DC_STATE_CHECK_CC2 or DC_STATE_CHECK_CV */
 					/* battery voltage is over 4.25V,but the vfloat of stage3 is 4.1V */
@@ -1701,7 +1945,9 @@ static int pca9468_charge_jeita_mode(struct pca9468_charger *pca9468)
 					pca9468->timer_id = TIMER_PDMSG_SEND;
 					pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 					mutex_unlock(&pca9468->lock);
-					schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+					queue_delayed_work(pca9468->dc_wq,
+									&pca9468->timer_work,
+									msecs_to_jiffies(pca9468->timer_period));
 				}
 			}
 			break;
@@ -1742,7 +1988,9 @@ static int pca9468_charge_start_jeita(struct pca9468_charger *pca9468)
 	pca9468->timer_id = TIMER_PDMSG_SEND;
 	pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 	mutex_unlock(&pca9468->lock);
-	schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+	queue_delayed_work(pca9468->dc_wq,
+						&pca9468->timer_work,
+						msecs_to_jiffies(pca9468->timer_period));
 	
 	return ret;
 }
@@ -1769,7 +2017,9 @@ static int pca9468_charge_check_jeita(struct pca9468_charger *pca9468)
 		pca9468->timer_period = PCA9468_JEITA_CHECK_T;
 		pca9468->timer_id = TIMER_JEITA_CHECK;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 	}
 error:
 	pr_info("%s: End, ret=%d\n", __func__, ret);
@@ -1787,6 +2037,10 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 	pr_info("%s: ======START=======\n", __func__);
 
 	pca9468->charging_state = DC_STATE_ADJUST_CC;
+
+	ret = pca9468_check_error(pca9468);
+	if (ret != 0)
+		goto error;	// This is not active mode.
 
 	ccmode = pca9468_check_ccmode_status(pca9468);
 	if (ccmode < 0) {
@@ -1820,7 +2074,9 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 		
 	case CCMODE_VFLT_LOOP:
@@ -1829,7 +2085,9 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_ENTER_CVMODE;
 		pca9468->timer_period = 0;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CCMODE_LOOP_INACTIVE1:
@@ -1911,7 +2169,9 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_ADJCC_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CCMODE_VIN_UVLO:
@@ -1921,7 +2181,9 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_period = 1000;	// 1000ms
 		pca9468->timer_id = TIMER_ENTER_ADJ_CCMODE;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	default:
@@ -1946,6 +2208,10 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 
 	pca9468->charging_state = DC_STATE_CHECK_CC;
 
+	ret = pca9468_check_error(pca9468);
+	if (ret != 0)
+		goto error;	// This is not active mode.
+	
 	ccmode = pca9468_check_ccmode_status(pca9468);
 	if (ccmode < 0) {
 		ret = ccmode;
@@ -2085,21 +2351,27 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 			pca9468->timer_period = PCA9468_CCMODE_CHECK1_T;
 			pca9468->timer_id = TIMER_CCMODE_CHECK;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));			
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));			
 		} else if (pca9468->charging_state == DC_STATE_START_CC2) {
 			/* go to CC2 mode */
 			mutex_lock(&pca9468->lock);
 			pca9468->timer_id = TIMER_ENTER_CCMODE2;
 			pca9468->timer_period = 0;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));	
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		} else if (pca9468->charging_state == DC_STATE_NO_CHARGING_JEITA) {
 			/* Set timer */
 			mutex_lock(&pca9468->lock);
 			pca9468->timer_period = 0;
 			pca9468->timer_id = TIMER_ENTER_JEITA;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		} else {
 			/* wait for new state polling */
 		}
@@ -2111,7 +2383,9 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_ENTER_CVMODE;
 		pca9468->timer_period = 0;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CCMODE_IIN_LOOP:
@@ -2131,7 +2405,9 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;			
 
 	case CCMODE_VIN_UVLO:
@@ -2141,7 +2417,9 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 		pca9468->timer_period = 1000;	// 1000ms
 		pca9468->timer_id = TIMER_CCMODE_CHECK;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	default:
@@ -2165,6 +2443,10 @@ static int pca9468_charge_start_ccmode2(struct pca9468_charger *pca9468)
 
 	pca9468->charging_state = DC_STATE_START_CC2;
 
+	ret = pca9468_check_error(pca9468);
+	if (ret != 0)
+		goto error;	// This is not active mode.
+	
 	/* Check the JEITA stage */
 	if (pca9468->jeita_stage == JEITA_STAGE2) {
 		/* Check the TA current > 900mA */
@@ -2182,14 +2464,18 @@ static int pca9468_charge_start_ccmode2(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_PDMSG_SEND;
 			pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		} else {
 			/* go to Check CC2 mode */
 			mutex_lock(&pca9468->lock);
 			pca9468->timer_id = TIMER_CCMODE2_CHECK;
 			pca9468->timer_period = PCA9468_CCMODE_CHECK2_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		}
 	} else {
 		/* go to Check CC2 mode */
@@ -2197,7 +2483,9 @@ static int pca9468_charge_start_ccmode2(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_CCMODE2_CHECK;
 		pca9468->timer_period = PCA9468_CCMODE_CHECK2_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 	}
 
 error:
@@ -2216,6 +2504,10 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 
 	pca9468->charging_state = DC_STATE_CHECK_CC2;
 
+	ret = pca9468_check_error(pca9468);
+	if (ret != 0)
+		goto error;	// This is not active mode.
+	
 	ccmode = pca9468_check_ccmode_status(pca9468);
 	if (ccmode < 0) {
 		ret = ccmode;
@@ -2258,7 +2550,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 					pca9468->timer_id = TIMER_CCMODE2_CHECK;
 					pca9468->timer_period = PCA9468_CCMODE_CHECK2_T;
 					mutex_unlock(&pca9468->lock);
-					schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+					queue_delayed_work(pca9468->dc_wq,
+										&pca9468->timer_work,
+										msecs_to_jiffies(pca9468->timer_period));
 				} else {
 					/* Check CC current > 900mA */
 					//if (pca9468->cc_ta_cur > PCA9468_CC2_IIN_CFG) {
@@ -2278,7 +2572,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 						pca9468->timer_period = PCA9468_CCMODE_CHECK2_T;
 						pca9468->timer_id = TIMER_CCMODE2_CHECK;
 						mutex_unlock(&pca9468->lock);
-						schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+						queue_delayed_work(pca9468->dc_wq,
+											&pca9468->timer_work,
+											msecs_to_jiffies(pca9468->timer_period));
 					} 
 					else if (pca9468->cc_ta_cur < g_high_volt_4P25_iin) {
 						/* Increase TA current 50mA */
@@ -2296,7 +2592,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 						pca9468->timer_period = PCA9468_CCMODE_CHECK2_T;
 						pca9468->timer_id = TIMER_CCMODE2_CHECK;
 						mutex_unlock(&pca9468->lock);
-						schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+						queue_delayed_work(pca9468->dc_wq,
+											&pca9468->timer_work,
+											msecs_to_jiffies(pca9468->timer_period));
 					}
 					else {
 						/* go to Check CC2 mode */
@@ -2310,7 +2608,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 							pca9468->timer_period = PCA9468_CCMODE_CHECK3_T;
 						}
 						mutex_unlock(&pca9468->lock);
-						schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+						queue_delayed_work(pca9468->dc_wq,
+											&pca9468->timer_work,
+											msecs_to_jiffies(pca9468->timer_period));
 					}
 				}			
 			} else {
@@ -2339,7 +2639,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 					//pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 					pca9468->timer_period = PCA9468_CCMODE_CHECK2_T;	// ASUS BSP : check every 10s +++
 					mutex_unlock(&pca9468->lock);
-					schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+					queue_delayed_work(pca9468->dc_wq,
+										&pca9468->timer_work,
+										msecs_to_jiffies(pca9468->timer_period));
 				} else {
 					/* go to Check CC2 mode */
 					mutex_lock(&pca9468->lock);
@@ -2352,7 +2654,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 						pca9468->timer_period = PCA9468_CCMODE_CHECK3_T;
 					}
 					mutex_unlock(&pca9468->lock);
-					schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+					queue_delayed_work(pca9468->dc_wq,
+										&pca9468->timer_work,
+										msecs_to_jiffies(pca9468->timer_period));
 				}
 			}
 		} else if (pca9468->charging_state == DC_STATE_NO_CHARGING_JEITA) {
@@ -2362,7 +2666,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 			pca9468->timer_period = 0;
 			pca9468->timer_id = TIMER_ENTER_JEITA;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		}
 		break;
 
@@ -2372,7 +2678,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_CVMODE_CHECK;
 		pca9468->timer_period = 0;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CCMODE_IIN_LOOP:
@@ -2391,7 +2699,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;			
 
 	case CCMODE_VIN_UVLO:
@@ -2401,7 +2711,9 @@ static int pca9468_charge_ccmode2(struct pca9468_charger *pca9468)
 		pca9468->timer_period = 1000;	// 1000ms
 		pca9468->timer_id = TIMER_CCMODE2_CHECK;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	default:
@@ -2424,6 +2736,10 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 
 	pca9468->charging_state = DC_STATE_START_CV;
 
+	ret = pca9468_check_error(pca9468);
+	if (ret != 0)
+		goto error;	// This is not active mode.
+	
 	/* Check TA current > CC2_IIN */
 	//if (pca9468->ta_cur > PCA9468_CC2_IIN_CFG) {
 	if (pca9468->ta_cur > g_high_volt_4P25_iin) {
@@ -2441,7 +2757,9 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		return ret;
 	}
 
@@ -2466,7 +2784,9 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_VFLT_LOOP:
@@ -2482,7 +2802,9 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_LOOP_INACTIVE:
@@ -2494,7 +2816,9 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_CVMODE_CHECK;
 		pca9468->timer_period = 0;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_CHG_DONE:
@@ -2524,7 +2848,9 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_VIN_UVLO:
@@ -2534,7 +2860,9 @@ static int pca9468_charge_start_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_period = 1000;	// 1000ms
 		pca9468->timer_id = TIMER_ENTER_CVMODE;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 		
 	default:
@@ -2556,6 +2884,10 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 
 	pca9468->charging_state = DC_STATE_CHECK_CV;
 
+	ret = pca9468_check_error(pca9468);
+	if (ret != 0)
+		goto error;	// This is not active mode.
+	
 	cvmode = pca9468_check_cvmode_status(pca9468);
 	if (cvmode < 0) {
 		ret = cvmode;
@@ -2590,7 +2922,9 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_CHG_LOOP:
@@ -2607,7 +2941,9 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_VFLT_LOOP:
@@ -2626,7 +2962,9 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	case CVMODE_LOOP_INACTIVE:
@@ -2642,7 +2980,9 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_CVMODE_CHECK;
 			pca9468->timer_period = PCA9468_CVMODE_CHECK_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		} else if (pca9468->charging_state == DC_STATE_NO_CHARGING_JEITA) {
 			/* Current Jeita stage is JEITA_STAGE1 or 4 */
 			/* Set timer */
@@ -2650,7 +2990,9 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 			pca9468->timer_period = 0;
 			pca9468->timer_id = TIMER_ENTER_JEITA;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		}
 		break;
 
@@ -2661,7 +3003,9 @@ static int pca9468_charge_cvmode(struct pca9468_charger *pca9468)
 		pca9468->timer_period = 1000; 	// 1000ms
 		pca9468->timer_id = TIMER_CVMODE_CHECK;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		break;
 
 	default:
@@ -2720,7 +3064,17 @@ static int pca9468_preset_dcmode(struct pca9468_charger *pca9468)
 		pca9468->timer_period = 0;
 		pca9468->timer_id = TIMER_ENTER_JEITA;
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
+		goto error;
+	}
+
+	/* Compare the current VBAT and VFLOAT value */
+	if (vbat > pca9468->pdata->v_float) {
+		pr_info("%s: VBAT(%duV) is already higher than VFLOAT(%duV)\n", 
+				__func__, vbat, pca9468->pdata->v_float);
+		ret = -EINVAL;
 		goto error;
 	}
 	
@@ -2759,7 +3113,9 @@ static int pca9468_preset_dcmode(struct pca9468_charger *pca9468)
 	pca9468->timer_id = TIMER_PDMSG_SEND;
 	pca9468->timer_period = PCA9468_PDMSG_WAIT_T;
 	mutex_unlock(&pca9468->lock);
-	schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+	queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 
 error:
 	pr_info("%s: End, ret=%d\n", __func__, ret);
@@ -2801,7 +3157,9 @@ static int pca9468_preset_config(struct pca9468_charger *pca9468)
 	pca9468->timer_id = TIMER_ENTER_ADJ_CCMODE;
 	pca9468->timer_period = PCA4968_ADJCC_DELAY_T;
 	mutex_unlock(&pca9468->lock);
-	schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+	queue_delayed_work(pca9468->dc_wq,
+						&pca9468->timer_work,
+						msecs_to_jiffies(pca9468->timer_period));
 	ret = 0;
 	
 error:
@@ -2893,7 +3251,9 @@ static int pca9468_check_vbatmin(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 			goto error;
 		}
 		
@@ -2904,12 +3264,8 @@ static int pca9468_check_vbatmin(struct pca9468_charger *pca9468)
 			/* enable direct charging */
 			ret = pca9468_start_direct_charging(pca9468);
 			if (ret < 0) {
-				/* Start Direct Charging again after 1sec */
-				mutex_lock(&pca9468->lock);
-				pca9468->timer_id = TIMER_VBATMIN_CHECK;
-				pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
-				mutex_unlock(&pca9468->lock);
-				schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+				/* Fail to start direct charging */
+				pr_info("%s: fail to start DC and return to SW charger\n", __func__);											
 				goto error;
 			}
 			//else {	//turn on charging led if direct charging enabled successfully
@@ -2928,7 +3284,9 @@ static int pca9468_check_vbatmin(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		}
 	} else {
 		/* Read switching charger status */	
@@ -2942,7 +3300,9 @@ static int pca9468_check_vbatmin(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 			goto error;
 		}
 		
@@ -2951,12 +3311,8 @@ static int pca9468_check_vbatmin(struct pca9468_charger *pca9468)
 			/* enable direct charging */
 			ret = pca9468_start_direct_charging(pca9468);
 			if (ret < 0) {
-				/* Start Direct Charging again after 1sec */
-				mutex_lock(&pca9468->lock);
-				pca9468->timer_id = TIMER_VBATMIN_CHECK;
-				pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
-				mutex_unlock(&pca9468->lock);
-				schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+				/* Fail to start direct charging */
+				pr_info("%s: fail to start DC and return to SW charger\n", __func__);
 				goto error;
 			}
 		} else {
@@ -2965,7 +3321,9 @@ static int pca9468_check_vbatmin(struct pca9468_charger *pca9468)
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = PCA9468_VBATMIN_CHECK_T;
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		}
 	}
 
@@ -3121,7 +3479,9 @@ static void pca9468_timer_work(struct work_struct *work)
 			/* Set timer */
 			pca9468->timer_id = TIMER_JEITA_CHECK;
 			pca9468->timer_period = PCA9468_JEITA_CHECK_T;
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		} else if (pca9468->charging_state == DC_STATE_CHARGING_DONE) {
 			/* Timer ID is none */
 			mutex_lock(&pca9468->lock);
@@ -3150,7 +3510,9 @@ static void pca9468_timer_work(struct work_struct *work)
 			/* Start pre-CV mode - with 500ms delay */
 			pca9468->timer_period = 500;
 			pca9468->timer_id = TIMER_ENTER_CVMODE;
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 		} else {
 			ret = -EINVAL;
 		}
@@ -3166,7 +3528,28 @@ static void pca9468_timer_work(struct work_struct *work)
 	return;
 	
 error:
+	pr_err("[PCA] ++%s: DC error(%d) happens and transit to switching charger\n", 
+			__func__, ret);
+
+	/* Return to the switching charger */
+	/* Set TA voltage to fixed 5V */
+	pca9468->ta_vol = 5000000;
+	/* Set TA current to maximum 3A */
+	pca9468->ta_cur = 3000000;
+	
+	/* Send PD Message */
+	pca9468->ta_objpos = 1;	// PDO1 - fixed 5V
+	ret = pca9468_send_pd_message(pca9468, PD_MSG_REQUEST_FIXED_PDO);
+	
+	/* wait 200ms */
+	msleep(200);
+	
+	/* Enable Switching Charger */
+	ret = pca9468_set_switching_charger(true, SWCHG_ICL_NORMAL, 
+										pca9468->pdata->ichg_cfg, 
+										pca9468->pdata->v_float);	
 	pca9468_stop_charging(pca9468);
+	pca_chg_done_pmic_notifier();
 	return;
 }
 
@@ -3358,7 +3741,9 @@ static irqreturn_t pca9468_interrupt_handler(int irq, void *data)
 				/* Go to Pre CV Mode */
 				pca9468->timer_id = TIMER_ENTER_CVMODE;
 				pca9468->timer_period = 10;
-				schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+				queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 			} else if (sts[REG_STS_A] & PCA9468_BIT_IIN_LOOP_STS) {
 				/* IIN loop or ICHG loop is in regulation */
 				pr_info("%s: IIN loop interrupt\n", __func__);
@@ -3566,7 +3951,7 @@ static void pca9468_prop_charging_enable_work(struct work_struct *work)
 	int ret =0;
 	
 	pr_info("%s: ======START=======\n", __func__);
-
+	CHG_DBG("pca9468->chg_enable = %d\n", pca9468->chg_enable);
 			/* Check the current charging enable status */
 		if (pca9468->chg_enable == POWER_SUPPLY_CHARGING_ENABLED_PMI) {
 			/* Check the new charging enable status */
@@ -3595,7 +3980,9 @@ static void pca9468_prop_charging_enable_work(struct work_struct *work)
 				pca9468->timer_id = TIMER_VBATMIN_CHECK;
 				pca9468->timer_period = 5000;	/* The dealy time for PD state goes to PE_SNK_STATE */
 				mutex_unlock(&pca9468->lock);
-				schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+				queue_delayed_work(pca9468->dc_wq,
+									&pca9468->timer_work,
+									msecs_to_jiffies(pca9468->timer_period));
 				ret = 0;
 			} else {
 				/* Stop Direct Charging */
@@ -3616,13 +4003,14 @@ static void pca9468_set_property_charging_enable(struct pca9468_charger *pca9468
 
 	g_Port2Enable = intval;
 
-	schedule_delayed_work(&pca9468->prop_charging_enable_work, 0);
+	queue_delayed_work(pca9468->dc_wq, &pca9468->prop_charging_enable_work, 0);
 
 	return;
 }
 #endif
 
 extern bool rt_chg_check_asus_vid(void);
+extern bool smartchg_stop_flag;
 static int pca9468_mains_set_property(struct power_supply *psy,
 				     enum power_supply_property prop,
 				     const union power_supply_propval *val)
@@ -3656,7 +4044,9 @@ static int pca9468_mains_set_property(struct power_supply *psy,
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = 5000;	/* The delay time for PD state goes to PE_SNK_STATE */
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 			ret = 0;
 		}
 		break;
@@ -3665,6 +4055,11 @@ static int pca9468_mains_set_property(struct power_supply *psy,
 #ifdef CONFIG_DUAL_PD_PORT
 		if (val->intval == POWER_SUPPLY_CHARGING_ENABLED_PMI) {
 			CHG_DBG("POWER_SUPPLY_CHARGING_ENABLED_PMI\n");
+			if (smartchg_stop_flag) {
+				CHG_DBG("smartchg_stop_flag, don't enable pca9468\n");
+				return 0;
+			}
+			
 			if (PE_check_asus_vid())
 				g_panel_off_iin = 2900000;
 			else
@@ -3674,6 +4069,11 @@ static int pca9468_mains_set_property(struct power_supply *psy,
 		}
 		else if (val->intval == POWER_SUPPLY_CHARGING_ENABLED_RT) {
 			CHG_DBG("POWER_SUPPLY_CHARGING_ENABLED_RT\n");
+			if (smartchg_stop_flag) {
+				CHG_DBG("smartchg_stop_flag, don't enable pca9468\n");
+				return 0;
+			}
+			
 			if (!gpio_get_value_cansleep(global_gpio->POGO_OVP_ACOK)) {
 				CHG_DBG("POGO_OVP is exist, skip POWER_SUPPLY_CHARGING_ENABLED_RT\n");
 			} else {
@@ -3710,7 +4110,9 @@ static int pca9468_mains_set_property(struct power_supply *psy,
 			pca9468->timer_id = TIMER_VBATMIN_CHECK;
 			pca9468->timer_period = 5000;	/* The dealy time for PD state goes to PE_SNK_STATE */
 			mutex_unlock(&pca9468->lock);
-			schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+			queue_delayed_work(pca9468->dc_wq,
+								&pca9468->timer_work,
+								msecs_to_jiffies(pca9468->timer_period));
 			ret = 0;
 		}
 #endif
@@ -4235,18 +4637,19 @@ static const struct attribute_group pca9468_attr_group = {
 };
 // ASUS BSP Austin_T : Add attributes ---
 
-void pca9468_enable_slow_charging(bool enable) {
+void pca9468_smartchg_slow_charging(bool enable) 
+{
 	int ret;
-	
+
 	if (enable) {
-		printk("pca9468_enable_slow_charging: enable slow charging\n");
+		CHG_DBG("enable slow charging\n");
 		g_panel_off_iin = 1000000;
 		g_panel_on_iin = 1000000;
 		g_high_volt_4P25_iin = 1000000;
 		g_inov_overtemp_iin = 1000000;
 		g_inov_overtemp_iin_low = 1000000;
 	} else {
-		printk("pca9468_enable_slow_charging: disable slow charging\n");
+		CHG_DBG("disable slow charging\n");
 		if (PE_check_asus_vid() || rt_chg_check_asus_vid())
 			g_panel_off_iin = 2900000;
 		else
@@ -4256,12 +4659,59 @@ void pca9468_enable_slow_charging(bool enable) {
 		g_inov_overtemp_iin = 2000000;
 		g_inov_overtemp_iin_low = 1400000;
 	}
-	
+
 	pca9468_chg_dev->ta_cur = g_panel_on_iin;
 	/* Send PD Message */
 	ret = pca9468_send_pd_message(pca9468_chg_dev, PD_MSG_REQUEST_APDO);
 	if (ret < 0)
 		CHG_DBG("pca9468_send_pd_message fail\n");
+}
+
+extern bool side_pps_flag;
+void pca9468_smartchg_stop_charging(bool enable) 
+{
+	int ret = 0;
+	struct power_supply *psy_pca9468;
+	union power_supply_propval val = {0};
+
+	if (enable) {
+		CHG_DBG("enable smartchg stop charging\n");
+
+		/* Change charging status */
+		pca9468_chg_dev->charging_state = DC_STATE_CHARGING_DONE;
+		
+		/* Set TA voltage to fixed 5V */
+		pca9468_chg_dev->ta_vol = 5000000;
+		/* Set TA current to maximum 3A */
+		pca9468_chg_dev->ta_cur = 3000000;
+		
+		/* Send PD Message */
+		pca9468_chg_dev->ta_objpos = 1;	// PDO1 - fixed 5V
+		ret = pca9468_send_pd_message(pca9468_chg_dev, PD_MSG_REQUEST_FIXED_PDO);
+		if (ret < 0) {
+			CHG_DBG("can not send fixed pdo 5V/3A\n");
+			return;
+		}
+		
+		pca9468_stop_charging(pca9468_chg_dev);
+		pca9468_chg_dev->chg_enable = 0;
+		
+		ret = pca9468_set_switching_charger(true, SWCHG_ICL_NORMAL, 
+												pca9468_chg_dev->pdata->ichg_cfg, pca9468_chg_dev->pdata->v_float);
+	}
+	else {
+		CHG_DBG("disable smartchg stop charging\n");
+		psy_pca9468 = power_supply_get_by_name("pca9468-mains");
+		
+		if (side_pps_flag)
+			val.intval = POWER_SUPPLY_CHARGING_ENABLED_PMI;
+		else
+			val.intval = POWER_SUPPLY_CHARGING_ENABLED_RT;
+
+		ret = power_supply_set_property(psy_pca9468, POWER_SUPPLY_PROP_CHARGING_ENABLED, &val);
+		if (ret < 0)
+			CHG_DBG("can not enable pca9468\n");
+	}
 }
 
 extern struct drm_panel *active_panel_asus;
@@ -4358,6 +4808,13 @@ static int pca9468_probe(struct i2c_client *client,
 
 	pr_info("[PCA] %s: pinctrl init done\n", __func__);
 //ASUS BSP : Request charger GPIO +++
+
+	/* Create a work queue for the direct charger */
+	pca9468_chg->dc_wq = alloc_ordered_workqueue("pca9468_dc_wq", WQ_MEM_RECLAIM);
+	if (pca9468_chg->dc_wq == NULL) {
+		dev_err(pca9468_chg->dev, "failed to create work queue\n");
+		return -ENOMEM;
+	}
 
 	wake_lock_init(&pca9468_chg->monitor_wake_lock, WAKE_LOCK_SUSPEND,
 		       "pca9468-charger-monitor");
@@ -4457,6 +4914,9 @@ static int pca9468_remove(struct i2c_client *client)
 		gpio_free(pca9468_chg->pdata->irq_gpio);
 	}
 
+	/* Delete the work queue */
+	destroy_workqueue(pca9468_chg->dc_wq);
+
 	wake_lock_destroy(&pca9468_chg->monitor_wake_lock);
 	power_supply_unregister(pca9468_chg->mains);
 	return 0;
@@ -4496,7 +4956,9 @@ static void pca9468_check_and_update_charging_timer(struct pca9468_charger *pca9
 		mutex_lock(&pca9468->lock);
 		pca9468->timer_period = time_left * 1000;	// ms unit
 		mutex_unlock(&pca9468->lock);
-		schedule_delayed_work(&pca9468->timer_work, msecs_to_jiffies(pca9468->timer_period));
+		queue_delayed_work(pca9468->dc_wq,
+							&pca9468->timer_work,
+							msecs_to_jiffies(pca9468->timer_period));
 		pr_info("%s: timer_id=%d, time_period=%ld\n", __func__, pca9468->timer_id, pca9468->timer_period);
 	}
 	pca9468->last_update_time = current_time;
@@ -4555,4 +5017,4 @@ module_i2c_driver(pca9468_driver);
 MODULE_AUTHOR("Clark Kim <clark.kim@nxp.com>");
 MODULE_DESCRIPTION("PCA9468 charger driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("2.3.1A");
+MODULE_VERSION("2.4.3A");

@@ -2176,10 +2176,10 @@ static void goodix_resume_work(struct work_struct *work)
 	ts_info("resume_work +++ AOD(%d) PanelOff(%d) FP(%d)", gts_core_data->aod_test_mode, asus_display_in_normal_off(), fp_status);
 
 	if (gts_core_data->aod_test_mode == 1){
-		if((fp_status == 0) || (fp_status == 2)) {
-			ts_info("resume +++ wait sec for FP status(%d)", fp_status);
+		if((fp_status == -1) || (fp_status == 0) || (fp_status == 2)) {
+			ts_info("resume +++ wait sec for FP status(%d) process_resume(%d)", fp_status, process_resume);
 			retval = wait_event_interruptible(gts_core_data->fp_queue, ((fp_status == 1) || (process_resume == true)));
-			ts_info("resume --- wait sec for FP status(%d)", fp_status);
+			ts_info("resume --- wait sec for FP status(%d) process_resume(%d)", fp_status, process_resume);
 		}
 	}
 
@@ -2187,6 +2187,9 @@ static void goodix_resume_work(struct work_struct *work)
 		ts_info("resume wait 0.3 sec for dclick");
 		wait_dclick_enable = false;
 		schedule_delayed_work(&gts_core_data->gts_resume_work, msecs_to_jiffies(300)); // 0.3 sec
+		if(process_resume == true) {
+			process_resume = false;
+		}
 		return;
 	}
 	if(get_aod_processing() == true) {

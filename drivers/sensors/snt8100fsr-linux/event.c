@@ -913,7 +913,7 @@ static void event_wq_func(struct work_struct *lwork) {
 		//PRINT_INFO("event_wq_func::do-while: %x, %x, %d",
 		//		reg_event.boot, reg_event.host, snt8100fsr->active_sc_cmd);
 		if(reg_event.host==1){
-		  PRINT_INFO("===Wake Up, receive reg_event.host===");
+			//PRINT_INFO("===Wake Up, receive reg_event.host===");
 		}
 #endif /* DYNAMIC_PWR_CTL */
 	        if (reg_event.command) {
@@ -967,7 +967,7 @@ static void event_wq_func(struct work_struct *lwork) {
 #ifdef DYNAMIC_PWR_CTL
 		snt8100fsr_g->wake_rsp_result = 0;	// succsess!
 	    while(down_trylock(&snt8100fsr->wake_req)==0) {
-	        PRINT_INFO("ActivityRsp host=%d", reg_event.host);
+	        //PRINT_INFO("ActivityRsp host=%d", reg_event.host);
 	        up(&snt8100fsr_g->wake_rsp);
 	    }
 #endif /* DYNAMIC_PWR_CTL */
