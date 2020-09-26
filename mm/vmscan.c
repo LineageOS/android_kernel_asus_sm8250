@@ -4155,7 +4155,6 @@ static void asussetenforce(void)
 	if (IS_ERR(pFile)) {
 		printk("[SELinux] Failed to open enforce file\n");
 	} else {
-		printk("[SELinux] Succeed in opening enforce file\n");
 		old_fs = get_fs();
 		set_fs(get_ds());
 		snprintf(buf, sizeof buf, "%d", g_bSetEnforce);
@@ -4178,7 +4177,6 @@ int wake_setselinux_wq(int nValue){
 // ASUS_BSP +++ get permissive status
 	if(permissive_enable == 1 && nValue == 0)
 	{
-		printk("[SELinux] CmdLine : androidboot.selinux=permissive !!(%d)\n", nValue);
 		return 0;
 	}
 // ASUS_BSP --- get permissive status
@@ -4225,7 +4223,6 @@ static ssize_t proc_rd_write(struct file *filp, const char __user *buff, size_t 
 				if (*(pPos+2) == '\n' || *(pPos+2) == '\0') {
 					int nValue = *(pPos+1) - '0';
 					if (nValue == 0 || nValue == 1) {
-						printk("[SELinux] Setting enforce to %d\n", nValue);
 						wake_setselinux_wq(nValue);
 					}
 				}

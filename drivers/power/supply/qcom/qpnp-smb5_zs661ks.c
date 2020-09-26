@@ -4718,6 +4718,9 @@ static ssize_t ultra_cos_spec_time_show(struct device *dev, struct device_attrib
 	return sprintf(buf, "%d\n", g_ultra_cos_spec_time);
 }
 
+extern bool side_pps_flag;
+extern bool btm_pps_flag;
+extern void pca9468_smartchg_stop_charging(bool enable);
 static ssize_t smartchg_stop_charging_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
@@ -4744,10 +4747,13 @@ static ssize_t smartchg_stop_charging_store(struct device *dev,
 		}
 	}
 
+	if (side_pps_flag || btm_pps_flag)
+		pca9468_smartchg_stop_charging(tmp);
+
 	return len;
 }
 
-extern void pca9468_enable_slow_charging(bool enable);
+extern void pca9468_smartchg_slow_charging(bool enable);
 static ssize_t smartchg_stop_charging_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", smartchg_stop_flag);
@@ -4770,7 +4776,7 @@ static ssize_t smartchg_slow_charging_store(struct device *dev,
 		jeita_rule();
 	}
 
-	pca9468_enable_slow_charging(tmp);
+	pca9468_smartchg_slow_charging(tmp);
 	return len;
 }
 

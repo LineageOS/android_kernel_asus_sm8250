@@ -87,7 +87,7 @@ int snt_activity_request_force(int force)
 
 	/* Check wake device for 3.4.0 */
         ret = sb_wake_device(snt8100fsr_g);
-		PRINT_INFO("sb_wake_device, snt_state=%d", snt8100fsr_g->snt_state);
+		PRINT_DEBUG("sb_wake_device, snt_state=%d", snt8100fsr_g->snt_state);
 		snt8100fsr_g->snt_state = GRIP_WAKEUP;
 		mutex_unlock(&snt8100fsr_g->IRQ_WAKE_SLEEP_LOCK);
         if (ret) {

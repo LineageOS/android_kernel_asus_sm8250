@@ -6656,7 +6656,7 @@ void asus_min_monitor_work(struct work_struct *work)
 	}*/
 // ASUS BSP : Add for DT overheat ---
 
-	if ((NXP_FLAG == 0) || pca_jeita_stop_flag || pca_chg_done_flag) {
+	if ((NXP_FLAG == 0) || pca_jeita_stop_flag || pca_chg_done_flag || smartchg_stop_flag) {
 		jeita_charging_enable = (u8)jeita_rule();
 		asus_monitor_thermal_management();
 	}

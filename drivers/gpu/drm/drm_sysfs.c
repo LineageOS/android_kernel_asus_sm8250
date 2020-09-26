@@ -59,6 +59,7 @@ int asus_ghbm_on_requested;
 int asus_ghbm_on_achieved;
 int fod_spot_ui_ready;
 int fod_gesture_touched;
+int has_pxlw_video_blocker = 0;
 
 static ssize_t hdr_mode_show(struct class *class,
 					struct class_attribute *attr,
@@ -79,6 +80,27 @@ static ssize_t hdr_mode_store(struct class *class,
 	return count;
 }
 static CLASS_ATTR_RW(hdr_mode);
+
+static ssize_t pxlw_video_blocker_show(struct class *class,
+					struct class_attribute *attr,
+					char *buf)
+{
+	return sprintf(buf, "%d\n", has_pxlw_video_blocker);
+}
+
+static ssize_t pxlw_video_blocker_store(struct class *class,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	if (!count)
+		return -EINVAL;
+
+	sscanf(buf, "%d", &has_pxlw_video_blocker);
+	printk("[Display] set pxlw video blocker: %d\n", has_pxlw_video_blocker);
+
+	return count;
+}
+static CLASS_ATTR_RW(pxlw_video_blocker);
 
 //
 // FOD timing optimize
@@ -205,6 +227,14 @@ int drm_sysfs_init(void)
 		return err;
 	}
 
+	err = class_create_file(drm_class, &class_attr_pxlw_video_blocker);
+	if (err) {
+		printk("[Display] Fail to create pxlw_video_blocker file node\n");
+		class_destroy(drm_class);
+		drm_class = NULL;
+		return err;
+	}
+
 	err = class_create_file(drm_class, &class_attr_ghbm_on_requested);
 	if (err) {
 		printk("[Display] Fail to create ghbm_on_requested file node\n");
@@ -254,6 +284,7 @@ void drm_sysfs_destroy(void)
 	class_remove_file(drm_class, &class_attr_version.attr);
 #ifdef ASUS_ZS661KS_PROJECT
 	class_remove_file(drm_class, &class_attr_hdr_mode);
+	class_remove_file(drm_class, &class_attr_pxlw_video_blocker);
 	class_remove_file(drm_class, &class_attr_ghbm_on_requested);
 	class_remove_file(drm_class, &class_attr_ghbm_on_achieved);
 	class_remove_file(drm_class, &class_attr_spot_on_achieved);

@@ -53,6 +53,7 @@ extern char asus_var_osc_reg_p20_value;
 extern bool asus_var_regulator_always_on;
 static bool asus_var_regulator_last_on = true;
 extern bool asus_var_global_hbm_pending;
+extern int  has_pxlw_video_blocker;
 
 extern int asus_current_fps;
 extern int asus_alpm_bl_high;
@@ -751,9 +752,11 @@ int asus_display_convert_backlight(struct dsi_panel *panel, int bl_lvl)
 			backlight_converted = asus_alpm_bl_low;
 			pr_err("[Display] convert to %d, reason AOD\n", asus_alpm_bl_low);
 		}
-	} else if (bl_lvl < 400) {
+	} else if (bl_lvl < 400 && !has_pxlw_video_blocker) {
 		pr_err("[Display] convert to 400, reason pixelworks\n");
 		backlight_converted = 400;
+	} else if (has_pxlw_video_blocker) {
+		pr_err("[Display] do not convert backlight, reason pixelworks video blocker\n");
 	}
 
 	return backlight_converted;
