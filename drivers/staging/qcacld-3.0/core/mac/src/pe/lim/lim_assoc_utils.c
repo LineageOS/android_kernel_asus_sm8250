@@ -1687,8 +1687,7 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 	qdf_size_t val_len;
 	tDot11fIEhe_cap *peer_he_caps;
 	tSchBeaconStruct *pBeaconStruct = NULL;
-	struct bss_description *bssDescription =
-		&pe_session->lim_join_req->bssDescription;
+	struct bss_description *bssDescription;
 
 	/* copy operational rate set from pe_session */
 	if (pe_session->rateSet.numRates <= WLAN_SUPPORTED_RATES_IE_MAX_LEN) {
@@ -1819,6 +1818,10 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 		peer_he_caps = he_caps;
 	} else {
 		bssDescription = &pe_session->lim_join_req->bssDescription;
+		if (!bssDescription) {
+			pe_err("bssDescription is NULL");
+			return QDF_STATUS_E_INVAL;
+		}
 		pBeaconStruct = qdf_mem_malloc(sizeof(tSchBeaconStruct));
 		if (!pBeaconStruct)
 			return QDF_STATUS_E_NOMEM;

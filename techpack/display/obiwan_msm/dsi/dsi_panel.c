@@ -776,8 +776,12 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	pr_err("[Display] request bl=%d\n", bl_lvl);
 
 	/* ASUS BSP DP, bl for station +++ */
-	if (gDongleType == 2)
-		ec_i2c_pd_set_display_bl(bl_lvl);
+	if (gDongleType == 2) {
+		if (asus_display_in_aod() && bl_lvl == 1)
+			pr_err("[msm-dp] skip bl to station in doze\n");
+		else
+			ec_i2c_pd_set_display_bl(bl_lvl);
+	}
 
 	if (bl_lvl != 0)
 		lastBL = (int)bl_lvl;

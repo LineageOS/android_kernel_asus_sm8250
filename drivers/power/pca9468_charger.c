@@ -2265,7 +2265,7 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 						}
 					}
 					//if (g_PanelOnOff && (pca9468->pdata->iin_cfg > PCA9468_CC1_IIN_CFG_3A)) {
-					else if ((g_PanelOnOff && (pca9468->pdata->iin_cfg > g_panel_on_iin)) || (virtual_therm > 45000 || virtual_therm_alert)) {
+					else if ((g_PanelOnOff && (pca9468->pdata->iin_cfg > g_panel_on_iin)) || (virtual_therm > 42000 || virtual_therm_alert)) {
 						virtual_therm_alert = true;
 						
 						/* panel on, TA current  to PCA9468_CC1_IIN_CFG_3A(1400mA) */
@@ -2302,7 +2302,7 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 						}
 					}
 					
-					if (virtual_therm < 42000) {
+					if (virtual_therm < 40000) {
 						virtual_therm_alert = false;
 					}
 				} else {
@@ -2316,7 +2316,7 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 								goto error;
 	
 						pr_info("[PCA] %s: NTC stage2(screen on + INBOX), ta_cur:%d(mA)\n", __func__, pca9468->ta_cur);
-					} else if ((g_PanelOnOff && (pca9468->ta_cur > g_inov_overtemp_iin_low)) || (virtual_therm > 45000 || virtual_therm_alert)) {
+					} else if ((g_PanelOnOff && (pca9468->ta_cur > g_inov_overtemp_iin_low)) || (virtual_therm > 42000 || virtual_therm_alert)) {
 						virtual_therm_alert = true;
 						
 						pca9468->ta_cur = g_inov_overtemp_iin_low;
@@ -2340,7 +2340,7 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 						pr_info("[PCA] %s: NTC stage2(screen off), ta_cur:%d(mA)\n", __func__, pca9468->ta_cur);
 					}
 					
-					if (virtual_therm < 42000) {
+					if (virtual_therm < 40000) {
 						virtual_therm_alert = false;
 					}
 				}
@@ -3545,9 +3545,11 @@ error:
 	msleep(200);
 	
 	/* Enable Switching Charger */
-	ret = pca9468_set_switching_charger(true, SWCHG_ICL_NORMAL, 
-										pca9468->pdata->ichg_cfg, 
-										pca9468->pdata->v_float);	
+	if (ret < 0)
+		ret = pca9468_set_switching_charger(true, 500000, pca9468->pdata->ichg_cfg, pca9468->pdata->v_float);
+	else
+		ret = pca9468_set_switching_charger(true, SWCHG_ICL_NORMAL, pca9468->pdata->ichg_cfg, pca9468->pdata->v_float);
+	
 	pca9468_stop_charging(pca9468);
 	pca_chg_done_pmic_notifier();
 	return;
@@ -4491,8 +4493,8 @@ static int pca9468_fb_callback(struct notifier_block *nb, unsigned long val, voi
 				g_PanelOnOff = 1;
 			}
 			//[---]This is a temporary WA for incorrect drm_notifier in COS mode
-			g_inov_temp_max = 50000;
-			g_inov_temp_min = 48000;
+			g_inov_temp_max = 47000;
+			g_inov_temp_min = 45000;
 
 			/* Set IIN_CFG */
 			//pca9468_set_input_current(pca9468_chg, PCA9468_CC1_IIN_CFG_3A);

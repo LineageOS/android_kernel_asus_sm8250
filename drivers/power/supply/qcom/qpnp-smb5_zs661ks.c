@@ -3788,19 +3788,19 @@ void asus_probe_pmic_settings(struct smb_charger *chg)
 		dev_err(chg->dev, "Couldn't set default SKIN_RST_THRESHOLD_LSB rc=%d\n", rc);
 	}
 	
-	rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_MSB_REG, 0x15);
+	rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_MSB_REG, 0x1C);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set default SKIN_H_THRESHOLD_MSB_REG rc=%d\n", rc);
 	}
-	rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_LSB_REG, 0xF7);
+	rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_LSB_REG, 0x22);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set default SKIN_H_THRESHOLD_LSB_REG rc=%d\n", rc);
 	}
-	rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_MSB_REG, 0x18);
+	rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_MSB_REG, 0x1D);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set default SKIN_L_THRESHOLD_MSB_REG rc=%d\n", rc);
 	}
-	rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_LSB_REG, 0x1D);
+	rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_LSB_REG, 0xE6);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set default SKIN_L_THRESHOLD_LSB_REG rc=%d\n", rc);
 	}

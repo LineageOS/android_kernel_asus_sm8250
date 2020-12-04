@@ -599,6 +599,10 @@ static void msm_restart_prepare(const char *cmd)
 				qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_UNLOCK);
 			__raw_writel(0x6f656d08, restart_reason);
+		} else if (!strncmp(cmd, "switch_active_slot", 18)) {
+				qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_SWITCH_ACTIVE_SLOT);
+			__raw_writel(0x6f656d08, restart_reason);
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
 			int ret;

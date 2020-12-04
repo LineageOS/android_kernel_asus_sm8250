@@ -1717,18 +1717,22 @@ static ssize_t FP_status_store(struct device *dev,
 {
 	int en;
 	
-	if (!((sscanf(buf, "%d", &en) == 0) || (sscanf(buf, "%d", &en) == 1) || (sscanf(buf, "%d", &en) == 2)))
+	if (!((sscanf(buf, "%d", &en) == 0) || (sscanf(buf, "%d", &en) == 1) || (sscanf(buf, "%d", &en) == 2) || (sscanf(buf, "%d", &en) == 3) || (sscanf(buf, "%d", &en) == 4)))
 		return -EINVAL;
 	ts_info("FP status %d",en);
 
 	fp_status = en;
-	if((fp_status == 1) && (process_resume == false)) {
-		ts_info("touch resume : vendor.goodix.sensor.status = 1");
+	ts_info("touch resume : vendor.goodix.sensor.status = %d", fp_status);
+	if(((fp_status == 1) || (fp_status == 3)) && (process_resume == false)) {
 		process_resume = true;
 		wake_up_interruptible(&gts_core_data->fp_queue);
 	}
+	if((fp_status == 4) && (process_resume == true)) {
+		process_resume = false;
+	}
 	return count;
 }
+
 
 static ssize_t FP_status_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
@@ -2176,9 +2180,9 @@ static void goodix_resume_work(struct work_struct *work)
 	ts_info("resume_work +++ AOD(%d) PanelOff(%d) FP(%d)", gts_core_data->aod_test_mode, asus_display_in_normal_off(), fp_status);
 
 	if (gts_core_data->aod_test_mode == 1){
-		if((fp_status == -1) || (fp_status == 0) || (fp_status == 2)) {
+		if((fp_status == -1) || (fp_status == 0) || (fp_status == 2) || (fp_status == 4)) {
 			ts_info("resume +++ wait sec for FP status(%d) process_resume(%d)", fp_status, process_resume);
-			retval = wait_event_interruptible(gts_core_data->fp_queue, ((fp_status == 1) || (process_resume == true)));
+			retval = wait_event_interruptible(gts_core_data->fp_queue, (((fp_status == 1) || (fp_status == 3)) || (process_resume == true)));
 			ts_info("resume --- wait sec for FP status(%d) process_resume(%d)", fp_status, process_resume);
 		}
 	}

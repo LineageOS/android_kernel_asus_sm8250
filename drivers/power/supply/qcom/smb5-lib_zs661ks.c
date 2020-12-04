@@ -87,7 +87,6 @@ int g_charger_mode_full_time = 0;
 volatile bool g_cos_over_full_flag = 0;
 volatile bool g_pdo_ok = false;//Add for HVDCP off
 volatile bool dual_port_once_flag = 0;
-bool pmic_inov_low = 0;
 volatile bool station_cable_flag = 0;
 bool bSkinTempOver = 0; // Add for ASUS SW INOV use
 //ASUS BSP : Add ASUS variables ---
@@ -6397,28 +6396,22 @@ bool jeita_rule(void)
 	int FCC_uA;
 	//int skin_temp;
 
-	if (!g_Charger_mode && ASUS_POGO_ID == NO_INSERT && g_PanelOnOff && game_type_flag == 1) {
+	if (g_PanelOnOff) {
 		CHG_DBG("Set PMIC INOV to Panel On\n");
-		if (!pmic_inov_low) {
-			pmic_inov_low = 1;
-			rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_MSB_REG, 0x1C);
-			rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_LSB_REG, 0x22);
-			rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_MSB_REG, 0x1D);
-			rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_LSB_REG, 0xE6);
-			if (rc < 0)
-				CHG_DBG_E("Couldn't set default SKIN THRESHOLD rc=%d\n", rc);
-		}
+		rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_MSB_REG, 0x1C);
+		rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_LSB_REG, 0x22);
+		rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_MSB_REG, 0x1D);
+		rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_LSB_REG, 0xE6);
+		if (rc < 0)
+			CHG_DBG_E("Couldn't set default SKIN THRESHOLD rc=%d\n", rc);
 	} else {
 		CHG_DBG("Set PMIC INOV to Panel Off\n");
-		if (pmic_inov_low) {
-			pmic_inov_low = 0;
-			rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_MSB_REG, 0x15);
-			rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_LSB_REG, 0xF7);
-			rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_MSB_REG, 0x18);
-			rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_LSB_REG, 0x1D);
-			if (rc < 0)
-				CHG_DBG_E("Couldn't set default SKIN THRESHOLD rc=%d\n", rc);
-		}
+		rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_MSB_REG, 0x15);
+		rc = smblib_write(smbchg_dev, SKIN_H_THRESHOLD_LSB_REG, 0xF7);
+		rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_MSB_REG, 0x18);
+		rc = smblib_write(smbchg_dev, SKIN_L_THRESHOLD_LSB_REG, 0x1D);
+		if (rc < 0)
+			CHG_DBG_E("Couldn't set default SKIN THRESHOLD rc=%d\n", rc);
 	}
 
 	if (no_input_suspend_flag)
