@@ -106,6 +106,8 @@
 #define GOODIX_PEN_MAX_PRESSURE		4096
 #define GOODIX_MAX_TP_KEY  4
 #define GOODIX_MAX_PEN_KEY 2
+
+#define ATR_QUEUE_SIZE 16
 /*
  * struct goodix_module - external modules container
  * @head: external modules list
@@ -343,6 +345,26 @@ struct goodix_ts_regs {
 	u16 fw_request;
 	u16 proximity;
 };
+
+// ASUS_BSP +++ Jiunhau_Wang
+struct goodix_atr_data {
+	u8 id;
+	u8 active;
+	u16 x;
+	u16 y;
+	u16 p;
+	u16 m;
+};
+
+struct atr_queue {
+	unsigned int head;
+	unsigned int tail;
+	unsigned int buf_size;
+	unsigned int capacity;
+	spinlock_t buffer_lock;
+	struct goodix_atr_data* data;
+};
+// ASUS_BSP --- Jiunhau_Wang
 
 enum goodix_cfg_bin_state {
 	CFG_BIN_STATE_UNINIT, /* config bin uninit */

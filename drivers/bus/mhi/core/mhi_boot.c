@@ -16,6 +16,7 @@
 #include <linux/wait.h>
 #include <linux/mhi.h>
 #include "mhi_internal.h"
+#include <soc/qcom/subsystem_restart.h>
 
 static void mhi_process_sfr(struct mhi_controller *mhi_cntrl,
 	struct file_info *info)
@@ -59,6 +60,7 @@ static void mhi_process_sfr(struct mhi_controller *mhi_cntrl,
 
 	/* force sfr string to log in kernel msg */
 	MHI_ERR("%s\n", sfr_buf);
+	subsys_save_reason("wlan", sfr_buf );
 err:
 	kfree(sfr_buf);
 }

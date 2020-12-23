@@ -360,6 +360,11 @@ static struct BAT_HEALTH_DATA_BACKUP g_bat_health_data_backup[BAT_HEALTH_NUMBER_
 };
 //ASUS_BS battery health upgrade ---
 
+//ASUS_BSP +++ add to printk the WIFI hotspot & QXDM UTS event
+bool g_qxdm_en = false;
+bool g_wifi_hs_en = false;
+//ASUS_BSP --- add to printk the WIFI hotspot & QXDM UTS event
+
 static struct fg_irq_info fg_irqs[FG_GEN4_IRQ_MAX];
 
 /* DT parameters for FG device */
@@ -7601,6 +7606,77 @@ static void create_battID_status_proc_file(void)
 	return;
 }
 
+//ASUS_BSP +++ LiJen add to printk the WIFI hotspot & QXDM UTS event
+#define uts_status_PROC_FILE	"driver/UTSstatus"
+static struct proc_dir_entry *uts_status_proc_file;
+static int uts_status_proc_read(struct seq_file *buf, void *v)
+{
+	seq_printf(buf, "WIFIHS:%d, QXDM:%d\n", g_wifi_hs_en, g_qxdm_en);
+	return 0;
+}
+
+static ssize_t uts_status_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	int val;
+	char messages[8]="";
+
+	len =(len > 8 ?8:len);
+	if (copy_from_user(messages, buff, len)) {
+		return -EFAULT;
+	}
+	val = (int)simple_strtol(messages, NULL, 10);
+
+	switch (val) {
+	case 0:
+		BAT_DBG("%s: WIFI Hotspot disable\n", __func__);
+		g_wifi_hs_en = false;
+		break;
+	case 1:
+		BAT_DBG("%s: WIFI Hotspot enable\n", __func__);
+		g_wifi_hs_en = true;
+		break;
+	case 2:
+		BAT_DBG("%s: QXDM disable\n", __func__);
+		g_qxdm_en = false;
+		break; 
+	case 3:
+		BAT_DBG("%s: QXDM enable\n", __func__);
+		g_qxdm_en = true;
+		break;       
+	default:
+		BAT_DBG("%s: Invalid mode\n", __func__);
+		break;
+	}
+    
+	return len;
+}
+
+static int uts_status_proc_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, uts_status_proc_read, NULL);
+}
+
+static const struct file_operations uts_status_fops = {
+	.owner = THIS_MODULE,
+    .open = uts_status_proc_open,
+    .read = seq_read,
+	.write = uts_status_proc_write,
+    .release = single_release,
+};
+
+void static create_uts_status_proc_file(void)
+{
+	uts_status_proc_file = proc_create(uts_status_PROC_FILE, 0666, NULL, &uts_status_fops);
+
+    if (uts_status_proc_file) {
+		BAT_DBG("%s: sucessed!\n", __func__);
+    } else {
+	    BAT_DBG("%s: failed!\n", __func__);
+    }
+}
+//ASUS_BSP --- LiJen add to printk the WIFI hotspot & QXDM UTS event
+
+
 //[+++] LiJen implement power bank and balance mode
 #define bat_policy_PROC_FILE	"driver/batpolicy"
 static struct proc_dir_entry *bat_policy_proc_file;
@@ -8569,6 +8645,7 @@ static int print_battery_status(void)
 	short station_cur = 0;
 	char stationInfo[256];
 	//[---]add to printk the battery status of the station
+	char UTSInfo[256]; //ASUS_BSP add to printk the WIFI hotspot & QXDM UTS event
 
 	if (g_fgDev == NULL || smbchg_dev == NULL || g_smb5_probe_complete == false)
 		return -ENODATA;
@@ -8655,6 +8732,12 @@ static int print_battery_status(void)
 		ASUSEvtlog("[BAT][Station]%s", stationInfo);
 	}
 	//[---]Add to print the battery status of the station
+
+	//ASUS_BSP +++ add to printk the WIFI hotspot & QXDM UTS event
+	snprintf(UTSInfo, sizeof(UTSInfo), "WIFI_HS=%d, QXDM=%d", g_wifi_hs_en, g_qxdm_en);
+	ASUSEvtlog("[UTS][Status]%s", UTSInfo);
+	BAT_DBG("%s: %s", __func__, UTSInfo);
+	//ASUS_BSP --- add to printk the WIFI hotspot & QXDM UTS event
 
 	return 0;
 }
@@ -9184,6 +9267,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	//fg->hid_suspend_id = hid_vote_register("CHARGER"); //Not used now
 	create_bat_policy_proc_file();
 //[---] LiJen implement power bank and balance mode
+	create_uts_status_proc_file(); //ASUS_BSP LiJen add to printk the WIFI hotspot & QXDM UTS event
 
 	fg_gen4_post_init(chip);
 

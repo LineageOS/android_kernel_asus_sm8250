@@ -23,7 +23,7 @@ static bool suspend_vdd_on = false;
 
 static struct ene_8k41_platform_data *g_pdata;
 static bool bumper_enable = false;
-static bool CSCmode = false;
+static bool CSCmode = true;
 
 // For control Bumper LED
 extern enum DEVICE_HWID g_ASUS_hwID;

@@ -348,6 +348,8 @@ static int rpm_stats_suspend(struct device *dev)
 	return 0;
 }
 
+int pre_aosd_count;
+bool need_dump_rpmh_master_stat;
 static int rpm_stats_resume(struct device *dev)
 {
 	void __iomem *reg =0;
@@ -369,6 +371,18 @@ static int rpm_stats_resume(struct device *dev)
 				offsetof(struct msm_rpm_stats_data, count));
 		memcpy(stat_type, &data.stat_type, sizeof(u32));
 		printk("[RPM] Resume: status: Mode: %s, Count: %d\n", stat_type, data.count);
+		if (i == 0) {
+			if(pre_aosd_count == data.count)
+			{
+				need_dump_rpmh_master_stat=true;
+			}
+			else
+			{
+				need_dump_rpmh_master_stat=false;
+			}
+			pre_aosd_count=data.count;
+			ASUSEvtlog("[RPM] Resume: status: Mode: %s, Count: %d\n", stat_type, data.count);
+		}
 	}
 	data.count = msm_rpmstats_read_long_register(reg,
 		3, offsetof(struct msm_rpm_stats_data, count));

@@ -8861,6 +8861,14 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 			extcon_set_state_sync(chg->extcon, EXTCON_USB, false);
 		}
 		//[---] When the VBUS 5V is removed, notify USB the EXTCON_USB is false
+
+		// ASUS BSP : Pull low ADC_SW_EN
+		rc = gpio_direction_output(global_gpio->ADC_SW_EN, 0);
+		if (rc) {
+			CHG_DBG_E("Failed to pull low ADC_SW_EN\n");
+		} else {
+			CHG_DBG("Succeed to pull low ADC_SW_EN\n");
+		}
 	}
 //ASUS BSP charger ---
 

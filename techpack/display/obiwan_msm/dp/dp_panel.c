@@ -2207,6 +2207,10 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 		bpp = min_t(u32, mode_edid_bpp, DP_PANEL_DEFAULT_BPP);
 	else
 		bpp = min_t(u32, mode_edid_bpp, max_supported_bpp);
+
+	// TT#255578
+	if (mode_edid_bpp > max_supported_bpp)
+		min_supported_bpp = 24;
 	/* ASUS BSP DP, to limit output with 8bit@24bpp --- */
 
 	link_info = &dp_panel->link_info;

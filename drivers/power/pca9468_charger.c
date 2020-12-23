@@ -219,6 +219,12 @@
 #define PCA9468_SNSRES_5mOhm			0x00
 #define PCA9468_SNSRES_10mOhm			PCA9468_BIT_SNSRES
 extern int g_fv_setting;//Add for battery safety upgrade
+
+//ASUS_BSP +++ Add for slow charger
+extern bool smartchg_slow_flag;
+#define SLOWE_CHARGING_TA_CUR  1000000 //1A
+//ASUS_BSP --- Add for slow charger
+
 /* VIN Overvoltage setting from 2*VOUT */
 enum {
 	OV_DELTA_10P,
@@ -2036,6 +2042,11 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 
 	pr_info("%s: ======START=======\n", __func__);
 
+	if (smartchg_slow_flag){
+		if (pca9468->ta_cur > SLOWE_CHARGING_TA_CUR)
+			pca9468->ta_cur = SLOWE_CHARGING_TA_CUR;
+	}
+
 	pca9468->charging_state = DC_STATE_ADJUST_CC;
 
 	ret = pca9468_check_error(pca9468);
@@ -2150,8 +2161,13 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 					} else {
 						/* TA current is low to enter IIN_LOOP, so w should increase TA current (50mA) */
 						pca9468->ta_cur = pca9468->ta_cur + PD_MSG_TA_CUR_STEP;
-						if (pca9468->ta_cur > pca9468->ta_max_cur)
-							pca9468->ta_cur = pca9468->ta_max_cur;
+						if (smartchg_slow_flag){
+							if (pca9468->ta_cur > SLOWE_CHARGING_TA_CUR)
+								pca9468->ta_cur = SLOWE_CHARGING_TA_CUR;
+						}else{
+							if (pca9468->ta_cur > pca9468->ta_max_cur)
+								pca9468->ta_cur = pca9468->ta_max_cur;
+						}
 						pr_info("%s: CC adjust Cont: ta_cur=%d\n", __func__, pca9468->ta_cur);
 					}
 				}
@@ -4645,11 +4661,11 @@ void pca9468_smartchg_slow_charging(bool enable)
 
 	if (enable) {
 		CHG_DBG("enable slow charging\n");
-		g_panel_off_iin = 1000000;
-		g_panel_on_iin = 1000000;
-		g_high_volt_4P25_iin = 1000000;
-		g_inov_overtemp_iin = 1000000;
-		g_inov_overtemp_iin_low = 1000000;
+		g_panel_off_iin = SLOWE_CHARGING_TA_CUR;
+		g_panel_on_iin = SLOWE_CHARGING_TA_CUR;
+		g_high_volt_4P25_iin = SLOWE_CHARGING_TA_CUR;
+		g_inov_overtemp_iin = SLOWE_CHARGING_TA_CUR;
+		g_inov_overtemp_iin_low = SLOWE_CHARGING_TA_CUR;
 	} else {
 		CHG_DBG("disable slow charging\n");
 		if (PE_check_asus_vid() || rt_chg_check_asus_vid())

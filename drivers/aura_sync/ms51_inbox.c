@@ -303,7 +303,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 2:
 			//printk("[INBOX_FAN] %s : fan_type 2: medium +++\n",__func__);
-			tmp = 0x82;
+			tmp = 0x96;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 2, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -329,7 +329,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 3:
 			//printk("[INBOX_FAN] %s : fan_type 3: high +++\n",__func__);
-			tmp = 0x8c;
+			tmp = 0xB4;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 3, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -354,7 +354,7 @@ static ssize_t inbox_user_fan(struct device *dev,
 			break;
 		case 4:
 			//printk("[INBOX_FAN] %s : fan_type 4: turbo +++\n",__func__);
-			tmp = 0x96;
+			tmp = 0xF0;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] user_type 4, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -457,7 +457,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 2:
 			//printk("[INBOX_FAN] %s : fan_type 2: medium +++\n",__func__);
-			tmp = 0x82;
+			tmp = 0x96;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 2, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -481,7 +481,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 3:
 			//printk("[INBOX_FAN] %s : fan_type 3: high +++\n",__func__);
-			tmp = 0x8c;
+			tmp = 0xB4;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 3, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);
@@ -505,7 +505,7 @@ static ssize_t inbox_thermal_fan(struct device *dev,
 			break;
 		case 4:
 			//printk("[INBOX_FAN] %s : fan_type 4: turbo +++\n",__func__);
-			tmp = 0x96;
+			tmp = 0xF0;
 			mutex_lock(&g_pdata->ms51_mutex);
 			printk("[INBOX_FAN] thermal_type 4, pwm : 0x%x\n", tmp);
 			err = ms51_write_bytes(client, 0x6001 ,tmp);

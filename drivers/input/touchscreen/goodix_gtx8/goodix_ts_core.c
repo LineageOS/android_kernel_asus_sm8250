@@ -77,13 +77,25 @@ bool enable_touch_time_debug = false;
 bool GoodixTSEnTimestamp = false;
 bool GoodixTSEnTimestampDebug = false;
 bool GoodixTSEnInputTimestampDebug = false;
+bool GoodixTSKeyMappingDebug = false;
 bool finger_press = false;
 int GoodixSampleRate = 240;
 int testkeycode = 0;
 int touch_figer_slot[TOTAL_SLOT] = {0};
 
 struct goodix_ts_core *gts_core_data = NULL;
+
 // ASUS_BSP --- Touch
+
+// ASUS_BSP +++ Touch - ATR
+struct atr_queue *atr_buf_queue = NULL;
+
+static ssize_t atr_queue_full(struct atr_queue *q);
+static ssize_t atr_queue_empty(struct atr_queue *q);
+static ssize_t atr_buf_write(struct atr_queue *q, u8 id, u8 active, u16 x, u16 y, u16 p, u16 m);
+static ssize_t atr_buf_read(struct atr_queue *q, struct input_dev *input_dev);
+static struct atr_queue* atr_buf_init(unsigned int _capacity);
+// ASUS_BSP --- Touch - ATR
 
 struct goodix_module goodix_modules;
 
@@ -1203,8 +1215,8 @@ static ssize_t game_settings_store(struct device *dev,
 	u16 cmd_addr = 0;
 	int ret = 0;
 	
-	u16 touch_level[5] = {150, 130, 110, 92, 75};
-	u16 leave_level[5] = {110, 90, 70, 70, 70};
+	u16 touch_level[5] = {150, 140, 130, 92, 75};
+	u16 leave_level[5] = {110, 100, 100, 70, 70};
 	u16 first_filter[5] = {25, 36, 48, 69, 90};
 	u16 normal_filter[5] = {35, 29, 24, 19, 15};
 	
@@ -1739,6 +1751,29 @@ static ssize_t FP_status_show(struct device *dev,
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", fp_status);
 }
+
+static ssize_t keymapping_touch_debug_store(struct device *dev,
+				      struct device_attribute *attr, const char *buf, size_t count)
+{
+	int en;
+	
+	if (sscanf(buf, "%d", &en) != 1)
+		return -EINVAL;
+	ts_info("keymapping touch debug %d",en);
+
+	if(en == 1)
+		GoodixTSKeyMappingDebug = true;
+	else
+		GoodixTSKeyMappingDebug = false;
+
+	return count;
+}
+
+static ssize_t keymapping_touch_debug_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", GoodixTSKeyMappingDebug);
+}
 // ASUS_BSP --- Touch
 
 static DEVICE_ATTR(extmod_info, S_IRUGO, goodix_ts_extmod_show, NULL);
@@ -1781,6 +1816,7 @@ static DEVICE_ATTR(chip_debug,S_IRUGO|S_IWUSR, chip_debug_show, NULL);
 static DEVICE_ATTR(enable_touch_debug,S_IRUGO|S_IWUSR, enable_touch_debug_show, enable_touch_debug_store);
 static DEVICE_ATTR(enable_touch_time_debug,S_IRUGO|S_IWUSR, enable_touch_time_debug_show, enable_touch_time_debug_store);
 static DEVICE_ATTR(FP_status,S_IRUGO|S_IWUSR, FP_status_show, FP_status_store);
+static DEVICE_ATTR(keymapping_touch_debug,S_IRUGO|S_IWUSR, keymapping_touch_debug_show, keymapping_touch_debug_store);
 // ASUS_BSP --- Touch
 
 static struct attribute *sysfs_attrs[] = {
@@ -1820,6 +1856,7 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_enable_touch_debug.attr,
 	&dev_attr_enable_touch_time_debug.attr,
 	&dev_attr_FP_status.attr,
+	&dev_attr_keymapping_touch_debug.attr,
 // ASUS_BSP --- Touch
 	NULL,
 };
@@ -2279,8 +2316,10 @@ void ATR_touch_new(struct device *dev, int id,int action, int x, int y, int rand
 	struct input_dev *input_dev = core_data->input_dev;
 	int first_empty_slot = -1;
 	int i;
+	static bool first_continue_flag = false;
 
-	ts_info("keymapping ATR_touch_new  id=%d, action=%d, x=%d, y=%d", id, action,  x,  y);
+	if (GoodixTSKeyMappingDebug == true)
+		ts_info("keymapping ATR_touch_new  id=%d, action=%d, x=%d, y=%d", id, action,  x,  y);
 	mutex_lock(&input_dev->mutex);
 	if(action) //press, find first slot or find last slot;
 	{
@@ -2291,33 +2330,42 @@ void ATR_touch_new(struct device *dev, int id,int action, int x, int y, int rand
 			if(touch_figer_slot[i] == (id + 1)) //if the last id has been pressed, keep reporting same slot
 				first_empty_slot = i;
 		}
-		ts_info("keymapping ATR_touch_new press found slot %d", first_empty_slot);
+		if (GoodixTSKeyMappingDebug == true)
+			ts_info("keymapping ATR_touch_new press found slot %d", first_empty_slot);
 		if(first_empty_slot != -1) // found an available slot
 		{
-			if(touch_figer_slot[first_empty_slot] ==0)
-				ts_info("keymapping report %d down x=%d ,y=%d ",first_empty_slot,x,y);
-
-			input_mt_slot(input_dev, first_empty_slot + 10);
-			input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, true);
-			input_report_abs(input_dev, ABS_MT_PRESSURE, 0x3f + random_pressure);
-			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, 0x09 + random_major);
-
-			if(!random)
-			{
-				input_report_abs(input_dev, ABS_MT_POSITION_X, x + random_x);
-				input_report_abs(input_dev, ABS_MT_POSITION_Y, y + random_y);
-			} else {
+			if(touch_figer_slot[first_empty_slot] ==0) {
+				if (GoodixTSKeyMappingDebug == true)
+					ts_info("keymapping report %d down x=%d ,y=%d ",first_empty_slot,x,y);
+			}
+			if(!random) {
+				x += random_x;
+				y += random_y;
+			}
+			if(!finger_press) {
+				input_mt_slot(input_dev, first_empty_slot + 10);
+				input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, true);
+				input_report_abs(input_dev, ABS_MT_PRESSURE, 0x3f + random_pressure);
+				input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, 0x09 + random_major);
 				input_report_abs(input_dev, ABS_MT_POSITION_X, x );
 				input_report_abs(input_dev, ABS_MT_POSITION_Y, y );
-			}
-			ts_info("slot %d", first_empty_slot+10);
-			if(!finger_press){
-				ts_info("atr touch down");
-				input_report_key(input_dev, BTN_TOUCH, 1);
+				ts_info("[ATR_N_R] ID %d active %d x %d y %d p %d m %d", first_empty_slot + 10, action, x, y, 0x3f + random_pressure, 0x09 + random_major);
 			} else {
-				ts_info("finger pressed , ignore atr touch down");
+				atr_buf_write(atr_buf_queue, first_empty_slot + 10, action, x, y, 0x3f + random_pressure, 0x09 + random_major);
 			}
-			input_sync(input_dev);
+
+			if (GoodixTSKeyMappingDebug == true)
+				ts_info("slot %d", first_empty_slot+10);
+			if(!finger_press){
+				if(first_continue_flag == false) {
+					ts_info("atr touch down(%d)", random);
+					input_report_key(input_dev, BTN_TOUCH, 1);
+					if (random == 1)
+						first_continue_flag = true;
+				}
+			}
+			if(!finger_press)
+				input_sync(input_dev);
 
 			touch_figer_slot[first_empty_slot] = id + 1; // save finger id in slot 
 			core_data->atr_enable = true;
@@ -2333,13 +2381,18 @@ void ATR_touch_new(struct device *dev, int id,int action, int x, int y, int rand
 				break;
 			}
 		}
-
-		ts_info("keymapping  release slot %d", first_empty_slot);
+		if (GoodixTSKeyMappingDebug == true)
+			ts_info("keymapping  release slot %d", first_empty_slot);
 		if(first_empty_slot >= 0)
 		{
-			input_mt_slot(input_dev, first_empty_slot + 10);
-			input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
-			input_sync(input_dev);
+			if(!finger_press) {
+				input_mt_slot(input_dev, first_empty_slot + 10);
+				input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
+				ts_info("[ATR_N_R] ID %d active %d x %d y %d p %d m %d", first_empty_slot + 10, action, 0, 0, 0, 0);
+				input_sync(input_dev);
+			} else {
+				atr_buf_write(atr_buf_queue, first_empty_slot + 10, action, 0, 0, 0, 0);
+			}
 			touch_figer_slot[first_empty_slot] = 0;
 		}
 	}
@@ -2352,6 +2405,9 @@ void ATR_touch_new(struct device *dev, int id,int action, int x, int y, int rand
 	if(i < 0) // all button up
 	{
 		core_data->atr_enable = false;
+		if(first_continue_flag == true) {
+			first_continue_flag = false;
+		}
 		if(!finger_press)
 		{
 			ts_info("keymapping all button up");
@@ -2473,6 +2529,128 @@ static struct file_operations asus_proc_glove_ops = {
 	.write = asus_proc_glove_write,
 	.read  = asus_proc_glove_read,
 };
+
+static ssize_t atr_queue_full(struct atr_queue *q){
+	if (q == NULL){
+		return -1;
+	}else if(q->buf_size == q->capacity){
+		return 1;
+	}else{
+		return 0;
+	}
+}
+
+static ssize_t atr_queue_empty(struct atr_queue *q){
+	if (q == NULL){
+		return -1;
+	}else if(q->buf_size == 0) {
+		return 1;
+	}else {
+		return 0;
+	}
+}
+
+static ssize_t atr_buf_write(struct atr_queue *q, u8 id, u8 active, u16 x, u16 y, u16 p, u16 m)
+{
+	if (q == NULL){
+		return -1;
+	} else if (atr_queue_full(q) == 1) {
+		ts_info("[ATR] buf status = full");
+		return 0;
+	} else {
+		spin_lock(&q->buffer_lock);
+		q->tail = (q->tail + 1) % q->capacity;
+		q->data[q->tail].id = id;
+		q->data[q->tail].active = active;
+		q->data[q->tail].x = x;
+		q->data[q->tail].y = y;
+		q->data[q->tail].p = p;
+		q->data[q->tail].m = m;
+		q->buf_size++;
+		spin_unlock(&q->buffer_lock);
+		ts_info("[ATR_Q_W] ID %d active %d x %d y %d p %d m %d", q->data[q->tail].id, q->data[q->tail].active, q->data[q->tail].x, q->data[q->tail].y,  q->data[q->tail].p,  q->data[q->tail].m);
+		return 1;
+	}
+}
+
+static ssize_t atr_buf_read(struct atr_queue *q, struct input_dev *input_dev)
+{
+	int id_buf[TOTAL_SLOT];
+	int i = 0;
+	
+	memset(id_buf,-1,TOTAL_SLOT);
+	
+	if (q == NULL){
+		return -1;
+	} else if (atr_queue_empty(q) == 1) {
+		return 0;
+	} else {
+		do {
+			struct goodix_atr_data* item = &(q->data[q->head]);
+			// check ID status
+			for(i = 0; i < TOTAL_SLOT; i++) {
+				if (id_buf[i] == -1) {
+					// ts_info("[ATRD_Q_R] end of id_buf[%d] = -1, skip......", i);
+					break;
+				}
+				if (item->id == id_buf[i]) {
+					// ts_info("[ATRD_Q_R] find id_buf[%d] = %d, skip......", i, item->id);
+					return 0;
+				}
+			}
+			spin_lock(&q->buffer_lock);
+			q->head = (q->head + 1) % q->capacity;
+			q->buf_size--;
+			spin_unlock(&q->buffer_lock);
+			ts_info("[ATR_Q_R] ID %d active %d x %d y %d p %d m %d", item->id, item->active, item->x, item->y, item->p, item->m);
+			
+			input_mt_slot(input_dev, item->id);
+			if (item->active == true) {
+				input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, true);
+				input_report_abs(input_dev, ABS_MT_PRESSURE, item->p);
+				input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, item->m);
+				input_report_abs(input_dev, ABS_MT_POSITION_X, item->x);
+				input_report_abs(input_dev, ABS_MT_POSITION_Y, item->y);
+			} else {
+				input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
+			}
+			// save ID 
+			for(i = 0; i < TOTAL_SLOT; i++) {
+				if (id_buf[i] == -1) {
+					id_buf[i] = item->id;
+					// ts_info("[ATRD_Q_R] save id_buf[%d] = %d", i, id_buf[i]);
+					break;
+				}
+			}
+		} while (atr_queue_empty(q) != 1);
+		// ts_info("[ATR_Q] ==========");
+		return 0;
+	}
+}
+
+static struct atr_queue* atr_buf_init(unsigned int _capacity)
+{
+	struct atr_queue *ATRQueue = (struct atr_queue *)kmalloc(sizeof(struct atr_queue), GFP_KERNEL);
+
+	if (ATRQueue == NULL ){
+		ts_info("Malloc failed");
+		return NULL;
+	} else {
+		ATRQueue->tail = -1;
+		ATRQueue->head = 0;
+		ATRQueue->buf_size = 0;
+		ATRQueue->capacity = _capacity;
+		ATRQueue->data = (struct goodix_atr_data *)kmalloc(_capacity * sizeof(struct goodix_atr_data), GFP_KERNEL);
+		if (ATRQueue->data == NULL) {
+			ts_info("Malloc failed");
+			kfree(ATRQueue);
+			return NULL;
+		} else {
+			spin_lock_init(&ATRQueue->buffer_lock);
+			return ATRQueue;
+		}
+	}
+}
 // ASUS_BSP --- Touch
 
 
@@ -2695,6 +2873,10 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 			}
 		}
 		finger_press = true;
+	}
+	// ATR
+	if (atr_queue_empty(atr_buf_queue) != 1) {
+		atr_buf_read(atr_buf_queue, dev);
 	}
 
 	/* report panel key */
@@ -3818,6 +4000,7 @@ out:
 		fod_position = ts_9896_fod_position;
 	}
 	ts_info("FOD %d %d %d %d", fod_position[0], fod_position[1], fod_position[2], fod_position[3]);
+	ts_info("Touch mt max slots %d", GOODIX_ASUS_MAX_TOUCH);
 
 	mutex_init(&core_data->gts_suspend_mutex);
 	core_data->gts_suspend_resume_wq = create_singlethread_workqueue("goodix_suspend_resume_wq");
@@ -3835,7 +4018,8 @@ out:
 	if (r) {
 		ts_err("failed create core sysfs group");
 	}
-
+	
+	atr_buf_queue = atr_buf_init(ATR_QUEUE_SIZE);
 // ASUS_BSP --- Touch
 
 	ts_info("goodix_ts_probe OUT, r:%d", r);
