@@ -1290,6 +1290,8 @@ void rt5683_irq_interrupt_event(struct work_struct *work)
 	unsigned int val_00bd;
 	unsigned int val_00be,val_070c,val_070d;
 	int report=0, i, btn_type=0, jd_is_changed=0, unplug_idx=0;
+	int retry_loop = 2;
+
 	mutex_lock(&rt5683->control_lock);
 
 	if (rt5683->rt5683_force_Detect_plug_flag == 1)	{
@@ -1336,8 +1338,26 @@ void rt5683_irq_interrupt_event(struct work_struct *work)
 	if (((val_00bd & 0x30)==0x0))	{
 		rt5683->is_unplug = 0;
 
-		if (jd_is_changed || rt5683->rt5683_force_Detect_plug_flag == 1)
+		if (jd_is_changed || rt5683->rt5683_force_Detect_plug_flag == 1)	{
 			rt5683->jack_type = rt5683_headset_detect(rt5683->component);
+			/* If detected unknow type do retry */
+			if (rt5683->jack_type == 0)	{
+				pr_err("Jack_type  is unkown type goto retry!\n");
+				i = 0;
+				while(i < retry_loop){
+					i++;
+					rt5683->jack_type = rt5683_headset_detect(rt5683->component);
+					pr_err("Retry time=%d  Jack_type  is : %d\n", i, rt5683->jack_type);
+					if (rt5683->jack_type != 0)
+						break;
+				}
+				if (rt5683->jack_type == 0)	{
+					pr_err("Finish retry(%d)  Jack_type still is : %d force report Hesdphone\n", i, rt5683->jack_type);
+					rt5683->jack_type = SND_JACK_HEADPHONE;
+				} else
+					pr_err("Finish retry(%d)  Jack_type  is : %d\n", i, rt5683->jack_type);
+			}
+		}
 		
 		report = rt5683->jack_type;
 		regmap_update_bits(rt5683->regmap, 0x0214, 0x2, 0x2);
