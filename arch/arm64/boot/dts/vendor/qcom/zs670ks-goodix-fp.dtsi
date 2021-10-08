@@ -1,4 +1,5 @@
 //for fingerprint;asus_bsp++;
+//#include "dsi-panel-samsung-fhd-cmd.dtsi"
 
 &soc{
 
@@ -18,8 +19,9 @@
         
 		goodix,gpio_irq = <&tlmm 23 0x00>;
 		goodix,gpio_reset = <&pm8150b_gpios 1 0x0>;
-                 goodix,gpio_vendor_id = <&pm8150b_gpios 2 0x0>;
+        goodix,gpio_vendor_id = <&pm8150b_gpios 2 0x0>;
 		goodix,gpio_ldo = <&tlmm 50 0x00>; 
+		panel = <&dsi_samsung_fhd_cmd>;
 	};
 };
 

@@ -32,13 +32,13 @@
 #include <linux/of_gpio.h>
 #endif /* CONFIG_OF */
 
-#include <linux/wakelock.h>
+#include <linux/pm_wakeup.h>
 #ifdef CONFIG_USBPD_PHY_QCOM
 #include <linux/usb/usbpd.h>		// Use Qualcomm USBPD PHY
 #endif
 #include <linux/uaccess.h>			// NTC compensation
 
-#include <linux/msm_drm_notify.h> //Add to get drm notifier
+//#include <linux/msm_drm_notify.h> //Add to get drm notifier //Todo
 #include <drm/drm_panel.h>
 
 #include "supply/qcom/smb5-lib.h"
@@ -523,7 +523,7 @@ int g_PanelOnOff = 0;
  * @debug_address: debug register address
  */
 struct pca9468_charger {
-	struct wake_lock	monitor_wake_lock;
+	struct wakeup_source	monitor_wake_lock;
 	struct mutex		lock;
 	struct device		*dev;
 	struct regmap		*regmap;
@@ -1326,7 +1326,7 @@ static int pca9468_stop_charging(struct pca9468_charger *pca9468)
 		pca9468->timer_id = TIMER_ID_NONE;
 		pca9468->timer_period = 0;
 		mutex_unlock(&pca9468->lock);
-		wake_unlock(&pca9468->monitor_wake_lock);
+		__pm_relax(&pca9468->monitor_wake_lock);
 
 		/* Clear parameter */
 		pca9468->jeita_stage = JEITA_STAGE_MAX;
@@ -3222,7 +3222,7 @@ static int pca9468_start_direct_charging(struct pca9468_charger *pca9468)
 	}
 	
 	/* wake lock */
-	wake_lock(&pca9468->monitor_wake_lock);
+	__pm_stay_awake(&pca9468->monitor_wake_lock);
 
 	/* Preset charging configuration and TA condition */
 	ret = pca9468_preset_dcmode(pca9468);
@@ -3509,7 +3509,7 @@ static void pca9468_timer_work(struct work_struct *work)
 			/* Notifier PMIC PCA CHG DONE */
 			pca_chg_done_pmic_notifier();
 			/* wake unlock */
-			wake_unlock(&pca9468->monitor_wake_lock);
+			__pm_relax(&pca9468->monitor_wake_lock);
 		} else if (pca9468->charging_state == DC_STATE_CHANGE_CV_JEITA) {
 			/* Set IIN_CFG and Vfloat as new value */
 			ret = pca9468_set_input_current(pca9468, pca9468->pdata->iin_cfg);
@@ -4834,8 +4834,7 @@ static int pca9468_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 
-	wake_lock_init(&pca9468_chg->monitor_wake_lock, WAKE_LOCK_SUSPEND,
-		       "pca9468-charger-monitor");
+	wakeup_source_init(&pca9468_chg->monitor_wake_lock, "pca9468-charger-monitor");
 
 	/* initialize work */
 	INIT_DELAYED_WORK(&pca9468_chg->timer_work, pca9468_timer_work);
@@ -4935,7 +4934,7 @@ static int pca9468_remove(struct i2c_client *client)
 	/* Delete the work queue */
 	destroy_workqueue(pca9468_chg->dc_wq);
 
-	wake_lock_destroy(&pca9468_chg->monitor_wake_lock);
+	wakeup_source_destroy(&pca9468_chg->monitor_wake_lock);
 	power_supply_unregister(pca9468_chg->mains);
 	return 0;
 }

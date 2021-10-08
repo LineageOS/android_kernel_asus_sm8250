@@ -37,7 +37,7 @@ extern char evtlog_bootup_reason[50];
 char evtlog_poweroff_reason[50];
 
 #ifdef CONFIG_PON_EVT_LOG
-char evtlog_pon_dump[100]; 
+extern char evtlog_pon_dump[100];
 extern char *evtlog_pm8250_dump[17];
 #endif
 
@@ -1530,6 +1530,9 @@ static ssize_t asusdebug_write(struct file *file, const char __user *buf, size_t
 		printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
 	} else if (strncmp(messages, "get_asdf_log",
 			   strlen("get_asdf_log")) == 0) {
+#ifdef CONFIG_QCOM_RTB
+		extern int g_saving_rtb_log;
+#endif
 		ulong *printk_buffer_slot2_addr;
 
 		printk_buffer_slot2_addr = (ulong *)PRINTK_BUFFER_SLOT2;

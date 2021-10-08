@@ -3,6 +3,8 @@
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/iopoll.h>
+#include <linux/iopoll.h>
 
 #include "dp_catalog.h"
 #include "dp_reg.h"
@@ -23,13 +25,13 @@
 	catalog->sub.write(catalog->dpc, io_data, x, y); \
 })
 
+#define DP_PHY_READY BIT(1)
 #define MAX_VOLTAGE_LEVELS 4
 #define MAX_PRE_EMP_LEVELS 4
 
 /* ASUS BSP DP +++ */
 extern int gDongleType;
 extern int asus_current_fps;
-extern struct dp_debug *asus_debug;
 /* ASUS BSP DP --- */
 
 static u8 const vm_pre_emphasis[MAX_VOLTAGE_LEVELS][MAX_PRE_EMP_LEVELS] = {
@@ -242,11 +244,11 @@ static void dp_catalog_ctrl_update_vx_px_v420(struct dp_catalog_ctrl *ctrl,
 
 	if (!ctrl || !((v_level < MAX_VOLTAGE_LEVELS)
 		&& (p_level < MAX_PRE_EMP_LEVELS))) {
-		DP_ERR("invalid input\n");
+		printk("[msm-dp] invalid input\n");
 		return;
 	}
 
-	DP_DEBUG("hw: v=%d p=%d, high=%d\n", v_level, p_level, high);
+	printk("[msm-dp] hw: v=%d p=%d, high=%d\n", v_level, p_level, high);
 
 	catalog = dp_catalog_get_priv_v420(ctrl);
 
@@ -277,34 +279,10 @@ static void dp_catalog_ctrl_update_vx_px_v420(struct dp_catalog_ctrl *ctrl,
 	io_data = catalog->io->dp_ln_tx1;
 	dp_write(TXn_TX_DRV_LVL_V420, 0x2A);
 	dp_write(TXn_TX_EMP_POST1_LVL, 0x20);
-
 	/* ASUS BSP DP +++ */
 	// for station
 	if (asus_current_fps >= 120 && gDongleType == 2 && v_level == 0 && p_level == 0) {
-		if (asus_debug->debug_swing != 0) {
-			DP_LOG("debug_swing is 0x%x\n", asus_debug->debug_swing);
-			value0 = asus_debug->debug_swing;
-		} else {
-			value0 = 0x10; /* tuned from Yoda */
-		}
-
-		if (asus_debug->debug_pre_emp != 0) {
-			DP_LOG("debug_pre_emp is 0x%x\n", asus_debug->debug_pre_emp);
-			value1 = asus_debug->debug_pre_emp;
-		}
-	}
-
-	// for external monitor
-	if (asus_debug->debug_lt) {
-		if (asus_debug->debug_swing != 0) {
-			DP_LOG("debug_lt = %d, debug_swing is 0x%x\n", asus_debug->debug_lt, asus_debug->debug_swing);
-			value0 = asus_debug->debug_swing;
-		}
-
-		if (asus_debug->debug_pre_emp != 0) {
-			DP_LOG("debug_lt = %d, debug_pre_emp is 0x%x\n", asus_debug->debug_lt, asus_debug->debug_pre_emp);
-			value1 = asus_debug->debug_pre_emp;
-		}
+		value0 = 0x10; /* tuned from Yoda */
 	}
 	/* ASUS BSP DP --- */
 
@@ -322,12 +300,114 @@ static void dp_catalog_ctrl_update_vx_px_v420(struct dp_catalog_ctrl *ctrl,
 		dp_write(TXn_TX_DRV_LVL_V420, value0);
 		dp_write(TXn_TX_EMP_POST1_LVL, value1);
 
-		DP_DEBUG("hw: vx_value=0x%x px_value=0x%x\n",
+		printk("[drm-dp] hw: vx_value=0x%x px_value=0x%x\n",
 			value0, value1);
 	} else {
-		DP_ERR("invalid vx (0x%x=0x%x), px (0x%x=0x%x\n",
+		printk("[drm-dp] invalid vx (0x%x=0x%x), px (0x%x=0x%x\n",
 			v_level, value0, p_level, value1);
 	}
+}
+
+static bool dp_catalog_ctrl_wait_for_phy_ready_v420(
+		struct dp_catalog_private_v420 *catalog)
+{
+	u32 reg = DP_PHY_STATUS_V420, state;
+	void __iomem *base = catalog->io->dp_phy->io.base;
+	bool success = true;
+	u32 const poll_sleep_us = 500;
+	u32 const pll_timeout_us = 10000;
+
+	if (readl_poll_timeout_atomic((base + reg), state,
+			((state & DP_PHY_READY) > 0),
+			poll_sleep_us, pll_timeout_us)) {
+		DP_ERR("PHY status failed, status=%x\n", state);
+
+		success = false;
+	}
+
+	return success;
+}
+
+static int dp_catalog_ctrl_late_phy_init_v420(struct dp_catalog_ctrl *ctrl,
+					u8 lane_cnt, bool flipped)
+{
+	int rc = 0;
+	u32 bias0_en, drvr0_en, bias1_en, drvr1_en;
+	struct dp_catalog_private_v420 *catalog;
+	struct dp_io_data *io_data;
+
+	if (!ctrl) {
+		DP_ERR("invalid input\n");
+		return -EINVAL;
+	}
+
+	catalog = dp_catalog_get_priv_v420(ctrl);
+
+	switch (lane_cnt) {
+	case 1:
+		drvr0_en = flipped ? 0x13 : 0x10;
+		bias0_en = flipped ? 0x3E : 0x15;
+		drvr1_en = flipped ? 0x10 : 0x13;
+		bias1_en = flipped ? 0x15 : 0x3E;
+		break;
+	case 2:
+		drvr0_en = flipped ? 0x10 : 0x10;
+		bias0_en = flipped ? 0x3F : 0x15;
+		drvr1_en = flipped ? 0x10 : 0x10;
+		bias1_en = flipped ? 0x15 : 0x3F;
+		break;
+	case 4:
+	default:
+		drvr0_en = 0x10;
+		bias0_en = 0x3F;
+		drvr1_en = 0x10;
+		bias1_en = 0x3F;
+		break;
+	}
+
+	io_data = catalog->io->dp_ln_tx0;
+	dp_write(TXn_HIGHZ_DRVR_EN_V420, drvr0_en);
+	dp_write(TXn_TRANSCEIVER_BIAS_EN_V420, bias0_en);
+
+	io_data = catalog->io->dp_ln_tx1;
+	dp_write(TXn_HIGHZ_DRVR_EN_V420, drvr1_en);
+	dp_write(TXn_TRANSCEIVER_BIAS_EN_V420, bias1_en);
+
+	io_data = catalog->io->dp_phy;
+	dp_write(DP_PHY_CFG, 0x18);
+	/* add hardware recommended delay */
+	udelay(2000);
+	dp_write(DP_PHY_CFG, 0x19);
+
+	/*
+	 * Make sure all the register writes are completed before
+	 * doing any other operation
+	 */
+	wmb();
+
+	if (!dp_catalog_ctrl_wait_for_phy_ready_v420(catalog)) {
+		rc = -EINVAL;
+		goto lock_err;
+	}
+
+	io_data = catalog->io->dp_ln_tx0;
+	dp_write(TXn_TX_POL_INV_V420, 0x0a);
+	io_data = catalog->io->dp_ln_tx1;
+	dp_write(TXn_TX_POL_INV_V420, 0x0a);
+
+	io_data = catalog->io->dp_ln_tx0;
+	dp_write(TXn_TX_DRV_LVL_V420, 0x27);
+	io_data = catalog->io->dp_ln_tx1;
+	dp_write(TXn_TX_DRV_LVL_V420, 0x27);
+
+	io_data = catalog->io->dp_ln_tx0;
+	dp_write(TXn_TX_EMP_POST1_LVL, 0x20);
+	io_data = catalog->io->dp_ln_tx1;
+	dp_write(TXn_TX_EMP_POST1_LVL, 0x20);
+	/* Make sure the PHY register writes are done */
+	wmb();
+lock_err:
+	return rc;
 }
 
 static void dp_catalog_ctrl_lane_pnswap_v420(struct dp_catalog_ctrl *ctrl,
@@ -392,6 +472,7 @@ struct dp_catalog_sub *dp_catalog_get_v420(struct device *dev,
 	catalog->ctrl.phy_lane_cfg = dp_catalog_ctrl_phy_lane_cfg_v420;
 	catalog->ctrl.update_vx_px = dp_catalog_ctrl_update_vx_px_v420;
 	catalog->ctrl.lane_pnswap = dp_catalog_ctrl_lane_pnswap_v420;
+	catalog->ctrl.late_phy_init = dp_catalog_ctrl_late_phy_init_v420;
 
 	return &catalog_priv->sub;
 }

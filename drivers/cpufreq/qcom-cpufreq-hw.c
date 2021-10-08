@@ -193,10 +193,11 @@ static void limits_dcvsh_poll(struct work_struct *work)
 
 static bool dcvsh_core_count_change(struct cpufreq_qcom *c)
 {
-	unsigned long freq;
-	u32 index;
-	u32 regval;
+	bool ret = false;
+	unsigned long freq, flags;
+	u32 index, regval;
 
+	spin_lock_irqsave(&c->skip_data.lock, flags);
 	index = readl_relaxed(c->reg_bases[REG_PERF_STATE]);
 
 	freq = readl_relaxed(c->reg_bases[REG_DOMAIN_STATE]) & GENMASK(7, 0);
@@ -208,10 +209,12 @@ static bool dcvsh_core_count_change(struct cpufreq_qcom *c)
 		regval |= GT_IRQ_STATUS;
 		writel_relaxed(regval, c->reg_bases[REG_INTR_CLR]);
 		pr_debug("core count change index IRQ received\n");
-		return true;
+		ret = true;
 	}
 
-	return false;
+	spin_unlock_irqrestore(&c->skip_data.lock, flags);
+
+	return ret;
 }
 
 static irqreturn_t dcvsh_handle_isr(int irq, void *data)

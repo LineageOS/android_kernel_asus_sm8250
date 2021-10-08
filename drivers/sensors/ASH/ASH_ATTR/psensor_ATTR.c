@@ -44,6 +44,11 @@ static struct device *g_psensor_dev;
 #define log(fmt, args...) printk(KERN_INFO "[%s][%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,__func__,##args)
 #define err(fmt, args...) printk(KERN_ERR "[%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,##args)
 
+static void proximity_onoff(struct work_struct *work);
+static	DECLARE_WORK(proximity_onoff_work, proximity_onoff);
+static	int g_psensor_on_flag = false;
+bool g_Psensor_load_cal_status = false;
+
 static ssize_t  ATT_proximity_show_vendor(struct device *dev, 
 	struct device_attribute *attr, char *buf)
 {
@@ -267,6 +272,10 @@ static ssize_t  ATT_proximity_store_write_reg(struct device *dev,
 /******************/
 /*HAL Function*/
 /*****************/
+static void proximity_onoff(struct work_struct *work){
+	log("Proximity switch %s\n", g_psensor_on_flag?"on":"off");
+	g_psensor_ATTR->ATTR_HAL->proximity_store_switch_onoff(g_psensor_on_flag);
+}
 static ssize_t  ATT_proximity_show_switch_onoff(struct device *dev, 
 	struct device_attribute *attr, char *buf)
 {
@@ -291,8 +300,21 @@ static ssize_t  ATT_proximity_store_switch_onoff(struct device *dev,
 		err("proximity_store_switch_onoff NOT SUPPORT. \n");
 		return count;
 	}
-	
+
+	if (0 == strncmp(buf, "off", 3)){
+		bOn = false;
+		g_psensor_on_flag = false;
+	}else if (0 == strncmp(buf, "on", 2)){
+		bOn = true;
+		g_psensor_on_flag = true;
+	}else
+		return -EINVAL;
+
+	log("Proximity workqueue to switch %s\n", bOn?"on":"off");
+	schedule_work(&proximity_onoff_work);
+
 	/*check input character*/
+	/*
 	if (0 == strncmp(buf, "off", 3))
 		bOn = false;
 	else if (0 == strncmp(buf, "on", 2)) 
@@ -303,7 +325,7 @@ static ssize_t  ATT_proximity_store_switch_onoff(struct device *dev,
 	log("Proximity switch %s\n", bOn?"on":"off");
 	if(g_psensor_ATTR->ATTR_HAL->proximity_store_switch_onoff(bOn) < 0)
 		return -EINVAL;		
-	
+	*/
 	return count;
 }
 

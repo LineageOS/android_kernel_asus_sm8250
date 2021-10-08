@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018 - 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019 - 2020, The Linux Foundation. All rights reserved.
  */
 
 #include "ipa_i.h"
@@ -442,7 +442,7 @@ int ipa3_conn_wdi3_pipes(struct ipa_wdi_conn_in_params *in,
 	int result = 0;
 	u32 gsi_db_addr_low, gsi_db_addr_high;
 	void __iomem *db_addr;
-	u32 evt_ring_db_addr_low, evt_ring_db_addr_high;
+	u32 evt_ring_db_addr_low, evt_ring_db_addr_high, db_val = 0;
 
 	/* wdi3 only support over gsi */
 	if (!ipa3_ctx->ipa_wdi3_over_gsi) {
@@ -610,11 +610,18 @@ int ipa3_conn_wdi3_pipes(struct ipa_wdi_conn_in_params *in,
 	 * initialization of the event, with a value that is
 	 * outside of the ring range. Eg: ring base = 0x1000,
 	 * ring size = 0x100 => AP can write value > 0x1100
-	 * into the doorbell address. Eg: 0x 1110
+	 * into the doorbell address. Eg: 0x 1110.
+	 * Use event ring base addr + event ring size + 1 element size.
 	 */
-	iowrite32(in->u_rx.rx.event_ring_size / 4 + 10, db_addr);
+	db_val = (u32)ep_rx->gsi_mem_info.evt_ring_base_addr;
+	db_val += ((in->is_smmu_enabled) ? in->u_rx.rx_smmu.event_ring_size :
+		in->u_rx.rx.event_ring_size);
+	db_val += GSI_EVT_RING_RE_SIZE_8B;
+	iowrite32(db_val, db_addr);
 	gsi_query_evt_ring_db_addr(ep_tx->gsi_evt_ring_hdl,
 		&evt_ring_db_addr_low, &evt_ring_db_addr_high);
+	IPADBG("RX base_addr 0x%x evt wp val: 0x%x\n",
+		ep_rx->gsi_mem_info.evt_ring_base_addr, db_val);
 
 	/* only 32 bit lsb is used */
 	db_addr = ioremap((phys_addr_t)(evt_ring_db_addr_low), 4);
@@ -624,9 +631,16 @@ int ipa3_conn_wdi3_pipes(struct ipa_wdi_conn_in_params *in,
 	 * outside of the ring range. Eg: ring base = 0x1000,
 	 * ring size = 0x100 => AP can write value > 0x1100
 	 * into the doorbell address. Eg: 0x 1110
+	 * Use event ring base addr + event ring size + 1 element size.
 	 */
-	iowrite32(in->u_tx.tx.event_ring_size / 4 + 10, db_addr);
-
+	db_val = (u32)ep_tx->gsi_mem_info.evt_ring_base_addr;
+	db_val += ((in->is_smmu_enabled) ? in->u_tx.tx_smmu.event_ring_size :
+		in->u_tx.tx.event_ring_size);
+	db_val += GSI_EVT_RING_RE_SIZE_16B;
+	iowrite32(db_val, db_addr);
+	IPADBG("db_addr %u  TX base_addr 0x%x evt wp val: 0x%x\n",
+		evt_ring_db_addr_low,
+		ep_tx->gsi_mem_info.evt_ring_base_addr, db_val);
 fail:
 	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 	return result;
@@ -673,6 +687,7 @@ int ipa3_disconn_wdi3_pipes(int ipa_ep_idx_tx, int ipa_ep_idx_rx)
 		IPAERR("failed to release gsi channel: %d\n", result);
 		goto exit;
 	}
+	ipa3_release_wdi3_gsi_smmu_mappings(IPA_WDI3_TX_DIR);
 
 	memset(ep_tx, 0, sizeof(struct ipa3_ep_context));
 	IPADBG("tx client (ep: %d) disconnected\n", ipa_ep_idx_tx);
@@ -693,6 +708,7 @@ int ipa3_disconn_wdi3_pipes(int ipa_ep_idx_tx, int ipa_ep_idx_rx)
 		IPAERR("failed to release gsi channel: %d\n", result);
 		goto exit;
 	}
+	ipa3_release_wdi3_gsi_smmu_mappings(IPA_WDI3_RX_DIR);
 
 	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5)
 		ipa3_uc_debug_stats_dealloc(IPA_HW_PROTOCOL_WDI3);

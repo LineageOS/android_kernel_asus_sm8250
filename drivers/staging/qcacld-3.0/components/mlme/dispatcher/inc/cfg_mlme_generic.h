@@ -597,6 +597,28 @@
 
 /*
  * <ini>
+ * disable_4way_hs_offload - Enable/Disable 4 way handshake offload to firmware
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * 0  4-way HS to be handled in firmware
+ * 1  4-way HS to be handled in supplicant
+ *
+ * Related: None
+ *
+ * Supported Feature: STA Roaming
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_DISABLE_4WAY_HS_OFFLOAD CFG_INI_BOOL("disable_4way_hs_offload", \
+						 0, \
+						 "Enable/disable 4 way handshake offload to firmware")
+
+/*
+ * <ini>
  * mgmt_retry_max - Maximum Retries for mgmt frames
  * @Min: 0
  * @Max: 31
@@ -642,6 +664,7 @@
 #define CFG_BMISS_SKIP_FULL_SCAN CFG_INI_BOOL("bmiss_skip_full_scan", \
 			0, \
 			"To decide partial/partial scan followed by full scan")
+
 /*
  * <ini>
  * gEnableRingBuffer - Enable Ring Buffer for Bug Report
@@ -660,9 +683,9 @@
  * </ini>
  */
 #define CFG_ENABLE_RING_BUFFER CFG_INI_BOOL( \
-			"gEnableRingBuffer", \
-			1, \
-			"To Enable Ring Buffer")
+		"gEnableRingBuffer", \
+		1, \
+		"To Enable Ring Buffer")
 
 #define CFG_GENERIC_ALL \
 	CFG(CFG_ENABLE_DEBUG_PACKET_LOG) \
@@ -681,6 +704,7 @@
 	CFG(CFG_ENABLE_LPASS_SUPPORT) \
 	CFG(CFG_ENABLE_SELF_RECOVERY) \
 	CFG(CFG_ENABLE_DEAUTH_TO_DISASSOC_MAP) \
+	CFG(CFG_DISABLE_4WAY_HS_OFFLOAD) \
 	CFG(CFG_SAP_DOT11MC) \
 	CFG(CFG_ENABLE_FATAL_EVENT_TRIGGER) \
 	CFG(CFG_SUB_20_CHANNEL_WIDTH) \

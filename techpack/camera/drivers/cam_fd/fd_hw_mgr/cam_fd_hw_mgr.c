@@ -1587,7 +1587,7 @@ static int cam_fd_mgr_hw_dump(
 	return rc;
 hw_dump:
 	cur_time = ktime_get();
-	diff = ktime_us_delta(frame_req->submit_timestamp, cur_time);
+	diff = ktime_us_delta(cur_time, frame_req->submit_timestamp);
 	cur_ts = ktime_to_timespec64(cur_time);
 	req_ts = ktime_to_timespec64(frame_req->submit_timestamp);
 	if (diff < CAM_FD_RESPONSE_TIME_THRESHOLD) {
@@ -1936,6 +1936,11 @@ int cam_fd_hw_mgr_deinit(struct device_node *of_node)
 	return 0;
 }
 
+static void cam_req_mgr_process_workq_cam_fd_worker(struct work_struct *w)
+{
+	cam_req_mgr_process_workq(w);
+}
+
 int cam_fd_hw_mgr_init(struct device_node *of_node,
 	struct cam_hw_mgr_intf *hw_mgr_intf)
 {
@@ -2081,7 +2086,8 @@ int cam_fd_hw_mgr_init(struct device_node *of_node,
 	}
 
 	rc = cam_req_mgr_workq_create("cam_fd_worker", CAM_FD_WORKQ_NUM_TASK,
-		&g_fd_hw_mgr.work, CRM_WORKQ_USAGE_IRQ, 0);
+		&g_fd_hw_mgr.work, CRM_WORKQ_USAGE_IRQ, 0,
+		cam_req_mgr_process_workq_cam_fd_worker);
 	if (rc) {
 		CAM_ERR(CAM_FD, "Unable to create a worker, rc=%d", rc);
 		goto detach_smmu;

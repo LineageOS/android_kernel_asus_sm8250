@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * RMNET Data Generic Netlink
  *
@@ -150,7 +150,7 @@ void rmnet_boost_for_pid(pid_t pid, int boost_enable,
 				continue;
 
 			/* PID Match found */
-			rm_err("CORE_BOOST: enable boost for pid %d for %d ms",
+			rm_err("CORE_BOOST: enable boost for pid %d for %llu ms",
 			       pid, boost_period);
 			node_p->sched_boost_enable = boost_enable;
 			node_p->sched_boost_period_ms = boost_period;
@@ -187,11 +187,8 @@ static void rmnet_create_pid_bps_resp(struct rmnet_core_pid_bps_resp
 			tx_bytes_cur = node_p->tx_bytes;
 			if (tx_bytes_cur <= node_p->tx_bytes_last_query) {
 				/* Dont send inactive pids to userspace */
-				/* TODO: can remove from hash table probably */
-				node_p->tx_bps = 0;
-				node_p->timstamp_last_query =
-					pid_bps_resp_ptr->timestamp;
-				node_p->sched_boost_remaining_ms = 0;
+				hash_del(&node_p->list);
+				kfree(node_p);
 				continue;
 			}
 
@@ -343,7 +340,7 @@ int rmnet_core_genl_pid_boost_req_hdlr(struct sk_buff *skb_2,
 	u16 boost_pid_cnt = RMNET_CORE_GENL_MAX_PIDS;
 	u16 i = 0;
 
-	rm_err("%s", "CORE_GNL: %s", __func__);
+	rm_err("CORE_GNL: %s", __func__);
 
 	if (!info) {
 		rm_err("%s", "CORE_GNL: error - info is null");

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/usb/usbpd.h>
@@ -265,7 +265,7 @@ static void dp_usbpd_connect_cb(struct usbpd_svid_handler *hdlr,
 		return;
 	}
 
-	DP_DEBUG("peer_usb_comm: %d\n");
+	DP_DEBUG("peer_usb_comm: %d\n", peer_usb_comm);
 	pd->dp_usbpd.base.peer_usb_comm = peer_usb_comm;
 	dp_usbpd_send_event(pd, DP_USBPD_EVT_DISCOVER);
 }
@@ -361,7 +361,7 @@ static int dp_usbpd_get_ss_lanes(struct dp_usbpd_private *pd)
 					DP_LOG("usb host timeout\n");
 			}
 			/* ASUS BSP DP --- */
-			
+
 			rc = pd->svid_handler.request_usb_ss_lane(
 					pd->pd, &pd->svid_handler);
 			if (rc != -EBUSY)
@@ -388,8 +388,7 @@ static void dp_usbpd_response_cb(struct usbpd_svid_handler *hdlr, u8 cmd,
 
 	pd = container_of(hdlr, struct dp_usbpd_private, svid_handler);
 
-	/* ASUS BSP DP +++ */
-	DP_LOG("callback -> cmd: %s, *vdos = 0x%x, num_vdos = %d\n",
+	DP_WARN("[DisplayPort] callback -> cmd: %s, *vdos = 0x%x, num_vdos = %d\n",
 				dp_usbpd_cmd_name(cmd), *vdos, num_vdos);
 
 	if (dp_usbpd_validate_callback(cmd, cmd_type, num_vdos)) {
@@ -598,7 +597,6 @@ struct dp_hpd *dp_usbpd_get(struct device *dev, struct dp_hpd_cb *cb)
 	dp_usbpd->base.simulate_attention = dp_usbpd_simulate_attention;
 	dp_usbpd->base.register_hpd = dp_usbpd_register;
 	dp_usbpd->base.wakeup_phy = dp_usbpd_wakeup_phy;
-
 	/* ASUS BSP DP +++ */
 	asus_usbpd = usbpd;
 	mutex_init(&asus_gs_mutex);
@@ -624,7 +622,6 @@ void dp_usbpd_put(struct dp_hpd *dp_hpd)
 
 	devm_kfree(usbpd->dev, usbpd);
 }
-
 /* ASUS BSP DP +++ */
 void asus_dp_disconnect(void)
 {

@@ -513,6 +513,8 @@ extern void hallsensor_report_lid(int lid);
 /*For transition period from 100ms to 50ms +++*/
 #define LSENSOR_50MS_CALIBRATION_FILE		"/vendor/factory/lsensor_50ms.nv"
 #define LSENSOR_100MS_CALIBRATION_FILE		"/vendor/factory/lsensor_100ms.nv"
+#define LSENSOR_200MS_CALIBRATION_FILE		"/vendor/factory/lsensor_200ms.nv"
+#define LSENSOR_400MS_CALIBRATION_FILE		"/vendor/factory/lsensor_400ms.nv"
 /*For transition period from 100ms to 50ms ---*/
 
 
@@ -988,9 +990,14 @@ typedef struct lsensor_hw {
 	int (*light_hw_get_adc)(void);
 	int (*light_hw_set_hi_threshold)(int hi_threshold);
 	int (*light_hw_set_lo_threshold)(int low_threshold);
-
 	int (*light_hw_set_integration)(uint8_t integration);
 	uint8_t (*light_hw_get_integration)(void);
+	int (*light_hw_dynamic_check)(int lux);
+	int (*light_hw_get_current_sensitive)(void);
+	uint8_t (*light_hw_get_current_IT)(void);
+	u64 (*light_hw_get_evt_skip_time_ns)(void);
+	void (*light_hw_reset_ALS_dynamic_status)(void);
+	
 }lsensor_hw;
 
 /**
@@ -1040,7 +1047,7 @@ typedef struct ALSPS_hw {
 	int (*ALSPS_hw_show_allreg)(void);	
 	int (*ALSPS_hw_set_register)(uint8_t reg, int value);
 	int (*ALSPS_hw_get_register)(uint8_t reg);	
-	int (*ALSPS_hw_close_power)(void);	
+	int (*ALSPS_hw_close_power)(void);		
 
 	psensor_hw	*mpsensor_hw;
 	lsensor_hw	*mlsensor_hw;

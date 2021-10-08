@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.*/
 
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 #include <linux/bitops.h>
@@ -682,7 +682,7 @@ struct msm_pcie_dev_t {
 	bool disable_pc;
 	struct pci_saved_state *saved_state;
 
-	struct wakeup_source ws;
+	struct wakeup_source *ws;
 	struct msm_bus_scale_pdata *bus_scale_table;
 	uint32_t bus_client;
 
@@ -762,6 +762,8 @@ struct msm_pcie_dev_t {
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_sleep;
 	struct msm_pcie_device_info pcidev_table[MAX_DEVICE_NUM];
+	bool config_recovery;
+	struct work_struct link_recover_wq;
 
 	struct msm_pcie_drv_info *drv_info;
 
@@ -1277,6 +1279,29 @@ static void pcie_parf_dump(struct msm_pcie_dev_t *dev)
 			readl_relaxed(dev->parf + (i + 20)),
 			readl_relaxed(dev->parf + (i + 24)),
 			readl_relaxed(dev->parf + (i + 28)));
+	}
+}
+
+static void pcie_dm_core_dump(struct msm_pcie_dev_t *dev)
+{
+	int i, size;
+
+	PCIE_DUMP(dev, "PCIe: RC%d DBI/dm_core register dump\n", dev->rc_idx);
+
+	size = resource_size(dev->res[MSM_PCIE_RES_DM_CORE].resource);
+
+	for (i = 0; i < size; i += 32) {
+		PCIE_DUMP(dev,
+			"RC%d: 0x%04x %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			dev->rc_idx, i,
+			readl_relaxed(dev->dm_core + i),
+			readl_relaxed(dev->dm_core + (i + 4)),
+			readl_relaxed(dev->dm_core + (i + 8)),
+			readl_relaxed(dev->dm_core + (i + 12)),
+			readl_relaxed(dev->dm_core + (i + 16)),
+			readl_relaxed(dev->dm_core + (i + 20)),
+			readl_relaxed(dev->dm_core + (i + 24)),
+			readl_relaxed(dev->dm_core + (i + 28)));
 	}
 }
 
@@ -2923,7 +2948,7 @@ static inline int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 
 		if (dev->shadow_en) {
 			if (rd_val == PCIE_LINK_DOWN &&
-				(readl_relaxed(config_base) == PCIE_LINK_DOWN))
+			   (readl_relaxed(config_base) == PCIE_LINK_DOWN))
 				PCIE_ERR(dev,
 					"Read of RC%d %d:0x%02x + 0x%04x[%d] is all FFs\n",
 					rc_idx, bus->number, devfn,
@@ -2937,6 +2962,17 @@ static inline int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 			"RC%d %d:0x%02x + 0x%04x[%d] <- 0x%08x; rd 0x%08x val 0x%08x\n",
 			rc_idx, bus->number, devfn, where, size,
 			wr_val, rd_val, *val);
+	}
+
+	if (rd_val == PCIE_LINK_DOWN &&
+	   (readl_relaxed(config_base) == PCIE_LINK_DOWN)) {
+		if (dev->config_recovery) {
+			PCIE_ERR(dev,
+				"RC%d link recovery schedule\n",
+				rc_idx);
+			dev->cfg_access = false;
+			schedule_work(&dev->link_recover_wq);
+		}
 	}
 
 unlock:
@@ -4836,6 +4872,16 @@ out:
 	mutex_unlock(&dev->recovery_lock);
 }
 
+static void handle_link_recover(struct work_struct *work)
+{
+	struct msm_pcie_dev_t *dev = container_of(work, struct msm_pcie_dev_t,
+					link_recover_wq);
+
+	PCIE_DBG(dev, "PCIe: link recover start for RC%d\n", dev->rc_idx);
+
+	msm_pcie_notify_client(dev, MSM_PCIE_EVENT_LINK_RECOVER);
+}
+
 static irqreturn_t handle_aer_irq(int irq, void *data)
 {
 	struct msm_pcie_dev_t *dev = data;
@@ -4991,8 +5037,8 @@ static irqreturn_t handle_wake_irq(int irq, void *data)
 		schedule_work(&dev->handle_wake_work);
 	} else {
 		PCIE_DBG2(dev, "Wake up RC%d\n", dev->rc_idx);
-		__pm_stay_awake(&dev->ws);
-		__pm_relax(&dev->ws);
+		__pm_stay_awake(dev->ws);
+		__pm_relax(dev->ws);
 
 		if (dev->num_ep > 1) {
 			for (i = 0; i < MAX_DEVICE_NUM; i++) {
@@ -5011,10 +5057,48 @@ static irqreturn_t handle_wake_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void msm_pcie_handle_linkdown(struct msm_pcie_dev_t *dev)
+{
+	int i;
+
+	if (dev->link_status == MSM_PCIE_LINK_DOWN)
+		return;
+
+	dev->link_status = MSM_PCIE_LINK_DOWN;
+	dev->shadow_en = false;
+
+	/* PCIe registers dump on link down */
+	PCIE_DUMP(dev, "PCIe:Linkdown IRQ for RC%d Dumping PCIe registers\n",
+		dev->rc_idx);
+	pcie_phy_dump(dev);
+	pcie_parf_dump(dev);
+	pcie_dm_core_dump(dev);
+
+	/* assert PERST */
+	if (!(msm_pcie_keep_resources_on & BIT(dev->rc_idx)))
+		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
+				dev->gpio[MSM_PCIE_GPIO_PERST].on);
+
+	PCIE_ERR(dev, "PCIe link is down for RC%d\n", dev->rc_idx);
+
+	if (dev->linkdown_panic)
+		panic("User has chosen to panic on linkdown\n");
+
+	if (dev->num_ep > 1) {
+		for (i = 0; i < MAX_DEVICE_NUM; i++) {
+			dev->event_reg =
+				dev->pcidev_table[i].event_reg;
+			msm_pcie_notify_client(dev,
+				MSM_PCIE_EVENT_LINKDOWN);
+		}
+	} else {
+		msm_pcie_notify_client(dev, MSM_PCIE_EVENT_LINKDOWN);
+	}
+}
+
 static irqreturn_t handle_linkdown_irq(int irq, void *data)
 {
 	struct msm_pcie_dev_t *dev = data;
-	int i;
 
 	dev->linkdown_counter++;
 
@@ -5022,39 +5106,16 @@ static irqreturn_t handle_linkdown_irq(int irq, void *data)
 		"PCIe: No. %ld linkdown IRQ for RC%d.\n",
 		dev->linkdown_counter, dev->rc_idx);
 
-	if (!dev->enumerated || dev->link_status != MSM_PCIE_LINK_ENABLED) {
+	if (!dev->enumerated || dev->link_status != MSM_PCIE_LINK_ENABLED)
 		PCIE_DBG(dev,
 			"PCIe:Linkdown IRQ for RC%d when the link is not enabled\n",
 			dev->rc_idx);
-	} else if (dev->suspending) {
+	else if (dev->suspending)
 		PCIE_DBG(dev,
 			"PCIe:the link of RC%d is suspending.\n",
 			dev->rc_idx);
-	} else {
-		dev->link_status = MSM_PCIE_LINK_DOWN;
-		dev->shadow_en = false;
-
-		if (dev->linkdown_panic)
-			panic("User has chosen to panic on linkdown\n");
-
-		/* assert PERST */
-		if (!(msm_pcie_keep_resources_on & BIT(dev->rc_idx)))
-			gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
-					dev->gpio[MSM_PCIE_GPIO_PERST].on);
-
-		PCIE_ERR(dev, "PCIe link is down for RC%d\n", dev->rc_idx);
-
-		if (dev->num_ep > 1) {
-			for (i = 0; i < MAX_DEVICE_NUM; i++) {
-				dev->event_reg =
-					dev->pcidev_table[i].event_reg;
-				msm_pcie_notify_client(dev,
-					MSM_PCIE_EVENT_LINKDOWN);
-			}
-		} else {
-			msm_pcie_notify_client(dev, MSM_PCIE_EVENT_LINKDOWN);
-		}
-	}
+	else
+		msm_pcie_handle_linkdown(dev);
 
 	return IRQ_HANDLED;
 }
@@ -5129,10 +5190,13 @@ static int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
 
-	if (dev->rc_idx)
-		wakeup_source_init(&dev->ws, "RC1 pcie_wakeup_source");
-	else
-		wakeup_source_init(&dev->ws, "RC0 pcie_wakeup_source");
+	dev->ws = wakeup_source_register(pdev, dev_name(pdev));
+	if (!dev->ws) {
+		PCIE_ERR(dev,
+			 "PCIe: RC%d: failed to register wakeup source\n",
+			 dev->rc_idx);
+		return -ENOMEM;
+	}
 
 	if (dev->irq[MSM_PCIE_INT_GLOBAL_INT].num) {
 		rc = devm_request_irq(pdev,
@@ -5180,7 +5244,7 @@ static void msm_pcie_irq_deinit(struct msm_pcie_dev_t *dev)
 {
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
 
-	wakeup_source_trash(&dev->ws);
+	wakeup_source_unregister(dev->ws);
 
 	if (dev->wake_n)
 		disable_irq(dev->wake_n);
@@ -5959,6 +6023,14 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		msm_pcie_gpio_deinit(pcie_dev);
 		goto decrease_rc_num;
 	}
+	pcie_dev->config_recovery = of_property_read_bool(of_node,
+					"qcom,config-recovery");
+	if (pcie_dev->config_recovery) {
+		PCIE_DUMP(pcie_dev,
+			"PCIe RC%d config space recovery enabled\n",
+			pcie_dev->rc_idx);
+		INIT_WORK(&pcie_dev->link_recover_wq, handle_link_recover);
+	}
 
 	drv_supported = of_property_read_bool(of_node, "qcom,drv-supported");
 	if (drv_supported) {
@@ -6714,6 +6786,15 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 	pcie_dev->suspending = true;
 	spin_unlock_irqrestore(&pcie_dev->irq_lock, irqsave_flags);
 
+	if (pcie_dev->config_recovery) {
+		if (work_pending(&pcie_dev->link_recover_wq)) {
+			PCIE_DBG(pcie_dev,
+				"RC%d: cancel link_recover_wq at pm suspend\n",
+				pcie_dev->rc_idx);
+			cancel_work_sync(&pcie_dev->link_recover_wq);
+		}
+	}
+
 	if (!pcie_dev->power_on) {
 		PCIE_DBG(pcie_dev,
 			"PCIe: power of RC%d has been turned off.\n",
@@ -7115,6 +7196,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 	int ret = 0;
 	struct pci_dev *dev;
 	u32 rc_idx = 0;
+	unsigned long flags;
 	struct msm_pcie_dev_t *pcie_dev;
 
 	PCIE_GEN_DBG("PCIe: pm_opt:%d;busnr:%d;options:%d\n",
@@ -7263,6 +7345,13 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		msm_pcie_dev[rc_idx].disable_pc = false;
 		spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
 				msm_pcie_dev[rc_idx].irqsave_flags);
+		break;
+	case MSM_PCIE_HANDLE_LINKDOWN:
+		PCIE_DBG(&msm_pcie_dev[rc_idx],
+			"User of RC%d requests handling link down.\n", rc_idx);
+		spin_lock_irqsave(&msm_pcie_dev[rc_idx].irq_lock, flags);
+		msm_pcie_handle_linkdown(pcie_dev);
+		spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].irq_lock, flags);
 		break;
 	default:
 		PCIE_ERR(&msm_pcie_dev[rc_idx],

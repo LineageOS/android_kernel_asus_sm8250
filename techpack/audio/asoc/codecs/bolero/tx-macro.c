@@ -180,6 +180,7 @@ struct tx_macro_priv {
 	int dec_mode[NUM_DECIMATORS];
 	bool bcs_clk_en;
 	bool hs_slow_insert_complete;
+	int amic_sample_rate;
 };
 
 static bool tx_macro_get_data(struct snd_soc_component *component,
@@ -415,6 +416,9 @@ static int tx_macro_event_handler(struct snd_soc_component *component,
 		else
 			tx_priv->hs_slow_insert_complete = false;
 		break;
+	default:
+		pr_debug("%s Invalid Event\n", __func__);
+		break;
 	}
 	return 0;
 }
@@ -501,6 +505,29 @@ static void tx_macro_tx_hpf_corner_freq_callback(struct work_struct *work)
 				hpf_cut_off_freq << 5);
 		snd_soc_component_update_bits(component, hpf_gate_reg,
 						0x03, 0x02);
+		/* Add delay between toggle hpf gate based on sample rate */
+		switch(tx_priv->amic_sample_rate) {
+		case 8000:
+			usleep_range(125, 130);
+			break;
+		case 16000:
+			usleep_range(62, 65);
+			break;
+		case 32000:
+			usleep_range(31, 32);
+			break;
+		case 48000:
+			usleep_range(20, 21);
+			break;
+		case 96000:
+			usleep_range(10, 11);
+			break;
+		case 192000:
+			usleep_range(5, 6);
+			break;
+		default:
+			usleep_range(125, 130);
+		}
 		snd_soc_component_update_bits(component, hpf_gate_reg,
 						0x03, 0x01);
 	} else {
@@ -903,6 +930,7 @@ static int tx_macro_enable_dec(struct snd_soc_dapm_widget *w,
 	u16 dec_cfg_reg = 0;
 	u16 hpf_gate_reg = 0;
 	u16 tx_gain_ctl_reg = 0;
+	u16 tx_fs_reg = 0;
 	u8 hpf_cut_off_freq = 0;
 	int hpf_delay = TX_MACRO_DMIC_HPF_DELAY_MS;
 	int unmute_delay = TX_MACRO_DMIC_UNMUTE_DELAY_MS;
@@ -927,6 +955,11 @@ static int tx_macro_enable_dec(struct snd_soc_dapm_widget *w,
 				TX_MACRO_TX_PATH_OFFSET * decimator;
 	tx_gain_ctl_reg = BOLERO_CDC_TX0_TX_VOL_CTL +
 				TX_MACRO_TX_PATH_OFFSET * decimator;
+	tx_fs_reg = BOLERO_CDC_TX0_TX_PATH_CTL +
+				TX_MACRO_TX_PATH_OFFSET * decimator;
+
+	tx_priv->amic_sample_rate = (snd_soc_component_read32(component,
+				     tx_fs_reg) & 0x0F);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -987,22 +1020,22 @@ static int tx_macro_enable_dec(struct snd_soc_dapm_widget *w,
 				   &tx_priv->tx_mute_dwork[decimator].dwork,
 				   msecs_to_jiffies(tx_unmute_delay));
 		if (tx_priv->tx_hpf_work[decimator].hpf_cut_off_freq !=
-							CF_MIN_3DB_150HZ)
+							CF_MIN_3DB_150HZ) {
 			queue_delayed_work(system_freezable_wq,
 				&tx_priv->tx_hpf_work[decimator].dwork,
 				msecs_to_jiffies(hpf_delay));
-
-		snd_soc_component_update_bits(component,
-				hpf_gate_reg, 0x03, 0x02);
-		if (!is_amic_enabled(component, decimator))
 			snd_soc_component_update_bits(component,
+					hpf_gate_reg, 0x03, 0x02);
+			if (!is_amic_enabled(component, decimator))
+				snd_soc_component_update_bits(component,
 					hpf_gate_reg, 0x03, 0x00);
-		snd_soc_component_update_bits(component,
-				hpf_gate_reg, 0x03, 0x01);
-		/*
-		 * 6ms delay is required as per HW spec
-		 */
-		usleep_range(6000, 6010);
+			snd_soc_component_update_bits(component,
+					hpf_gate_reg, 0x03, 0x01);
+			/*
+			 * 6ms delay is required as per HW spec
+			 */
+			usleep_range(6000, 6010);
+		}
 		/* apply gain after decimator is enabled */
 		snd_soc_component_write(component, tx_gain_ctl_reg,
 			      snd_soc_component_read32(component,
@@ -1135,28 +1168,6 @@ static int tx_macro_enable_micbias(struct snd_soc_dapm_widget *w,
 	}
 	return 0;
 }
-
-/* Cutoff frequency for high pass filter */
-static const char * const cf_text[] = {
-	"CF_NEG_3DB_4HZ", "CF_NEG_3DB_75HZ", "CF_NEG_3DB_150HZ"
-};
-
-static SOC_ENUM_SINGLE_DECL(cf_dec0_enum, BOLERO_CDC_TX0_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec1_enum, BOLERO_CDC_TX1_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec2_enum, BOLERO_CDC_TX2_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec3_enum, BOLERO_CDC_TX3_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec4_enum, BOLERO_CDC_TX4_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec5_enum, BOLERO_CDC_TX5_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec6_enum, BOLERO_CDC_TX6_TX_PATH_CFG0, 5,
-							cf_text);
-static SOC_ENUM_SINGLE_DECL(cf_dec7_enum, BOLERO_CDC_TX7_TX_PATH_CFG0, 5,
-							cf_text);
 
 static int tx_macro_hw_params(struct snd_pcm_substream *substream,
 			   struct snd_pcm_hw_params *params,
@@ -2466,28 +2477,13 @@ static const struct snd_kcontrol_new tx_macro_snd_controls[] = {
 
 	SOC_ENUM_EXT("DEC7 MODE", dec_mode_mux_enum,
 			tx_macro_dec_mode_get, tx_macro_dec_mode_put),
-	SOC_ENUM("TX0 HPF cut off", cf_dec0_enum),
-
-	SOC_ENUM("TX1 HPF cut off", cf_dec1_enum),
-
-	SOC_ENUM("TX2 HPF cut off", cf_dec2_enum),
-
-	SOC_ENUM("TX3 HPF cut off", cf_dec3_enum),
-
-	SOC_ENUM("TX4 HPF cut off", cf_dec4_enum),
-
-	SOC_ENUM("TX5 HPF cut off", cf_dec5_enum),
-
-	SOC_ENUM("TX6 HPF cut off", cf_dec6_enum),
-
-	SOC_ENUM("TX7 HPF cut off", cf_dec7_enum),
 
 	SOC_SINGLE_EXT("DEC0_BCS Switch", SND_SOC_NOPM, 0, 1, 0,
 		       tx_macro_get_bcs, tx_macro_set_bcs),
 };
 
 static int tx_macro_register_event_listener(struct snd_soc_component *component,
-					    bool enable, bool is_dmic_sva)
+					    bool enable)
 {
 	struct device *tx_dev = NULL;
 	struct tx_macro_priv *tx_priv = NULL;
@@ -2514,12 +2510,10 @@ static int tx_macro_register_event_listener(struct snd_soc_component *component,
 			ret = swrm_wcd_notify(
 				tx_priv->swr_ctrl_data[0].tx_swr_pdev,
 				SWR_REGISTER_WAKEUP, NULL);
-			if (!is_dmic_sva)
-				msm_cdc_pinctrl_set_wakeup_capable(
+			msm_cdc_pinctrl_set_wakeup_capable(
 					tx_priv->tx_swr_gpio_p, false);
 		} else {
-			if (!is_dmic_sva)
-				msm_cdc_pinctrl_set_wakeup_capable(
+			msm_cdc_pinctrl_set_wakeup_capable(
 					tx_priv->tx_swr_gpio_p, true);
 			ret = swrm_wcd_notify(
 				tx_priv->swr_ctrl_data[0].tx_swr_pdev,
@@ -2651,7 +2645,7 @@ static int tx_macro_tx_va_mclk_enable(struct tx_macro_priv *tx_priv,
 				dev_err(tx_priv->dev, "%s: clock already disabled\n",
 						__func__);
 				tx_priv->tx_mclk_users = 0;
-				return 0;
+				goto tx_clk;
 			}
 			tx_priv->tx_mclk_users--;
 			if (tx_priv->tx_mclk_users == 0) {
@@ -2676,6 +2670,7 @@ static int tx_macro_tx_va_mclk_enable(struct tx_macro_priv *tx_priv,
 				goto done;
 			}
 		}
+tx_clk:
 		if (!clk_tx_ret)
 			ret = bolero_clk_rsc_request_clock(tx_priv->dev,
 						   TX_CORE_CLK,
@@ -3264,6 +3259,12 @@ static int tx_macro_probe(struct platform_device *pdev)
 	const char *dmic_sample_rate = "qcom,tx-dmic-sample-rate";
 	u32 is_used_tx_swr_gpio = 0;
 	const char *is_used_tx_swr_gpio_dt = "qcom,is-used-swr-gpio";
+
+	if (!bolero_is_va_macro_registered(&pdev->dev)) {
+		dev_err(&pdev->dev,
+			"%s: va-macro not registered yet, defer\n", __func__);
+		return -EPROBE_DEFER;
+	}
 
 	tx_priv = devm_kzalloc(&pdev->dev, sizeof(struct tx_macro_priv),
 			    GFP_KERNEL);

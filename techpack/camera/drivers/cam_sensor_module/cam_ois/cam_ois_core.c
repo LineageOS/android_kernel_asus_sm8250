@@ -19,6 +19,8 @@
 
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
+#include "asus_actuator.h"
+//extern void icm_reset_ois_channel(void);
 
 int32_t cam_ois_construct_default_power_setting(
 	struct cam_sensor_power_ctrl_t *power_info)
@@ -109,7 +111,7 @@ static int cam_ois_power_up(struct cam_ois_ctrl_t *o_ctrl)
 		&o_ctrl->soc_info;
 	struct cam_ois_soc_private *soc_private;
 	struct cam_sensor_power_ctrl_t  *power_info;
-
+	CAM_INFO(CAM_OIS,"OIS POWER UP E ois index(%u)",o_ctrl->soc_info.index);
 	soc_private =
 		(struct cam_ois_soc_private *)o_ctrl->soc_info.soc_private;
 	power_info = &soc_private->power_info;
@@ -155,12 +157,12 @@ static int cam_ois_power_up(struct cam_ois_ctrl_t *o_ctrl)
 		CAM_ERR(CAM_OIS, "failed in ois power up rc %d", rc);
 		return rc;
 	}
-
+	asus_vcm_move_write(1);//ASUS_BSP Jason fix multi actuator write
 	rc = camera_io_init(&o_ctrl->io_master_info);
 	if (rc)
 		CAM_ERR(CAM_OIS, "cci_init failed: rc: %d", rc);
     asus_ois_init_config(o_ctrl->soc_info.index);
-	CAM_INFO(CAM_OIS,"OIS POWER UP");
+	CAM_INFO(CAM_OIS,"OIS POWER UP X ois index(%u)",o_ctrl->soc_info.index);
 	return rc;
 }
 
@@ -182,7 +184,7 @@ static int cam_ois_power_down(struct cam_ois_ctrl_t *o_ctrl)
 		CAM_ERR(CAM_OIS, "failed: o_ctrl %pK", o_ctrl);
 		return -EINVAL;
 	}
-
+	CAM_INFO(CAM_OIS,"OIS POWER DOWN E ois index(%u)",o_ctrl->soc_info.index);
 	soc_private =
 		(struct cam_ois_soc_private *)o_ctrl->soc_info.soc_private;
 	power_info = &soc_private->power_info;
@@ -195,16 +197,15 @@ static int cam_ois_power_down(struct cam_ois_ctrl_t *o_ctrl)
 
 	rc = onsemi_OV08A_poweroff_setting(o_ctrl);
 
-	onsemi_ois_go_off(o_ctrl);//ASUS_BSP Zhengwei "disable OIS before power down"
 	rc = cam_sensor_util_power_down(power_info, soc_info);
 	if (rc) {
 		CAM_ERR(CAM_OIS, "power down the core is failed:%d", rc);
 		return rc;
 	}
-
+	asus_vcm_move_write(1);//ASUS_BSP Jason fix multi actuator write
 	camera_io_release(&o_ctrl->io_master_info);
-    asus_ois_deinit_config(o_ctrl->soc_info.index);
-	CAM_INFO(CAM_OIS,"OIS POWER DOWN");
+    	asus_ois_deinit_config(o_ctrl->soc_info.index);
+	CAM_INFO(CAM_OIS,"OIS POWER DOWN X ois index(%u)",o_ctrl->soc_info.index);
 	return rc;
 }
 static void dump_i2c_setting(struct cam_sensor_i2c_reg_setting * setting)
@@ -608,6 +609,13 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		}
 
 		if (o_ctrl->cam_ois_state != CAM_OIS_CONFIG) {
+			//ASUS_BSP Byron Reset 8M OIS if 8M OIS already on +++
+			if(o_ctrl->soc_info.index == OIS_CLIENT_IMX686) {
+				if(get_ois_power_state(OIS_CLIENT_OV08A10) == 1) {
+					ZF7_VcmRemap(o_ctrl);
+				}
+			}
+			//ASUS_BSP Byron Reset 8M OIS if 8M OIS already on ---
 			rc = cam_ois_power_up(o_ctrl);
 			if (rc) {
 				CAM_ERR(CAM_OIS, " OIS Power up failed");
@@ -624,6 +632,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			}
 		}
 #endif
+
 		rc = cam_ois_apply_settings(o_ctrl, &o_ctrl->i2c_init_data);
 		if ((rc == -EAGAIN) &&
 			(o_ctrl->io_master_info.master_type == CCI_MASTER)) {
@@ -633,6 +642,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			rc = cam_ois_apply_settings(o_ctrl,
 				&o_ctrl->i2c_init_data);
 		}
+//		icm_reset_ois_channel();  //ASUS_BSP Byron add work around for reset gyro
 		if (rc < 0) {
 			CAM_ERR(CAM_OIS,
 				"Cannot apply Init settings: rc = %d",

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -555,7 +555,7 @@ QDF_STATUS wlan_mlme_set_sap_get_peer_info(struct wlan_objmgr_psoc *psoc,
 					   bool value);
 
 /**
- * wlan_mlme_is_sap_bcast_deauth_enabled() - get the enable/disable value
+ * wlan_mlme_get_sap_bcast_deauth_enabled() - get the enable/disable value
  *                                           for broadcast deauth in sap
  * @psoc: pointer to psoc object
  * @value: Value that needs to get from the caller
@@ -563,8 +563,8 @@ QDF_STATUS wlan_mlme_set_sap_get_peer_info(struct wlan_objmgr_psoc *psoc,
  * Return: QDF Status
  */
 QDF_STATUS
-wlan_mlme_is_sap_bcast_deauth_enabled(struct wlan_objmgr_psoc *psoc,
-				      bool *value);
+wlan_mlme_get_sap_bcast_deauth_enabled(struct wlan_objmgr_psoc *psoc,
+				       bool *value);
 
 /**
  * wlan_mlme_get_sap_allow_all_channels() - get the value of sap allow all
@@ -576,6 +576,18 @@ wlan_mlme_is_sap_bcast_deauth_enabled(struct wlan_objmgr_psoc *psoc,
  */
 QDF_STATUS wlan_mlme_get_sap_allow_all_channels(struct wlan_objmgr_psoc *psoc,
 						bool *value);
+
+/**
+ * wlan_mlme_is_6g_sap_fd_enabled() - get the enable/disable value
+ *                                     for 6g sap fils discovery
+ * @psoc: pointer to psoc object
+ * @value: Value that needs to get from the caller
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS
+wlan_mlme_is_6g_sap_fd_enabled(struct wlan_objmgr_psoc *psoc,
+			       bool *value);
 
 /**
  * wlan_mlme_get_sap_allow_all_channels() - get the value sap max peers
@@ -781,6 +793,15 @@ QDF_STATUS wlan_mlme_set_sap_11ac_override(struct wlan_objmgr_psoc *psoc,
  */
 QDF_STATUS wlan_mlme_get_oce_sta_enabled_info(struct wlan_objmgr_psoc *psoc,
 					      bool *value);
+
+/**
+ * wlan_mlme_get_host_scan_abort_support() - Get support for stop all host
+ * scans service capability.
+ * @psoc: PSOC object pointer
+ *
+ * Return: True if capability is supported, else False
+ */
+bool wlan_mlme_get_host_scan_abort_support(struct wlan_objmgr_psoc *psoc);
 
 /**
  * wlan_mlme_get_oce_sap_enabled_info() - Get the OCE feature enable
@@ -2216,6 +2237,16 @@ wlan_mlme_get_self_gen_frm_pwr(struct wlan_objmgr_psoc *psoc,
 			       uint32_t *value);
 
 /**
+ * wlan_mlme_get_4way_hs_offload() - get 4-way hs offload to fw cfg
+ * @psoc: pointer to psoc object
+ * @val:  Pointer to the value which will be filled for the caller
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS
+wlan_mlme_get_4way_hs_offload(struct wlan_objmgr_psoc *psoc, bool *value);
+
+/**
  * wlan_mlme_get_bmiss_skip_full_scan_value() - To get value of
  * bmiss_skip_full_scan ini
  * @psoc: pointer to psoc object
@@ -2260,30 +2291,6 @@ QDF_STATUS mlme_set_tgt_wpa3_roam_cap(struct wlan_objmgr_psoc *psoc,
 QDF_STATUS
 wlan_mlme_get_ignore_fw_reg_offload_ind(struct wlan_objmgr_psoc *psoc,
 					bool *disabled);
-
-/**
- * wlan_mlme_get_mgmt_max_retry() - Get the
- * max mgmt retry
- * @psoc: pointer to psoc object
- * @max_retry: output pointer to hold user config
- *
- * Return: QDF Status
- */
-QDF_STATUS
-wlan_mlme_get_mgmt_max_retry(struct wlan_objmgr_psoc *psoc,
-			     uint8_t *max_retry);
-/**
- * wlan_mlme_get_status_ring_buffer() - Get the
- * status of ring buffer
- * @psoc: pointer to psoc object
- * @enable_ring_buffer: output pointer to point the configured value of
- * ring buffer
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-wlan_mlme_get_status_ring_buffer(struct wlan_objmgr_psoc *psoc,
-				 bool *enable_ring_buffer);
 
 /**
  * mlme_get_roam_trigger_str() - Get the string for enum
@@ -2390,7 +2397,65 @@ char *mlme_get_roam_fail_reason_str(uint32_t result);
  */
 char *mlme_get_sub_reason_str(uint32_t sub_reason);
 
+/**
+ * wlan_mlme_get_mgmt_max_retry() - Get the
+ * max mgmt retry
+ * @psoc: pointer to psoc object
+ * @max_retry: output pointer to hold user config
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS
+wlan_mlme_get_mgmt_max_retry(struct wlan_objmgr_psoc *psoc,
+			     uint8_t *max_retry);
+
+/**
+ * wlan_mlme_get_status_ring_buffer() - Get the
+ * status of ring buffer
+ * @psoc: pointer to psoc object
+ * @enable_ring_buffer: output pointer to point the configured value of
+ * ring buffer
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+wlan_mlme_get_status_ring_buffer(struct wlan_objmgr_psoc *psoc,
+				 bool *enable_ring_buffer);
+
+/**
+ * wlan_mlme_get_peer_unmap_conf() - Indicate if peer unmap confirmation
+ * support is enabled or disabled
+ * @psoc: pointer to psoc object
+ *
+ * Return: true if peer unmap confirmation support is enabled, else false
+ */
+bool wlan_mlme_get_peer_unmap_conf(struct wlan_objmgr_psoc *psoc);
+
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
+/**
+ * wlan_mlme_get_roam_reason_vsie_status() - Indicate if roam reason
+ * vsie is enabled or disabled
+ * @psoc: pointer to psoc object
+ * @roam_reason_vsie_enabled: pointer to hold value of roam reason
+ * vsie
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+wlan_mlme_get_roam_reason_vsie_status(struct wlan_objmgr_psoc *psoc,
+				      uint8_t *roam_reason_vsie_enabled);
+
+/**
+ * wlan_mlme_set_roam_reason_vsie_status() - Update roam reason vsie status
+ * @psoc: pointer to psoc object
+ * @roam_reason_vsie_enabled: value of roam reason vsie
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+wlan_mlme_set_roam_reason_vsie_status(struct wlan_objmgr_psoc *psoc,
+				      uint8_t roam_reason_vsie_enabled);
+
 /**
  * wlan_mlme_get_roaming_triggers  - Get the roaming triggers bitmap
  * @psoc: Pointer to PSOC object
@@ -2399,6 +2464,20 @@ char *mlme_get_sub_reason_str(uint32_t sub_reason);
  */
 uint32_t wlan_mlme_get_roaming_triggers(struct wlan_objmgr_psoc *psoc);
 #else
+static inline QDF_STATUS
+wlan_mlme_get_roam_reason_vsie_status(struct wlan_objmgr_psoc *psoc,
+				      uint8_t *roam_reason_vsie_enable)
+{
+	return QDF_STATUS_E_FAILURE;
+}
+
+static inline QDF_STATUS
+wlan_mlme_set_roam_reason_vsie_status(struct wlan_objmgr_psoc *psoc,
+				      uint8_t roam_reason_vsie_enable)
+{
+	return QDF_STATUS_E_FAILURE;
+}
+
 static inline
 uint32_t wlan_mlme_get_roaming_triggers(struct wlan_objmgr_psoc *psoc)
 {

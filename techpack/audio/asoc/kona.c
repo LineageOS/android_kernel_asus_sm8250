@@ -40,17 +40,22 @@
 #include "codecs/bolero/wsa-macro.h"
 #include "kona-port-config.h"
 
-//ASUS_BSP +++   add for codec_status
-#ifdef ASUS_FACTORY_BUILD
-#include <linux/proc_fs.h>
-#include <linux/syscalls.h>
-#include <linux/fs.h>
-#include <linux/file.h>
-#define AUDIO_CODEC_PROC_FILE  "driver/audio_codec"
-static struct proc_dir_entry *audio_codec_proc_file;
-int codec_status=0;
-int codec_num=0;
-//ASUS_BSP ---   add for codec_status
+#ifdef CONFIG_SND_SOC_TFA9874
+struct tfa98xx_dai_name {
+    const char *name;
+    const char *dai_name;
+};
+
+static struct tfa98xx_dai_name tfa98xx_dai_names[] = {
+       {
+               .name = "tfa98xx.5-0034",//for receiver AMP
+               .dai_name = "tfa98xx-aif-5-34",
+       },
+       {
+               .name = "tfa98xx.5-0035",//for speaker AMP
+               .dai_name = "tfa98xx-aif-5-35",
+       },
+};
 #endif
 
 #define DRV_NAME "kona-asoc-snd"
@@ -93,10 +98,8 @@ int codec_num=0;
 
 #define ADSP_STATE_READY_TIMEOUT_MS 3000
 
-#define WSA8810_NAME_1 "wsa881x.1020170211"
-#define WSA8810_NAME_2 "wsa881x.1020170212"
-#define WSA8815_NAME_1 "wsa881x.1021170213"
-#define WSA8815_NAME_2 "wsa881x.1021170214"
+#define WSA8810_NAME_1 "wsa881x.20170211"
+#define WSA8810_NAME_2 "wsa881x.20170212"
 #define WCN_CDC_SLIM_RX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX 2
 #define WCN_CDC_SLIM_TX_CH_MAX_LITO 3
@@ -490,7 +493,7 @@ static struct dev_config mi2s_rx_cfg[] = {
 #ifdef CONFIG_SND_SOC_TFA9874
 	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S24_LE, 2},//for nxp AMP to Tequila
 #else
-    [PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 #endif
 	[SEC_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[TERT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
@@ -507,7 +510,7 @@ static struct dev_config mi2s_tx_cfg[] = {
 #ifdef CONFIG_SND_SOC_TFA9874
 	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S24_LE, 2},//for nxp AMP to Tequila
 #else
-    [PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
+	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 #endif
 	[SEC_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[TERT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
@@ -680,7 +683,7 @@ static struct dev_config cdc_dma_rx_cfg[] = {
 
 /* Default configuration of Codec DMA Interface TX */
 static struct dev_config cdc_dma_tx_cfg[] = {
-	[WSA_CDC_DMA_TX_0] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+	[WSA_CDC_DMA_TX_0] = {SAMPLING_RATE_8KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[WSA_CDC_DMA_TX_1] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[WSA_CDC_DMA_TX_2] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[TX_CDC_DMA_TX_0] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
@@ -800,6 +803,7 @@ static SOC_ENUM_SINGLE_EXT_DECL(sen_mi2s_tx_sample_rate, mi2s_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(mi2s_rx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(mi2s_tx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(prim_mi2s_rx_chs, mi2s_ch_text);
+static SOC_ENUM_SINGLE_EXT_DECL(pri_mi2s_rx_chs, mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(sec_mi2s_rx_chs, mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tert_mi2s_rx_chs, mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(quat_mi2s_rx_chs, mi2s_ch_text);
@@ -4053,6 +4057,8 @@ static const struct snd_kcontrol_new msm_mi2s_snd_controls[] = {
 			msm_mi2s_tx_format_get, msm_mi2s_tx_format_put),
 	SOC_ENUM_EXT("PRIM_MI2S_RX Channels", prim_mi2s_rx_chs,
 			msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
+    SOC_ENUM_EXT("PRI_MI2S_RX Channels", pri_mi2s_rx_chs,
+			msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
 	SOC_ENUM_EXT("SEC_MI2S_RX Channels", sec_mi2s_rx_chs,
 			msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
 	SOC_ENUM_EXT("TERT_MI2S_RX Channels", tert_mi2s_rx_chs,
@@ -4513,9 +4519,10 @@ static int msm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 		break;
 
 	case MSM_BACKEND_DAI_WSA_CDC_DMA_TX_0:
+		idx = msm_cdc_dma_get_idx_from_beid(dai_link->id);
 		param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
 				SNDRV_PCM_FORMAT_S32_LE);
-		rate->min = rate->max = SAMPLING_RATE_8KHZ;
+		rate->min = rate->max = cdc_dma_tx_cfg[idx].sample_rate;
 		channels->min = channels->max = msm_vi_feed_tx_ch;
 		break;
 
@@ -5530,11 +5537,6 @@ static int msm_int_audrx_init(struct snd_soc_pcm_runtime *rtd)
 						WSA_MACRO_SPKR_MODE_1);
 				wsa_macro_set_spkr_gain_offset(component,
 						WSA_MACRO_GAIN_OFFSET_M1P5_DB);
-			} else if (aux_comp->name != NULL && (
-				!strcmp(aux_comp->name, WSA8815_NAME_1) ||
-		    		!strcmp(aux_comp->name, WSA8815_NAME_2))) {
-				wsa_macro_set_spkr_mode(component,
-						WSA_MACRO_SPKR_MODE_DEFAULT);
 			}
 		}
 	}
@@ -6165,10 +6167,9 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
-
 	//for nxp AMP+++
 #ifdef CONFIG_SND_SOC_TFA9874
-	{
+	{/* hw:x,33 */
 		.name = "Primary MI2S_TX Hostless",
 		.stream_name = "Primary MI2S_TX Hostless Capture",
 		.cpu_dai_name = "PRI_MI2S_TX_HOSTLESS",
@@ -6186,23 +6187,7 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 #endif
 	//for nxp AMP---
 };
-#ifndef ASUS_ZS661KS_PROJECT
-static struct snd_soc_dai_link msm_bolero_fe_dai_links[] = {
-	{/* hw:x,33 */
-		.name = LPASS_BE_WSA_CDC_DMA_TX_0,
-		.stream_name = "WSA CDC DMA0 Capture",
-		.cpu_dai_name = "msm-dai-cdc-dma-dev.45057",
-		.platform_name = "msm-pcm-hostless",
-		.codec_name = "bolero_codec",
-		.codec_dai_name = "wsa_macro_vifeedback",
-		.id = MSM_BACKEND_DAI_WSA_CDC_DMA_TX_0,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_suspend = 1,
-		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ops = &msm_cdc_dma_be_ops,
-	},
-};
-#endif
+
 static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 	{/* hw:x,34 */
 		.name = MSM_DAILINK_NAME(ASM Loopback),
@@ -6442,6 +6427,33 @@ static struct snd_soc_dai_link msm_common_be_dai_links[] = {
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
+	},
+	/* Proxy Tx BACK END DAI Link */
+	{
+		.name = LPASS_BE_PROXY_TX,
+		.stream_name = "Proxy Capture",
+		.cpu_dai_name = "msm-dai-q6-dev.8195",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-tx",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.id = MSM_BACKEND_DAI_PROXY_TX,
+		.ignore_suspend = 1,
+	},
+	/* Proxy Rx BACK END DAI Link */
+	{
+		.name = LPASS_BE_PROXY_RX,
+		.stream_name = "Proxy Playback",
+		.cpu_dai_name = "msm-dai-q6-dev.8194",
+		.platform_name = "msm-pcm-routing",
+		.codec_name = "msm-stub-codec.1",
+		.codec_dai_name = "msm-stub-rx",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.id = MSM_BACKEND_DAI_PROXY_RX,
+		.ignore_pmdown_time = 1,
+		.ignore_suspend = 1,
 	},
 	{
 		.name = LPASS_BE_USB_AUDIO_RX,
@@ -6776,50 +6788,22 @@ static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
 
 //for nxp AMP+++
 #ifdef CONFIG_SND_SOC_TFA9874
-#ifdef ASUS_ZS661KS_PROJECT
 static struct snd_soc_dai_link_component tfa98xx_codecs[] = {
        {
-               .name = "tfa98xx.7-0034",//for receiver AMP
+               .name = "tfa98xx.5-0034",//for receiver AMP
                .of_node = NULL,
                .dai_name = "tfa98xx-aif-7-34",
        },
        {
-               .name = "tfa98xx.7-0035",//for speaker AMP
+               .name = "tfa98xx.5-0035",//for speaker AMP
                .of_node = NULL,
                .dai_name = "tfa98xx-aif-7-35",
        },
 };
-#else
-static struct snd_soc_dai_link_component tfa98xx_codecs_evb[] = {
-       {
-               .name = "tfa98xx.6-0034",//for receiver AMP
-               .of_node = NULL,
-               .dai_name = "tfa98xx-aif-6-34",
-       },
-       {
-               .name = "tfa98xx.6-0035",//for speaker AMP
-               .of_node = NULL,
-               .dai_name = "tfa98xx-aif-6-35",
-       },
-};
-
-static struct snd_soc_dai_link_component tfa98xx_codecs[] = {
-       {
-               .name = "tfa98xx.7-0034",//for receiver AMP
-               .of_node = NULL,
-               .dai_name = "tfa98xx-aif-7-34",
-       },
-       {
-               .name = "tfa98xx.7-0035",//for speaker AMP
-               .of_node = NULL,
-               .dai_name = "tfa98xx-aif-7-35",
-       },
-};
-#endif
 #endif
 //for nxp AMP---
 
-#ifdef ASUS_ZS661KS_PROJECT
+/* ASUS_BSP +++ For Inbox I2S audio codec */
 static struct snd_soc_dai_link_component rt5683_codecs[] = {
         {
                 .name = "rt5683.2-001a",
@@ -6832,206 +6816,7 @@ static struct snd_soc_dai_link_component rt5683_codecs[] = {
                 .dai_name = "rt5683-aif2-2-1a",
         },
 };
-#endif
-
-#ifndef ASUS_ZS661KS_PROJECT
-static struct snd_soc_dai_link msm_mi2s_be_dai_links_evb[] = {
-	{
-		.name = LPASS_BE_PRI_MI2S_RX,
-		.stream_name = "Primary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.0",
-		.platform_name = "msm-pcm-routing",
-#ifdef CONFIG_SND_SOC_TFA9874
-		.codecs = tfa98xx_codecs_evb,//for nxp AMP Tequila
-		.num_codecs = 2,//for nxp AMP Tequila
-#else
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-#endif
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_PRI_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_PRI_MI2S_TX,
-		.stream_name = "Primary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.0",
-		.platform_name = "msm-pcm-routing",
-#ifdef CONFIG_SND_SOC_TFA9874
-		.codecs = tfa98xx_codecs_evb,//for nxp AMP Tequila
-		.num_codecs = 2,//for nxp AMP Tequila
-#else
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-#endif
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_PRI_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-	{
-		.name = LPASS_BE_SEC_MI2S_RX,
-		.stream_name = "Secondary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.1",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_SEC_MI2S_TX,
-		.stream_name = "Secondary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.1",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_SECONDARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-	{
-		.name = LPASS_BE_TERT_MI2S_RX,
-		.stream_name = "Tertiary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.2",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_TERT_MI2S_TX,
-		.stream_name = "Tertiary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.2",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_TERTIARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-	{
-		.name = LPASS_BE_QUAT_MI2S_RX,
-		.stream_name = "Quaternary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.3",
-		.platform_name = "msm-pcm-routing",
-#ifdef ASUS_ZS661KS_PROJECT
-		.codecs = rt5683_codecs,
-		.num_codecs = 2,
-#else
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-#endif
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_QUAT_MI2S_TX,
-		.stream_name = "Quaternary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.3",
-		.platform_name = "msm-pcm-routing",
-#ifdef ASUS_ZS661KS_PROJECT
-		.codecs = rt5683_codecs,
-		.num_codecs = 2,
-#else
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-#endif
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-	{
-		.name = LPASS_BE_QUIN_MI2S_RX,
-		.stream_name = "Quinary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.4",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_QUINARY_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_QUIN_MI2S_TX,
-		.stream_name = "Quinary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.4",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_QUINARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-	{
-		.name = LPASS_BE_SENARY_MI2S_RX,
-		.stream_name = "Senary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.5",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_SENARY_MI2S_RX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_SENARY_MI2S_TX,
-		.stream_name = "Senary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.5",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_SENARY_MI2S_TX,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
-};
-#endif
+/* ASUS_BSP --- */
 
 static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 	{
@@ -7136,13 +6921,12 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-#ifdef ASUS_ZS661KS_PROJECT
+		/* ASUS_BSP +++ For Inbox I2S audio codec */
 		.codecs = rt5683_codecs,
 		.num_codecs = 2,
-#else
-		.codec_name = "msm-stub-codec.1",
+		/*.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
-#endif
+		ASUS_BSP --- */
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -7156,13 +6940,12 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-#ifdef ASUS_ZS661KS_PROJECT
+		/* ASUS_BSP +++ For Inbox I2S audio codec */
 		.codecs = rt5683_codecs,
 		.num_codecs = 2,
-#else
-		.codec_name = "msm-stub-codec.1",
+		/*.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
-#endif
+		ASUS_BSP --- */
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
@@ -7618,32 +7401,8 @@ static struct snd_soc_dai_link msm_afe_rxtx_lb_be_dai_link[] = {
 	},
 };
 
-#ifndef ASUS_ZS661KS_PROJECT
-static struct snd_soc_dai_link msm_kona_dai_links_evb[
-			ARRAY_SIZE(msm_common_dai_links) +
-#ifndef ASUS_ZS661KS_PROJECT
-			ARRAY_SIZE(msm_bolero_fe_dai_links) +
-#endif
-			ARRAY_SIZE(msm_common_misc_fe_dai_links) +
-			ARRAY_SIZE(msm_common_be_dai_links) +
-			ARRAY_SIZE(msm_mi2s_be_dai_links_evb) +
-			ARRAY_SIZE(msm_auxpcm_be_dai_links) +
-#ifndef ASUS_ZS661KS_PROJECT
-			ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links) +
-#endif
-			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links) +
-			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links) +
-			ARRAY_SIZE(ext_disp_be_dai_link) +
-			ARRAY_SIZE(msm_wcn_be_dai_links) +
-			ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link) +
-			ARRAY_SIZE(msm_wcn_btfm_be_dai_links)];
-#endif
-
 static struct snd_soc_dai_link msm_kona_dai_links[
 			ARRAY_SIZE(msm_common_dai_links) +
-#ifndef ASUS_ZS661KS_PROJECT
-			ARRAY_SIZE(msm_bolero_fe_dai_links) +
-#endif
 			ARRAY_SIZE(msm_common_misc_fe_dai_links) +
 			ARRAY_SIZE(msm_common_be_dai_links) +
 			ARRAY_SIZE(msm_mi2s_be_dai_links) +
@@ -7849,187 +7608,6 @@ static const struct of_device_id kona_asoc_machine_of_match[]  = {
 	{},
 };
 
-#ifndef ASUS_ZS661KS_PROJECT
-static struct snd_soc_card *populate_snd_card_dailinks_evb(struct device *dev)
-{
-	struct snd_soc_card *card = NULL;
-	struct snd_soc_dai_link *dailink = NULL;
-	int len_1 = 0;
-	int len_2 = 0;
-	int total_links = 0;
-	int rc = 0;
-	u32 mi2s_audio_intf = 0;
-	u32 auxpcm_audio_intf = 0;
-	u32 val = 0;
-	u32 wcn_btfm_intf = 0;
-#ifndef ASUS_ZS661KS_PROJECT
-	u32 wsa_bolero_codec = 0;
-#endif
-	const struct of_device_id *match;
-
-	match = of_match_node(kona_asoc_machine_of_match, dev->of_node);
-	if (!match) {
-		dev_err(dev, "%s: No DT match found for sound card\n",
-			__func__);
-		return NULL;
-	}
-
-	if (!strcmp(match->data, "codec")) {
-		card = &snd_soc_card_kona_msm;
-
-		memcpy(msm_kona_dai_links_evb + total_links,
-		       msm_common_dai_links,
-		       sizeof(msm_common_dai_links));
-		total_links += ARRAY_SIZE(msm_common_dai_links);
-#ifndef ASUS_ZS661KS_PROJECT
-		rc = of_property_read_u32(dev->of_node, "qcom,wsa-bolero-codec",
-		&wsa_bolero_codec);
-		if (rc) {
-			dev_err(dev, "%s: No DT match WSA Macro codec\n", __func__);
-			} else {
-			if (wsa_bolero_codec) {
-				dev_err(dev, "%s(): WSA macro in bolero codec present\n", __func__);
-				memcpy(msm_kona_dai_links_evb + total_links,
-					   msm_bolero_fe_dai_links,
-					   sizeof(msm_bolero_fe_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_bolero_fe_dai_links);
-			}
-		}
-#endif
-		memcpy(msm_kona_dai_links_evb + total_links,
-		       msm_common_misc_fe_dai_links,
-		       sizeof(msm_common_misc_fe_dai_links));
-		total_links += ARRAY_SIZE(msm_common_misc_fe_dai_links);
-
-		memcpy(msm_kona_dai_links_evb + total_links,
-		       msm_common_be_dai_links,
-		       sizeof(msm_common_be_dai_links));
-		total_links += ARRAY_SIZE(msm_common_be_dai_links);
-#ifndef ASUS_ZS661KS_PROJECT
-		if (wsa_bolero_codec) {
-			 dev_err(dev, "%s(): WSAmacro in bolero codec present\n", __func__);
-			memcpy(msm_kona_dai_links_evb + total_links,
-				   msm_wsa_cdc_dma_be_dai_links,
-				   sizeof(msm_wsa_cdc_dma_be_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
-		}
-#endif
-		memcpy(msm_kona_dai_links_evb + total_links,
-		       msm_rx_tx_cdc_dma_be_dai_links,
-		       sizeof(msm_rx_tx_cdc_dma_be_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links);
-
-		memcpy(msm_kona_dai_links_evb + total_links,
-		       msm_va_cdc_dma_be_dai_links,
-		       sizeof(msm_va_cdc_dma_be_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links);
-
-		rc = of_property_read_u32(dev->of_node, "qcom,mi2s-audio-intf",
-					  &mi2s_audio_intf);
-		if (rc) {
-			dev_dbg(dev, "%s: No DT match MI2S audio interface\n",
-				__func__);
-		} else {
-			if (mi2s_audio_intf) {
-				memcpy(msm_kona_dai_links_evb + total_links,
-					msm_mi2s_be_dai_links_evb,
-					sizeof(msm_mi2s_be_dai_links_evb));
-				total_links +=
-					ARRAY_SIZE(msm_mi2s_be_dai_links_evb);
-			}
-		}
-
-		rc = of_property_read_u32(dev->of_node,
-					  "qcom,auxpcm-audio-intf",
-					  &auxpcm_audio_intf);
-		if (rc) {
-			dev_dbg(dev, "%s: No DT match Aux PCM interface\n",
-				__func__);
-		} else {
-			if (auxpcm_audio_intf) {
-				memcpy(msm_kona_dai_links_evb + total_links,
-					msm_auxpcm_be_dai_links,
-					sizeof(msm_auxpcm_be_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_auxpcm_be_dai_links);
-			}
-		}
-
-		rc = of_property_read_u32(dev->of_node,
-					   "qcom,ext-disp-audio-rx", &val);
-		if (!rc && val) {
-			dev_dbg(dev, "%s(): ext disp audio support present\n",
-				__func__);
-			memcpy(msm_kona_dai_links_evb + total_links,
-			       ext_disp_be_dai_link,
-			       sizeof(ext_disp_be_dai_link));
-			total_links += ARRAY_SIZE(ext_disp_be_dai_link);
-		}
-
-		rc = of_property_read_u32(dev->of_node, "qcom,wcn-bt", &val);
-		if (!rc && val) {
-			dev_dbg(dev, "%s(): WCN BT support present\n",
-				__func__);
-			memcpy(msm_kona_dai_links_evb + total_links,
-			       msm_wcn_be_dai_links,
-			       sizeof(msm_wcn_be_dai_links));
-			total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
-		}
-
-		rc = of_property_read_u32(dev->of_node, "qcom,afe-rxtx-lb",
-				&val);
-		if (!rc && val) {
-			memcpy(msm_kona_dai_links_evb + total_links,
-				msm_afe_rxtx_lb_be_dai_link,
-				sizeof(msm_afe_rxtx_lb_be_dai_link));
-			total_links +=
-				ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link);
-		}
-
-		rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm",
-					  &wcn_btfm_intf);
-		if (rc) {
-			dev_dbg(dev, "%s: No DT match wcn btfm interface\n",
-				__func__);
-		} else {
-			if (wcn_btfm_intf) {
-				memcpy(msm_kona_dai_links_evb + total_links,
-					msm_wcn_btfm_be_dai_links,
-					sizeof(msm_wcn_btfm_be_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_wcn_btfm_be_dai_links);
-			}
-		}
-		dailink = msm_kona_dai_links_evb;
-	} else if(!strcmp(match->data, "stub_codec")) {
-		card = &snd_soc_card_stub_msm;
-		len_1 = ARRAY_SIZE(msm_stub_fe_dai_links);
-		len_2 = len_1 + ARRAY_SIZE(msm_stub_be_dai_links);
-
-		memcpy(msm_stub_dai_links,
-		       msm_stub_fe_dai_links,
-		       sizeof(msm_stub_fe_dai_links));
-		memcpy(msm_stub_dai_links + len_1,
-		       msm_stub_be_dai_links,
-		       sizeof(msm_stub_be_dai_links));
-
-		dailink = msm_stub_dai_links;
-		total_links = len_2;
-	}
-
-	if (card) {
-		card->dai_link = dailink;
-		card->num_links = total_links;
-	}
-
-	return card;
-}
-#endif
-
 static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 {
 	struct snd_soc_card *card = NULL;
@@ -8042,9 +7620,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	u32 auxpcm_audio_intf = 0;
 	u32 val = 0;
 	u32 wcn_btfm_intf = 0;
-#ifndef ASUS_ZS661KS_PROJECT
-	u32 wsa_bolero_codec = 0;
-#endif
+
 	const struct of_device_id *match;
 
 	match = of_match_node(kona_asoc_machine_of_match, dev->of_node);
@@ -8061,22 +7637,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       msm_common_dai_links,
 		       sizeof(msm_common_dai_links));
 		total_links += ARRAY_SIZE(msm_common_dai_links);
-#ifndef ASUS_ZS661KS_PROJECT
-		rc = of_property_read_u32(dev->of_node, "qcom,wsa-bolero-codec",
-		&wsa_bolero_codec);
-		if (rc) {
-			dev_err(dev, "%s: No DT match WSA Macro codec\n", __func__);
-			} else {
-			if (wsa_bolero_codec) {
-				dev_err(dev, "%s(): WSA macro in bolero codec present\n", __func__);
-				memcpy(msm_kona_dai_links + total_links,
-					   msm_bolero_fe_dai_links,
-					   sizeof(msm_bolero_fe_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_bolero_fe_dai_links);
-			}
-		}
-#endif
+
 		memcpy(msm_kona_dai_links + total_links,
 		       msm_common_misc_fe_dai_links,
 		       sizeof(msm_common_misc_fe_dai_links));
@@ -8086,16 +7647,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       msm_common_be_dai_links,
 		       sizeof(msm_common_be_dai_links));
 		total_links += ARRAY_SIZE(msm_common_be_dai_links);
-#ifndef ASUS_ZS661KS_PROJECT
-		if (wsa_bolero_codec) {
-			 dev_err(dev, "%s(): WSAmacro in bolero codec present\n", __func__);
-			memcpy(msm_kona_dai_links + total_links,
-				   msm_wsa_cdc_dma_be_dai_links,
-				   sizeof(msm_wsa_cdc_dma_be_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
-		}
-#endif
+
 		memcpy(msm_kona_dai_links + total_links,
 		       msm_rx_tx_cdc_dma_be_dai_links,
 		       sizeof(msm_rx_tx_cdc_dma_be_dai_links));
@@ -8115,6 +7667,13 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 				__func__);
 		} else {
 			if (mi2s_audio_intf) {
+#ifdef CONFIG_SND_SOC_TFA9874
+                pr_info("%s: modify tfa98xx dai name from %s to %s\n", __func__, tfa98xx_codecs[0].name, tfa98xx_dai_names[0].name);
+                tfa98xx_codecs[0].name = tfa98xx_dai_names[0].name;
+                tfa98xx_codecs[0].dai_name = tfa98xx_dai_names[0].dai_name;
+                tfa98xx_codecs[1].name = tfa98xx_dai_names[1].name;
+                tfa98xx_codecs[1].dai_name = tfa98xx_dai_names[1].dai_name;
+#endif
 				memcpy(msm_kona_dai_links + total_links,
 					msm_mi2s_be_dai_links,
 					sizeof(msm_mi2s_be_dai_links));
@@ -8389,8 +7948,8 @@ static int msm_init_aux_dev(struct platform_device *pdev,
 	u32 codec_max_aux_devs = 0;
 	u32 codec_aux_dev_cnt = 0;
 	int i;
-	struct msm_wsa881x_dev_info *wsa881x_dev_info;
-	struct aux_codec_dev_info *aux_cdc_dev_info;
+	struct msm_wsa881x_dev_info *wsa881x_dev_info = NULL;
+	struct aux_codec_dev_info *aux_cdc_dev_info = NULL;
 	const char *auxdev_name_prefix[1];
 	char *dev_name_str = NULL;
 	int found = 0;
@@ -8481,7 +8040,7 @@ static int msm_init_aux_dev(struct platform_device *pdev,
 			ret = -EINVAL;
 			goto err;
 		}
-		if (soc_find_component(wsa_of_node, NULL)) {
+		if (soc_find_component_locked(wsa_of_node, NULL)) {
 			/* WSA device registered with ALSA core */
 			wsa881x_dev_info[found].of_node = wsa_of_node;
 			wsa881x_dev_info[found].index = i;
@@ -8578,7 +8137,7 @@ codec_aux_dev:
 			ret = -EINVAL;
 			goto err;
 		}
-		if (soc_find_component(aux_codec_of_node, NULL)) {
+		if (soc_find_component_locked(aux_codec_of_node, NULL)) {
 			/* AUX codec registered with ALSA core */
 			aux_cdc_dev_info[codecs_found].of_node =
 						aux_codec_of_node;
@@ -8786,43 +8345,51 @@ static int msm_audio_ssr_register(struct device *dev)
 
 	return ret;
 }
+#ifdef CONFIG_SND_SOC_TFA9874
+int register_receiver_dai_name(struct device *dev, int i2cbus, int addr){
+    char buf[50];
+    char *str;
+    snprintf(buf, 50, "tfa98xx.%x-00%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 receiver name =  %s\n", __func__, str);
+    tfa98xx_dai_names[0].name = str;
 
-#ifdef ASUS_FACTORY_BUILD
-//ASUS_BSP +++   add for codec_status
-static ssize_t audio_codec_proc_read(struct file *filp, char __user *buff, size_t len, loff_t *off)
-{
-       char messages[256];
-       pr_err("[Audio] audio_codec_proc_read, codec_status is %d\n", codec_status);
-       if(*off)
-               return 0;
-       memset(messages, 0, sizeof(messages));
-       if (len > 256)
-               len = 256;
-
-       sprintf(messages, "%d\n", codec_status);
-    if (copy_to_user(buff, messages, sizeof(messages)))
-               return -EFAULT;
-       (*off)++;
-       return len;
+    snprintf(buf, 50, "tfa98xx-aif-%x-%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 receiver dai_name =  %s\n", __func__, str);
+    tfa98xx_dai_names[0].dai_name = str;
+    return 0;
 }
+EXPORT_SYMBOL(register_receiver_dai_name);
 
-static struct file_operations proc_fops=
-{
-    .read=audio_codec_proc_read,
-    .owner=THIS_MODULE,
-};
+int register_speaker_dai_name(struct device *dev, int i2cbus, int addr){
+    char buf[50];
+    char *str;
+    snprintf(buf, 50, "tfa98xx.%x-00%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 speaker name =  %s\n", __func__, str);
+    tfa98xx_dai_names[1].name = str;
 
-static void create_audio_codec_proc_file(void)
-{
-    pr_err("[Audio] create_audio_codec_proc_file\n");
-    audio_codec_proc_file = proc_create(AUDIO_CODEC_PROC_FILE, 0444, NULL, &proc_fops);
-    if (!audio_codec_proc_file){
-        pr_err("[Audio] create_audio_codec_proc_file failed!\n");
-    }
+    snprintf(buf, 50, "tfa98xx-aif-%x-%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 speaker dai_name =  %s\n", __func__, str);
+    tfa98xx_dai_names[1].dai_name = str;
+    return 0;
 }
-//ASUS_BSP ---   add for codec_status
+EXPORT_SYMBOL(register_speaker_dai_name);
 #endif
-
 static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = NULL;
@@ -8846,25 +8413,12 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 				"qcom,lito-is-v2-enabled",
 				&pdata->lito_v2_enabled);
 
-#ifdef ASUS_ZS661KS_PROJECT
 	card = populate_snd_card_dailinks(&pdev->dev);
 	if (!card) {
 		dev_err(&pdev->dev, "%s: Card uninitialized\n", __func__);
 		ret = -EINVAL;
 		goto err;
 	}
-#else
-	if(g_ASUS_hwID == HW_REV_EVB) {
-		card = populate_snd_card_dailinks_evb(&pdev->dev);
-	} else {
-		card = populate_snd_card_dailinks(&pdev->dev);
-	}
-	if (!card) {
-		dev_err(&pdev->dev, "%s: Card uninitialized\n", __func__);
-		ret = -EINVAL;
-		goto err;
-	}
-#endif
 
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
@@ -8876,15 +8430,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 		goto err;
 	}
-
-    #ifdef ASUS_FACTORY_BUILD
-    //ASUS_BSP +++   add for codec_status
-    if(!codec_num){
-        codec_num++;
-        create_audio_codec_proc_file();
-    }
-    //ASUS_BSP ---   add for codec_status
-    #endif
 
 	ret = snd_soc_of_parse_audio_routing(card, "qcom,audio-routing");
 	if (ret) {
@@ -8901,16 +8446,15 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	ret = msm_init_aux_dev(pdev, card);
 	if (ret) {
-		dev_info(&pdev->dev, "%s: msm_init_aux_dev failed (%d)\n",
-			__func__, ret);
+		dev_info(&pdev->dev, "%s: msm_init_aux_dev failed (%d)\n", __func__, ret);
 		goto err;
 	}
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
 		if (codec_reg_done) {
-			dev_err(&pdev->dev, "%s: devm_snd_soc_register_card failed (%d)\n",
-				__func__, ret);
+		   dev_err(&pdev->dev, "%s: devm_snd_soc_register_card failed (%d)\n",
+				   __func__, ret);
 			ret = -EINVAL;
 		}
 		goto err;
@@ -9039,22 +8583,9 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 
 	is_initial_boot = true;
 
-    #ifdef ASUS_FACTORY_BUILD
-    //ASUS_BSP +++   add for codec_status
-    if(!codec_status){
-            codec_status=1;
-    }
-    //ASUS_BSP +++   add for codec_status
-    #endif
-
 	return 0;
 err:
 	devm_kfree(&pdev->dev, pdata);
-    #ifdef ASUS_FACTORY_BUILD
-    //ASUS_BSP +++  add for codec_status
-    codec_status=0;
-    //ASUS_BSP ---   add for codec_status
-    #endif
 	return ret;
 }
 

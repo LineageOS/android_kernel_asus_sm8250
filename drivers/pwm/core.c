@@ -41,6 +41,10 @@ static LIST_HEAD(pwm_chips);
 static DECLARE_BITMAP(allocated_pwms, MAX_PWMS);
 static RADIX_TREE(pwm_tree, GFP_KERNEL);
 
+#ifdef ZS670KS
+bool led_sync = false;
+#endif
+
 static struct pwm_device *pwm_to_device(unsigned int pwm)
 {
 	return radix_tree_lookup(&pwm_tree, pwm);
@@ -555,6 +559,16 @@ int pwm_apply_state(struct pwm_device *pwm, struct pwm_state *state)
 			pwm->state.period = state->period;
 		}
 
+#ifdef ZS670KS
+		if (!strcmp(pwm->label, "blue")) {
+			if (pwm->state.output_type == PWM_OUTPUT_MODULATED){
+				led_sync = true;
+			} else {
+				led_sync = false;
+			}
+		}
+#endif
+
 		if (state->enabled != pwm->state.enabled) {
 			if (state->enabled) {
 				err = pwm->chip->ops->enable(pwm->chip, pwm);
@@ -910,6 +924,7 @@ void pwm_put(struct pwm_device *pwm)
 	if (pwm->chip->ops->free)
 		pwm->chip->ops->free(pwm->chip, pwm);
 
+	pwm_set_chip_data(pwm, NULL);
 	pwm->label = NULL;
 
 	module_put(pwm->chip->ops->owner);

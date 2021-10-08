@@ -8,7 +8,7 @@
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/msm_drm_notify.h>
+//AR porting - #include <linux/msm_drm_notify.h>
 
 #include "ec_i2c_interface.h"
 

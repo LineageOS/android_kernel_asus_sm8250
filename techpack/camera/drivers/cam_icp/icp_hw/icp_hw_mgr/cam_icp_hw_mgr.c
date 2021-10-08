@@ -1741,6 +1741,7 @@ static int cam_icp_mgr_ipe_bps_power_collapse(struct cam_icp_hw_mgr *hw_mgr,
 			bps_dev_intf->hw_ops.deinit
 				(bps_dev_intf->hw_priv, NULL, 0);
 			hw_mgr->bps_clk_state = false;
+			hw_mgr->clk_info[ICP_CLK_HW_BPS].curr_clk = 0;
 		}
 	} else {
 		CAM_DBG(CAM_PERF, "ipe ctx cnt %d", hw_mgr->ipe_ctxt_cnt);
@@ -1776,6 +1777,7 @@ static int cam_icp_mgr_ipe_bps_power_collapse(struct cam_icp_hw_mgr *hw_mgr,
 		}
 
 		hw_mgr->ipe_clk_state = false;
+		hw_mgr->clk_info[ICP_CLK_HW_IPE].curr_clk = 0;
 	}
 
 end:
@@ -5223,7 +5225,7 @@ static int cam_icp_mgr_hw_dump(void *hw_priv, void *hw_dump_args)
 	return 0;
 hw_dump:
 	cur_time = ktime_get();
-	diff = ktime_us_delta(frm_process->submit_timestamp[i], cur_time);
+	diff = ktime_us_delta(cur_time, frm_process->submit_timestamp[i]);
 	cur_ts = ktime_to_timespec64(cur_time);
 	req_ts = ktime_to_timespec64(frm_process->submit_timestamp[i]);
 
@@ -5972,28 +5974,45 @@ compat_hw_name_failed:
 	return rc;
 }
 
+static void cam_req_mgr_process_workq_icp_command_queue(struct work_struct *w)
+{
+	cam_req_mgr_process_workq(w);
+}
+
+static void cam_req_mgr_process_workq_icp_message_queue(struct work_struct *w)
+{
+	cam_req_mgr_process_workq(w);
+}
+
+static void cam_req_mgr_process_workq_icp_timer_queue(struct work_struct *w)
+{
+	cam_req_mgr_process_workq(w);
+}
+
 static int cam_icp_mgr_create_wq(void)
 {
 	int rc;
 	int i;
 
 	rc = cam_req_mgr_workq_create("icp_command_queue", ICP_WORKQ_NUM_TASK,
-		&icp_hw_mgr.cmd_work, CRM_WORKQ_USAGE_NON_IRQ,
-		0);
+		&icp_hw_mgr.cmd_work, CRM_WORKQ_USAGE_NON_IRQ, 0,
+		cam_req_mgr_process_workq_icp_command_queue);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "unable to create a command worker");
 		goto cmd_work_failed;
 	}
 
 	rc = cam_req_mgr_workq_create("icp_message_queue", ICP_WORKQ_NUM_TASK,
-		&icp_hw_mgr.msg_work, CRM_WORKQ_USAGE_IRQ, 0);
+		&icp_hw_mgr.msg_work, CRM_WORKQ_USAGE_IRQ, 0,
+		cam_req_mgr_process_workq_icp_message_queue);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "unable to create a message worker");
 		goto msg_work_failed;
 	}
 
 	rc = cam_req_mgr_workq_create("icp_timer_queue", ICP_WORKQ_NUM_TASK,
-		&icp_hw_mgr.timer_work, CRM_WORKQ_USAGE_IRQ, 0);
+		&icp_hw_mgr.timer_work, CRM_WORKQ_USAGE_IRQ, 0,
+		cam_req_mgr_process_workq_icp_timer_queue);
 	if (rc) {
 		CAM_ERR(CAM_ICP, "unable to create a timer worker");
 		goto timer_work_failed;

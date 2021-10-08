@@ -100,6 +100,7 @@ static int icm_config_sample_rate(struct icm_sensor *sensor);
 static int icm_acc_data_process(struct icm_sensor *sensor);
 static void icm_resume_work_fn(struct work_struct *work);
 static s32 icm_read_byte_data(struct icm_sensor *sensor, u8 command);
+static s32 icm_do_write_byte_data(struct icm_sensor *sensor, u8 command, u8 value);
 static s32 icm_write_byte_data(struct icm_sensor *sensor, u8 command, u8 value);
 static s32 icm_mask_write_byte_data(struct icm_sensor *sensor, u8 command, u8 mask, u8 value);
 static int icm_power_ctl(struct icm_sensor *sensor, bool enable);
@@ -165,12 +166,14 @@ static int icm_read_reg(struct icm_sensor *sensor, u8 reg, u8 *data, int len)
 	if (!data)
 		return -EINVAL;
 
+	mutex_lock(&sensor->bus_lock);
 	d[0] = (reg | INV_SPI_READ);
 
 	spi_message_init(&msg);
 	spi_message_add_tail(&xfers[0], &msg);
 	spi_message_add_tail(&xfers[1], &msg);
 	res = spi_sync(sensor->pdev, &msg);
+	mutex_unlock(&sensor->bus_lock);
 
 	return res;
 
@@ -408,6 +411,21 @@ static irqreturn_t icm_interrupt_routine(int irq, void *data)
 {
 	g_icm_timestamp = ktime_to_timespec(ktime_get_boottime());
 	return IRQ_WAKE_THREAD;
+}
+void icm_reset_ois_channel()
+{
+	int ret;
+	icm_dbgmsg("E\n");
+	ret = icm_write_byte_data(g_icm206xx_sensor, g_icm206xx_sensor->reg.signal_path_reset, 0x00);
+	if (ret < 0) {
+		icm_errmsg("write signal_path_reset failed.\n");
+	}
+	msleep(50);
+	ret = icm_write_byte_data(g_icm206xx_sensor, g_icm206xx_sensor->reg.signal_path_reset, 0x08);
+	if (ret < 0) {
+		icm_dbgmsg("write signal_path_reset failed.\n");
+	}
+	icm_errmsg("X\n");
 }
 static irqreturn_t icm_interrupt_thread(int irq, void *data)
 {
@@ -2063,23 +2081,18 @@ static int icm_check_chip_type(struct icm_sensor *sensor)
 	ret = icm_read_byte_data(sensor,
 		REG_WHOAMI);
 	if (ret < 0)
-		return ret;
+		return 0;
 
 	sensor->deviceid = ret;
+	sensor->chip_type = INV_ICM20690;
 	icm_dbgmsg("WHOAMI=0x%x", ret);
 
-	if (sensor->deviceid == ICM20602_ID) {
-		sensor->chip_type = INV_ICM20602;
-	} else if (sensor->deviceid == ICM20626_ID) {
-		sensor->chip_type = INV_ICM20626;
-	} else if (sensor->deviceid == ICM20690_ID) {
-		sensor->chip_type = INV_ICM20690;
-	} else {
+	if (sensor->deviceid != ICM20690_ID) {
 		icm_errmsg("Invalid chip ID %d\n", sensor->deviceid);
-		return -ENODEV;
+		return 0;
+	} else{
+		return 1;
 	}
-
-	return 0;
 }
 
 /*
@@ -2322,10 +2335,35 @@ static ssize_t gyro2_poll_delay_store(struct class *c, struct class_attribute *a
 	return count;
 }
 static CLASS_ATTR_RW(gyro2_poll_delay);
+static ssize_t icm206xx_get_icm_status_show(struct class *c, struct class_attribute *attr,
+			char *ubuf)
+{
+	s32 ret = 0;
+	u64 l_irq_counter = g_icm_irq_counter;
+	int i = 0;
+	if (!g_icm206xx_sensor) {
+		icm_errmsg("null icm sensor!");
+	} else{
+		icm_accel_set_enable(g_icm206xx_sensor, true);
+		if (ICM20690_ID == icm_read_byte_data(g_icm206xx_sensor, REG_WHOAMI)) {
+			for (i = 0; i < 10; i++) {
+				if (g_icm_irq_counter > l_irq_counter + 1) {
+					ret = 1;
+					break;
+				}
+				msleep(100);
+			}
+		}
+		icm_accel_set_enable(g_icm206xx_sensor, false);
+	}
+	return snprintf(ubuf, PAGE_SIZE, "%d\n", ret);
+}
+static CLASS_ATTR_RO(icm206xx_get_icm_status);
 
 static struct attribute *icm206xx_class_attrs[] = {
 	[ACCEL2_POLL_DELAY]	= &class_attr_accel2_poll_delay.attr,
 	[GYRO2_POLL_DELAY]	= &class_attr_gyro2_poll_delay.attr,
+	[ICM206XX_GET_ICM_STATUS]	= &class_attr_icm206xx_get_icm_status.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(icm206xx_class);
@@ -2418,15 +2456,16 @@ static int icm206xx_accel_miscRelease(struct inode *inode, struct file *file)
 static long icm206xx_accel_miscIoctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
-	int dataI[ICM206XX_ACCEL_DATA_SIZE];
+	int dataI[ASUS_2ND_ACCEL_SENSOR_DATA_SIZE];
 	u8 shift;
+	static int l_counter = 0;
 	if (!g_icm206xx_sensor) {
 		icm_errmsg("null icm ctrl!");
 		ret = -1;
 		goto end;
 	}
 	switch (cmd) {
-		case ICM206XX_ACCEL_IOCTL_DATA_READ:
+		case ASUS_2ND_ACCEL_SENSOR_IOCTL_DATA_READ:
 			icm_acc_data_process(g_icm206xx_sensor);
 			shift = icm_accel_fs_shift[g_icm206xx_sensor->cfg.accel_fs];
 			dataI[0] = g_icm206xx_sensor->axis.x << shift;
@@ -2434,6 +2473,11 @@ static long icm206xx_accel_miscIoctl(struct file *file, unsigned int cmd, unsign
 			dataI[2] = g_icm206xx_sensor->axis.z << shift;
 			icm_dbgmsg("cmd = DATA_READ, data[0] = %d, data[1] = %d, data[2] = %d\n", dataI[0], dataI[1], dataI[2]);
 			ret = copy_to_user((int __user*)arg, &dataI, sizeof(dataI));
+			break;
+		case ASUS_2ND_ACCEL_SENSOR_IOCTL_UPDATE_CALIBRATION:
+			icm_dbgmsg("cmd = UPDATE_CALIBRATION\n");
+			input_report_abs(g_icm206xx_sensor->accel_dev, ABS_BRAKE, ++l_counter);
+			input_sync(g_icm206xx_sensor->accel_dev);
 			break;
 		default:
 			ret = -1;
@@ -2483,10 +2527,11 @@ static int icm206xx_gyro_miscRelease(struct inode *inode, struct file *file)
 static long icm206xx_gyro_miscIoctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
-	int dataI[ICM206XX_GYRO_DATA_SIZE];
+	int dataI[ASUS_2ND_GYRO_SENSOR_DATA_SIZE];
 	u8 shift;
+	static int l_counter = 0;
 	switch (cmd) {
-		case ICM206XX_GYRO_IOCTL_DATA_READ:
+		case ASUS_2ND_GYRO_SENSOR_IOCTL_DATA_READ:
 			icm_read_gyro_data(g_icm206xx_sensor, &g_icm206xx_sensor->axis);
 			icm_remap_gyro_data(&g_icm206xx_sensor->axis,
 				g_icm206xx_sensor->pdata.place);
@@ -2496,6 +2541,11 @@ static long icm206xx_gyro_miscIoctl(struct file *file, unsigned int cmd, unsigne
 			dataI[2] = g_icm206xx_sensor->axis.rz >> shift;
 			icm_dbgmsg("cmd = DATA_READ, data[0] = %d, data[1] = %d, data[2] = %d\n", dataI[0], dataI[1], dataI[2]);
 			ret = copy_to_user((int __user*)arg, &dataI, sizeof(dataI));
+			break;
+		case ASUS_2ND_GYRO_SENSOR_IOCTL_UPDATE_CALIBRATION:
+			icm_dbgmsg("cmd = UPDATE_CALIBRATION\n");
+			input_report_abs(g_icm206xx_sensor->gyro_dev, ABS_BRAKE, ++l_counter);
+			input_sync(g_icm206xx_sensor->gyro_dev);
 			break;
 		default:
 			ret = -1;
@@ -2607,6 +2657,7 @@ static struct input_dev* icm206xx_input_setup(struct icm_sensor *sensor, int sen
 	input_set_capability(l_dev, EV_ABS, ABS_WHEEL); //sec
 	input_set_capability(l_dev, EV_ABS, ABS_GAS); //nsec
 	input_set_capability(l_dev, EV_ABS, ABS_MISC);
+	input_set_capability(l_dev, EV_ABS, ABS_BRAKE);
 	input_set_drvdata(l_dev, sensor);
 
 	if (sensor_type == 0) {
@@ -2667,17 +2718,26 @@ static int icm206xx_init_regulator(struct icm_sensor *sensor)
 		ret = -EINVAL;
 		goto exit;
 	}
-	sensor->vdd = NULL;
+	if (regulator_count_voltages(sensor->power_supply) > 0) {
+		ret = regulator_set_voltage(sensor->power_supply, 2900000, 3450000);
+	}
 #ifdef ASUS_DXO
 	sensor->vdd = regulator_get(sensor->dev, "icm206xx-cam");
 	if (IS_ERR(sensor->vdd)) {
 		sensor->vdd = NULL;
 		icm_dbgmsg("there is no regulator icm206xx-cam\n");
 	}
-#endif
-	if (regulator_count_voltages(sensor->power_supply) > 0) {
-		ret = regulator_set_voltage(sensor->power_supply, 1710000, 3450000);
+#else
+	sensor->vdd = regulator_get(sensor->dev, "icm206xx-vdd");
+	if (IS_ERR(sensor->vdd)) {
+		sensor->vdd = NULL;
+		icm_dbgmsg("there is no regulator icm206xx-vdd\n");
+	} else{
+		if (regulator_count_voltages(sensor->vdd) > 0) {
+			regulator_set_voltage(sensor->vdd, 1710000, 3450000);
+		}
 	}
+#endif
 exit:
 	return ret;
 }
@@ -2766,7 +2826,6 @@ static void icm_deinit()
 			gpio_free((g_icm206xx_sensor->pdata).gpio_int);
 			l_init_status->gpio_inited = false;
 		}
-		wakeup_source_trash(&g_icm206xx_sensor->icm206xx_wakeup_source);
 		devm_kfree(g_icm206xx_sensor->dev, g_icm206xx_sensor);
 		g_icm206xx_sensor = NULL;
 	}
@@ -2851,6 +2910,18 @@ static bool icm_spi_check_bus(struct spi_device *spi)
 	}
 	return true;
 }
+static void icm_irq_ctl(int irq, bool enable)
+{
+	static bool enabled = true;
+	if (enabled != enable) {
+		if (enable) {
+			enable_irq(irq);
+		} else{
+			disable_irq(irq);
+		}
+		enabled = enable;
+	}
+}
 /*
  * icm_probe() - device detection callback
  * @client: i2c client of found device
@@ -2885,7 +2956,7 @@ static int icm_spi_probe(struct spi_device *pdev)
 	dev_set_drvdata(&pdev->dev, sensor);
 	g_icm206xx_sensor = sensor;
 	pdata = &sensor->pdata;
-	wakeup_source_init(&sensor->icm206xx_wakeup_source, "icm206xx_wakeup_source");
+	device_init_wakeup(sensor->dev, true);
 
 	if (pdev->dev.of_node) {
 		ret = icm_parse_dt(&pdev->dev, pdata);
@@ -2902,6 +2973,7 @@ static int icm_spi_probe(struct spi_device *pdev)
 	}
 
 	mutex_init(&sensor->op_lock);
+	mutex_init(&sensor->bus_lock);
 	ret = icm206xx_init_regulator(sensor);
 	if (ret) {
 		icm_errmsg("icm206xx_init_regulator failed\n");
@@ -2941,7 +3013,7 @@ static int icm_spi_probe(struct spi_device *pdev)
 				icm_interrupt_routine, icm_interrupt_thread,
 				pdata->int_flags | IRQF_ONESHOT,
 				"icm", sensor);
-		disable_irq(sensor->irq);
+		icm_irq_ctl(sensor->irq, false);
 		if (ret) {
 			icm_errmsg("Can't get IRQ %d, error %d\n",
 				sensor->irq, ret);
@@ -2958,33 +3030,10 @@ static int icm_spi_probe(struct spi_device *pdev)
 		goto probe_failed;
 	}
 
-	ret = icm_check_chip_type(sensor);
-	if (ret) {
-		icm_errmsg("Cannot get invalid chip type\n");
-		goto probe_failed;
-	}
-
-	icm_dbgmsg("sensor->deviceid=0x%02X, sensor->chip_type=0x%02X\n", sensor->deviceid, sensor->chip_type);
-	if(sensor->deviceid == ICM20690_ID)
-		g_icm206xx_status = 1;
-	
-	ret = icm_init_engine(sensor);
-	if (ret) {
-		icm_errmsg("Failed to init chip engine\n");
-		goto probe_failed;
-	}
-
 	sensor->cfg.is_asleep = false;
 	atomic_set(&sensor->accel_en, 0);
 	atomic_set(&sensor->gyro_en, 0);
-	icm_reset_chip(sensor);
 	icm_init_config(sensor);
-	ret = icm_restore_context(sensor, true);
-	if (ret) {
-		icm_errmsg("Failed to set default config\n");
-		goto probe_failed;
-	}
-
 	sensor->accel_poll_ms = ICM_ACCEL_DEFAULT_POLL_INTERVAL_MS;
 	sensor->gyro_poll_ms = ICM_GYRO_DEFAULT_POLL_INTERVAL_MS;
 
@@ -3014,10 +3063,20 @@ static int icm_spi_probe(struct spi_device *pdev)
 	sensor->gyr_task = kthread_run(gyro_poll_thread, sensor, "sns_gyro");
 	sensor->accel_task = kthread_run(accel_poll_thread, sensor, "sns_accel");
 
-	ret = icm206xx_input_setup_BMMI(sensor);
-	if (ret) {
-		icm_errmsg("Failed to register input device - BMMI\n");
-		goto probe_failed;
+	g_icm206xx_status = icm_check_chip_type(sensor);
+
+	if (g_icm206xx_status) {
+		ret = icm_init_engine(sensor);
+		if (ret) {
+			icm_errmsg("Failed to init chip engine\n");
+			goto probe_failed;
+		}
+		icm_reset_chip(sensor);
+		ret = icm_restore_context(sensor, true);
+		if (ret) {
+			icm_errmsg("Failed to set default config\n");
+			goto probe_failed;
+		}
 	}
 
 	sensor->accel_dev = icm206xx_input_setup(sensor, 0);
@@ -3030,6 +3089,11 @@ static int icm_spi_probe(struct spi_device *pdev)
 	if (!sensor->gyro_dev) {
 		icm_errmsg("Failed to register gyro input device\n");
 		ret = -1;
+		goto probe_failed;
+	}
+	ret = icm206xx_input_setup_BMMI(sensor);
+	if (ret) {
+		icm_errmsg("Failed to register input device - BMMI\n");
 		goto probe_failed;
 	}
 
@@ -3292,11 +3356,11 @@ static int icm_power_up(struct icm_sensor *sensor)
 	}
 	g_icm206xx_sensor->power_enabled = true;
 	if (g_icm206xx_sensor->irq) {
-		enable_irq(g_icm206xx_sensor->irq);
+		icm_irq_ctl(g_icm206xx_sensor->irq, true);
 	} else{
 		icm_errmsg("invalid irq");
 	}
-	__pm_stay_awake(&g_icm206xx_sensor->icm206xx_wakeup_source);
+	pm_stay_awake(g_icm206xx_sensor->dev);
 exit:
 	return rc;
 }
@@ -3306,7 +3370,7 @@ static int icm_power_down(struct icm_sensor *sensor)
 	int rc = 0;
 
 	if (g_icm206xx_sensor->irq) {
-		disable_irq(g_icm206xx_sensor->irq);
+		icm_irq_ctl(g_icm206xx_sensor->irq, false);
 	} else{
 		icm_errmsg("invalid irq");
 	}
@@ -3326,7 +3390,7 @@ static int icm_power_down(struct icm_sensor *sensor)
 	if (sensor->vdd) {
 		regulator_disable(sensor->vdd);
 	}
-	__pm_relax(&g_icm206xx_sensor->icm206xx_wakeup_source);
+	pm_relax(g_icm206xx_sensor->dev);
 	return rc;
 }
 
@@ -3349,18 +3413,37 @@ static s32 icm_read_byte_data(struct icm_sensor *sensor, u8 reg)
 		 }
 	};
 
+	mutex_lock(&sensor->bus_lock);
 	d[0] = (reg | INV_SPI_READ);
 
 	spi_message_init(&msg);
 	spi_message_add_tail(&xfers[0], &msg);
 	spi_message_add_tail(&xfers[1], &msg);
 	res = spi_sync(sensor->pdev, &msg);
+	mutex_unlock(&sensor->bus_lock);
 
 	return (res == 0 ? data : res);
 
 }
 
 static s32 icm_write_byte_data(struct icm_sensor *sensor, u8 reg, u8 data)
+{
+	int res = -1;
+	int read_data;
+	int count = 5;
+	u8 i = 0;
+	for (i = 0; i < count; i++) {
+		res = icm_do_write_byte_data(sensor, reg, data);
+		read_data = icm_read_byte_data(sensor, reg);
+		if (read_data != data) {
+			icm_errmsg("i = %u/%u, addr = %u, write data = %u, read data = %d, result = %d\n", i, count, reg, data, read_data, res);
+		} else{
+			break;
+		}
+	}
+	return res;
+}
+static s32 icm_do_write_byte_data(struct icm_sensor *sensor, u8 reg, u8 data)
 {
 	struct spi_message msg;
 	int res;
@@ -3371,6 +3454,7 @@ static s32 icm_write_byte_data(struct icm_sensor *sensor, u8 reg, u8 data)
 		.len = 2,
 	};
 
+	mutex_lock(&sensor->bus_lock);
 	d[0] = reg;
 	d[1] = data;
 	spi_message_init(&msg);
@@ -3379,6 +3463,7 @@ static s32 icm_write_byte_data(struct icm_sensor *sensor, u8 reg, u8 data)
 	if (g_icm_debugMode) {
 		icm_dbgmsg("%02x: %02x\n", reg, data);
 	}
+	mutex_unlock(&sensor->bus_lock);
 
 	return res;
 }

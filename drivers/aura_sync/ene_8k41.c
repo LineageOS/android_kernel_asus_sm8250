@@ -135,7 +135,7 @@ static int ene_GetFirmwareSize(char *firmware_name)
 		pr_err("error occured while opening file %s.\n", filepath);
 		return -EIO;
 	}
-	inode = pfile->f_dentry->d_inode;
+	inode = file_inode(pfile);
 	magic = inode->i_sb->s_magic;
 	fsize = inode->i_size;
 	filp_close(pfile, NULL);
@@ -161,7 +161,7 @@ static int ene_ReadFirmware(char *fw_name, unsigned char *fw_buf)
 		pr_err("error occured while opening file %s.\n", filepath);
 		return -EIO;
 	}
-	inode = pfile->f_dentry->d_inode;
+	inode = file_inode(pfile);
 	magic = inode->i_sb->s_magic;
 	fsize = inode->i_size;
 	old_fs = get_fs();
@@ -1766,7 +1766,7 @@ static void aura_resume_work(struct work_struct *work)
 	int i=0;
 	u8 tmp=0;
 
-	wake_lock(&g_pdata->aura_wake_lock);
+	__pm_stay_awake(&g_pdata->aura_wake_lock);
 	// Enable Bumper if in need
 	if(bumper_enable){
 		printk("[AURA_SYNC] aura_resume_work to enable bumper LED\n");
@@ -1786,12 +1786,15 @@ static void aura_resume_work(struct work_struct *work)
 				break;
 			}
 		}
-
+	if(lid2_status) {
+		printk("[ASUS_SYNC] lid2_status:0x%x, open Bumper.\n", lid2_status);
 		bumper_switch(1);
+	} else
+		printk("[ASUS_SYNC] lid2_status:0x%x, no need open Bumper.\n", lid2_status);
 		//if ((g_ASUS_hwID >= ZS660KL_EVB && g_ASUS_hwID < ZS660KL_ER2) || (g_ASUS_hwID >= ZS660KL_CN_EVB && g_ASUS_hwID < ZS660KL_CN_ER2))
 			//bumper_vdd_switch(1);
 	}
-	wake_unlock(&g_pdata->aura_wake_lock);
+	__pm_relax(&g_pdata->aura_wake_lock);
 }
 
 // Check FW work
@@ -1897,7 +1900,7 @@ static int ene_8k41_probe(struct i2c_client *client, const struct i2c_device_id 
 {
 	int err = 0;
 	struct ene_8k41_platform_data *platform_data;
-	
+
 	printk("[AURA_SYNC] ene_8k41_probe.\n");
 
 	if(g_Charger_mode) {
@@ -2042,7 +2045,8 @@ if (platform_data->aura_front_en != -ENOENT )
 	INIT_WORK(&platform_data->resume_aura_work, aura_resume_work);
 
 // Init wake lock
-	wake_lock_init(&platform_data->aura_wake_lock, WAKE_LOCK_SUSPEND, "aura_wake_lock");
+	//wake_lock_init(&platform_data->aura_wake_lock, WAKE_LOCK_SUSPEND, "aura_wake_lock");
+	wakeup_source_init(&platform_data->aura_wake_lock, "aura_wake_lock");
 	wakeup_source_init(&ene_wakelock, "ene_wakelock");
 
 //#ifdef ASUS_FTM

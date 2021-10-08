@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -63,7 +63,7 @@ struct antenna_switch_vreg {
 // static int do_antenna_switch = 1;
 // module_param(do_antenna_switch, int, S_IWUSR | S_IRUGO);
 // MODULE_PARM_DESC(do_antenna_switch, "Switch VREG_L16A_3P3 flag");
-static struct antenna_switch_vreg priv_switch_vreg = { NULL, "vdd-3.0-antenna", 3000000, 3000000, 0, false};
+static struct antenna_switch_vreg priv_switch_vreg = { NULL, "vdd-3.0-antenna", 2850000, 2850000, 0, false};
 //ASUS_BSP --- JACK "add for the antenna switch power (LDO16A)"
 
 
@@ -1378,6 +1378,9 @@ static int pil_tz_driver_probe(struct platform_device *pdev)
 			goto err_ramdump;
 		}
 	}
+
+	d->desc.sequential_loading = of_property_read_bool(pdev->dev.of_node,
+						"qcom,sequential-fw-load");
 
 	d->ramdump_dev = create_ramdump_device(d->subsys_desc.name,
 								&pdev->dev);

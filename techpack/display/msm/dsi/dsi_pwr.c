@@ -11,7 +11,6 @@
 #include "dsi_parser.h"
 #include "dsi_defs.h"
 
-extern bool g_Recovery_mode;
 /*
  * dsi_pwr_parse_supply_node() - parse power supply node from root device node
  */
@@ -173,14 +172,6 @@ static int dsi_pwr_enable_vregs(struct dsi_regulator_info *regs, bool enable)
 	} else {
 		for (i = (regs->count - 1); i >= 0; i--) {
 			vreg = &regs->vregs[i];
-
-			if(g_Recovery_mode){
-				if(strcmp(vreg->vreg_name,"vdda-1p2")==0){
-					printk("dsi_pwr_enable_vregs skip disable %s for Recovery_mode reboot \n",vreg->vreg_name);
-					continue;
-				}
-			}
-
 			pre_off_ms = vreg->pre_off_sleep;
 			post_off_ms = vreg->post_off_sleep;
 
@@ -196,6 +187,7 @@ static int dsi_pwr_enable_vregs(struct dsi_regulator_info *regs, bool enable)
 			(void)regulator_set_load(regs->vregs[i].vreg,
 						regs->vregs[i].disable_load);
 			(void)regulator_disable(regs->vregs[i].vreg);
+
 			if (post_off_ms)
 				usleep_range((post_off_ms * 1000),
 						(post_off_ms * 1000) + 10);

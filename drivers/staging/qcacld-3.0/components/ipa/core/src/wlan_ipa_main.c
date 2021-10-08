@@ -125,7 +125,7 @@ void ipa_set_dp_handle(struct wlan_objmgr_psoc *psoc, void *dp_soc)
 	wlan_objmgr_pdev_release_ref(pdev, WLAN_IPA_ID);
 }
 
-void ipa_set_txrx_handle(struct wlan_objmgr_psoc *psoc, void *txrx_handle)
+void ipa_set_pdev_id(struct wlan_objmgr_psoc *psoc, uint8_t pdev_id)
 {
 	struct wlan_objmgr_pdev *pdev;
 	struct wlan_ipa_priv *ipa_obj;
@@ -150,7 +150,7 @@ void ipa_set_txrx_handle(struct wlan_objmgr_psoc *psoc, void *txrx_handle)
 		return;
 	}
 
-	ipa_obj->dp_pdev = txrx_handle;
+	ipa_obj->dp_pdev_id = pdev_id;
 	wlan_objmgr_pdev_release_ref(pdev, WLAN_IPA_ID);
 }
 
@@ -377,6 +377,11 @@ void ipa_uc_force_pipe_shutdown(struct wlan_objmgr_pdev *pdev)
 {
 	struct wlan_ipa_priv *ipa_obj;
 
+	if (!pdev) {
+		ipa_debug("objmgr pdev is null!");
+		return;
+	}
+
 	if (!ipa_config_is_enabled()) {
 		ipa_debug("ipa is disabled");
 		return;
@@ -516,7 +521,7 @@ QDF_STATUS ipa_send_mcc_scc_msg(struct wlan_objmgr_pdev *pdev,
 }
 
 QDF_STATUS ipa_wlan_evt(struct wlan_objmgr_pdev *pdev, qdf_netdev_t net_dev,
-			uint8_t device_mode, uint8_t sta_id, uint8_t session_id,
+			uint8_t device_mode, uint8_t session_id,
 			enum wlan_ipa_wlan_event ipa_event_type,
 			uint8_t *mac_addr)
 {
@@ -528,7 +533,7 @@ QDF_STATUS ipa_wlan_evt(struct wlan_objmgr_pdev *pdev, qdf_netdev_t net_dev,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	return wlan_ipa_wlan_evt(net_dev, device_mode, sta_id, session_id,
+	return wlan_ipa_wlan_evt(net_dev, device_mode, session_id,
 				 ipa_event_type, mac_addr);
 }
 
@@ -614,6 +619,11 @@ void ipa_fw_rejuvenate_send_msg(struct wlan_objmgr_pdev *pdev)
 {
 	struct wlan_ipa_priv *ipa_obj;
 
+	if (!pdev) {
+		ipa_debug("objmgr pdev is null!");
+		return;
+	}
+
 	ipa_obj = ipa_pdev_get_priv_obj(pdev);
 	if (!ipa_obj) {
 		ipa_err("IPA object is NULL");
@@ -673,4 +683,21 @@ void ipa_update_tx_stats(struct wlan_objmgr_pdev *pdev, uint64_t sta_tx,
 	}
 
 	wlan_ipa_update_tx_stats(ipa_obj, sta_tx, ap_tx);
+}
+
+void ipa_flush_pending_vdev_events(struct wlan_objmgr_pdev *pdev,
+				   uint8_t vdev_id)
+{
+	struct wlan_ipa_priv *ipa_obj;
+
+	if (!ipa_config_is_enabled())
+		return;
+
+	ipa_obj = ipa_pdev_get_priv_obj(pdev);
+	if (!ipa_obj) {
+		ipa_err("IPA object is NULL");
+		return;
+	}
+
+	wlan_ipa_flush_pending_vdev_events(ipa_obj, vdev_id);
 }

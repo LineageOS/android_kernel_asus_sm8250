@@ -323,6 +323,8 @@ static int vblank_ctrl_queue_work(struct msm_drm_private *priv,
 					int crtc_id, bool enable)
 {
 	struct vblank_work *cur_work;
+	struct drm_crtc *crtc;
+	struct kthread_worker *worker;
 
 	if (!priv || crtc_id >= priv->num_crtcs)
 		return -EINVAL;
@@ -331,14 +333,15 @@ static int vblank_ctrl_queue_work(struct msm_drm_private *priv,
 	if (!cur_work)
 		return -ENOMEM;
 
+	crtc = priv->crtcs[crtc_id];
+
 	kthread_init_work(&cur_work->work, vblank_ctrl_worker);
 	cur_work->crtc_id = crtc_id;
 	cur_work->enable = enable;
 	cur_work->priv = priv;
+	worker = &priv->event_thread[crtc_id].worker;
 
-	kthread_queue_work(&priv->event_thread[crtc_id].worker,
-						&cur_work->work);
-
+	kthread_queue_work(worker, &cur_work->work);
 	return 0;
 }
 
@@ -805,16 +808,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 		priv->fbdev = msm_fbdev_init(ddev);
 #endif
 
-	priv->debug_root = debugfs_create_dir("debug",
-					ddev->primary->debugfs_root);
-	if (IS_ERR_OR_NULL(priv->debug_root)) {
-		pr_err("debugfs_root create_dir fail, error %ld\n",
-		       PTR_ERR(priv->debug_root));
-		priv->debug_root = NULL;
-		goto fail;
-	}
-
-	ret = sde_dbg_debugfs_register(priv->debug_root);
+	ret = sde_dbg_debugfs_register(dev);
 	if (ret) {
 		dev_err(dev, "failed to reg sde dbg debugfs: %d\n", ret);
 		goto fail;
@@ -1019,10 +1013,11 @@ static void msm_lastclose(struct drm_device *dev)
 
 	/* check for splash status before triggering cleanup
 	 * if we end up here with splash status ON i.e before first
-	 * commit then ignore the last close call
+	 * commit then ignore the last close call. Also, ignore
+	 * if kms module is not yet initialized.
 	 */
-	if (kms && kms->funcs && kms->funcs->check_for_splash
-		&& kms->funcs->check_for_splash(kms))
+	if (!kms || (kms && kms->funcs && kms->funcs->check_for_splash
+		&& kms->funcs->check_for_splash(kms)))
 		return;
 
 	/*
@@ -1590,17 +1585,24 @@ int msm_ioctl_power_ctrl(struct drm_device *dev, void *data,
 		pr_err("ignoring, unbalanced disable\n");
 	}
 
+	mutex_lock(&priv->phandle.ext_client_lock);
+
 	if (vote_req) {
-		if (power_ctrl->enable)
+		if (power_ctrl->enable) {
 			rc = pm_runtime_get_sync(dev->dev);
-		else
+			priv->phandle.is_ext_vote_en = true;
+		} else {
 			pm_runtime_put_sync(dev->dev);
+			 priv->phandle.is_ext_vote_en = false;
+		}
 
 		if (rc < 0)
 			ctx->enable_refcnt = old_cnt;
 		else
 			rc = 0;
 	}
+
+	mutex_unlock(&priv->phandle.ext_client_lock);
 
 	pr_debug("pid %d enable %d, refcnt %d, vote_req %d\n",
 			current->pid, power_ctrl->enable, ctx->enable_refcnt,

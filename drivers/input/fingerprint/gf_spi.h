@@ -152,6 +152,7 @@ struct gf_dev {
 	char device_available;
 	char fb_black;
 	struct regulator *vcc;
+	struct wakeup_source *ws;
 };
 
 int gf_parse_dts(struct gf_dev *gf_dev);

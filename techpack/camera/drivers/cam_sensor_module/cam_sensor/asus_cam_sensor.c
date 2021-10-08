@@ -59,6 +59,12 @@ static uint8_t otp_data_id[MAX_CAMERA_ID + 1][OTP_ID_LEN];
 #define ZF7_DxO_REMOSAIC_CALI_SIZE (ZF7_DxO_REMOSAIC_CALI_END-ZF7_DxO_REMOSAIC_CALI_START+1)
 //ASUS_BSP Bryant --- "Zenfone7_DXO eeprom setting"
 
+//ASUS_BSP Bryant +++ For imx686 low sku remosaic
+#define ZF7L_REMOSAIC_CALI_START 0x1023
+#define ZF7L_REMOSAIC_CALI_END 0x1BF4
+#define ZF7L_REMOSAIC_CALI_SIZE (REMOSAIC_CALI_END-REMOSAIC_CALI_START+1)
+//ASUS_BSP Bryant +++ For imx686 low sku remosaic
+
 //ASUS_BSP Byron +++
 #define CALI_AF_INFINITY_START 0x0
 #define CALI_AF_MACRO_START 0x4
@@ -101,20 +107,41 @@ typedef struct
 //ASUS_BSP Byron EEprom [Step.1] Add your camera module here +++
 //Use OTP: EEPROM index must > 8 in dtsi. EEPROM size >= OTP_DATA_LEN_BYTE*3
 
+//<2020/12/15-[ZS661KS][PORTING][COMMON][CAMERA][][]Code base upgrade and modified the green preview screen of ov13855.
+#if( 0 ) /* Source */
 static eeprom_group_t  g_eeprom_group[] =
 {
 //MODULE_ID ID_OFFSET                  SENSOR_NAME AF_INFINITY_START_ADDR  AF_MACRO_START_ADDR  PDAF_CALI_START_ADDR    REMOSAIC_CALI_START_ADDR     LRC_START  LRC_SIZE DUAL_NUM  IS_CHANGED
-  {0x68, EEPROM_MODULEID_OFFSET,       "OV13855_R", -1                    , -1                 , -1,                     -1,                          -1,         0,        0,       0},
   {0x6B, EEPROM_MODULEID_OFFSET,       "IMX686_H",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, ZF7_DxO_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
-  {0x71, EEPROM_MODULEID_OFFSET,       "IMX686_L",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, ZF7_DxO_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
+  //{0x71, EEPROM_MODULEID_OFFSET,       "IMX686_L",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, ZF7_DxO_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
+  {0x71, EEPROM_MODULEID_OFFSET,       "IMX686_L",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START,  ZF7L_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
   {0x6C, EEPROM_MODULEID_OFFSET,       "IMX363_H",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       2,       0},
   {0x6D, EEPROM_MODULEID_OFFSET,       "IMX363_L",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       1,       0},
   {0x6E, EEPROM_MODULEID_OFFSET,       "OV08A10_H", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       0,       0},
   {0x70, EEPROM_MODULEID_OFFSET,       "OV08A10_L", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       0,       0},
   {0x6A, EEPROM_MODULEID_OFFSET,       "IMX686_R",  CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, REMOSAIC_CALI_START,         LRC_START, LRC_SIZE, 1,       0},
   {0x67, EEPROM_MODULEID_OFFSET,       "OV24B1Q_R", -1                    , -1                  , -1,                     OV24B1Q_EEPROM_MAP_START,    -1,         0,        0,       0},
+  {0x68, SHARE_EEPROM_MODULEID_OFFSET, "OV13855_R", -1                    , -1                  , -1,                     -1,                          -1,         0,        0,       0},
   {0x6F, EEPROM_MODULEID_OFFSET,       "OV8856_R" , -1                    , -1                  , -1,                     -1,                          -1,         0,        0,       0},
 };
+#else /* From Android Q. */
+static eeprom_group_t  g_eeprom_group[] =
+{
+//MODULE_ID ID_OFFSET                  SENSOR_NAME AF_INFINITY_START_ADDR  AF_MACRO_START_ADDR  PDAF_CALI_START_ADDR    REMOSAIC_CALI_START_ADDR     LRC_START  LRC_SIZE DUAL_NUM  IS_CHANGED
+  {0x68, EEPROM_MODULEID_OFFSET,      "OV13855_R", -1                    , -1                 , -1,                     -1,                          -1,         0,        0,       0},
+  {0x6B, EEPROM_MODULEID_OFFSET,       "IMX686_H", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, ZF7_DxO_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
+//{0x71, EEPROM_MODULEID_OFFSET,       "IMX686_L", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, ZF7_DxO_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
+  {0x71, EEPROM_MODULEID_OFFSET,       "IMX686_L", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START,  ZF7L_REMOSAIC_CALI_START, LRC_START, LRC_SIZE, 0,       0},
+  {0x6C, EEPROM_MODULEID_OFFSET,       "IMX363_H", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       2,       0},
+  {0x6D, EEPROM_MODULEID_OFFSET,       "IMX363_L", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       1,       0},
+  {0x6E, EEPROM_MODULEID_OFFSET,      "OV08A10_H", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       0,       0},
+  {0x70, EEPROM_MODULEID_OFFSET,      "OV08A10_L", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_START,        -1,                          -1,         0,       0,       0},
+  {0x6A, EEPROM_MODULEID_OFFSET,       "IMX686_R", CALI_AF_INFINITY_START, CALI_AF_MACRO_START, PDAF_CALI_IMX686_START, REMOSAIC_CALI_START,         LRC_START, LRC_SIZE, 1,       0},
+  {0x67, EEPROM_MODULEID_OFFSET,      "OV24B1Q_R", -1                    , -1                 , -1,                     OV24B1Q_EEPROM_MAP_START,    -1,         0,        0,       0},
+  {0x6F, EEPROM_MODULEID_OFFSET,      "OV8856_R" , -1                    , -1                 , -1,                     -1,                          -1,         0,        0,       0},
+};
+#endif
+//>2020/12/15-[ZS661KS][PORTING][COMMON][CAMERA][][].
 //ASUS_BSP Byron EEprom [Step.1] Add your camera module here ---
 
 typedef struct
@@ -1184,8 +1211,8 @@ static void copy_to_dit_eeprom(struct cam_eeprom_ctrl_t *e_ctrl, uint8_t moduleG
 
 void getSpecificDITEEpromFileDir(uint8_t moduleGroupIndex, char *dit_dut_factory_file_dir, char *dit_dut_golden_file_dir) {
 	char dit_dut_bin_name[20];
-	sprintf(dit_dut_bin_name, DIT_DUT_BIN, g_eeprom_group[moduleGroupIndex].physicalSensorModuleName);
-	pr_info("[DIT_EEPROM] moduleGroupIndex(%u)  dit_dut_bin_name(%s)\n", moduleGroupIndex, dit_dut_bin_name);
+	sprintf(dit_dut_bin_name,DIT_DUT_BIN, g_eeprom_group[moduleGroupIndex].physicalSensorModuleName);
+	pr_info("[DIT_EEPROM] moduleGroupIndex(%u)  dit_dut_bin_name(%s)\n",moduleGroupIndex, dit_dut_bin_name);
 	sprintf(dit_dut_factory_file_dir, "/vendor/factory/%s", dit_dut_bin_name);
 	sprintf(dit_dut_golden_file_dir, "/vendor/lib64/camera/%s", dit_dut_bin_name);
 	pr_info("[DIT_EEPROM] factory file dir(%s), golden file dir(%s)\n", dit_dut_factory_file_dir, dit_dut_golden_file_dir);
@@ -1523,7 +1550,7 @@ static int eeprom_to_otp_read(struct seq_file *buf, void *v)
 						for( j = 0; j < 8; j++)
 						{
 							seq_printf(buf, "0x00 ");
-							num++;
+							num++;  // Copy when code base upgrade.
 						}
 					}
 					else
@@ -1712,8 +1739,8 @@ void eeprom_dump_create(struct cam_eeprom_ctrl_t * e_ctrl,uint8_t moduleGroupInd
 
 		//- create proc files
 		create_proc_file(file_name, &eeprom_proc_fops, &g_eeprom_info[moduleGroupIndex]);  //creat  driver/rear_eeprom file
-		create_proc_file(otp_name, &eeprom_to_otp_fops, &g_eeprom_info[moduleGroupIndex]); // eeprom to otp   "driver/otp"
-		create_proc_file(dit_file_name, &dit_eeprom_proc_fops, &g_dit_eeprom_info[moduleGroupIndex]);   //"driver/dit_eeprom"
+		create_proc_file(otp_name, &eeprom_to_otp_fops, &g_eeprom_info[moduleGroupIndex]); // eeprom to otp   "driver/rear_otp"
+		create_proc_file(dit_file_name, &dit_eeprom_proc_fops, &g_dit_eeprom_info[moduleGroupIndex]);   //"driver/dit_rear_eeprom"
 
 
 		//TODO Randy need to add proc file(PROC_ARCSOFT_CALI_1x,PROC_ARCSOFT_CALI_3x) here
@@ -1807,6 +1834,15 @@ void asus_cam_sensor_init(struct cam_sensor_ctrl_t *s_ctrl)
 		pr_err("s_ctrl is NULL\n");
 		return;
 	}
+
+
+//ASUS_BSP+++ CR_on zf7, only camera 2 will be created Randy_Change@asus.com.tw [2020/3/13] Modify Begin
+//	if((s_ctrl->id == CAMERA_1 || s_ctrl->id == CAMERA_4) && (s_ctrl->sensordata->slave_info.sensor_id == 0x363))
+//	{
+//	 	pr_err("On ZF7 only camera id 2 will be created, camera 1 ignore\n");
+//		return;
+//	}
+//ASUS_BSP--- CR_on zf7, only camera 2 will be created Randy_Change@asus.com.tw [2020/3/13] Modify End
 
 	if(s_ctrl->id > MAX_CAMERA_ID)
 	{

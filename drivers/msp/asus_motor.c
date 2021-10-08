@@ -14,6 +14,10 @@
 #define PROC_MOTOR_ANGLE_MODE   "driver/motor_angle"
 #define PROC_MOTOR_DRV_MODE     "driver/motor_drv"
 #define PROC_MOTOR_AKM_MODE     "driver/motor_akm"
+#define PROC_MOTOR_K    		"driver/motor_k"
+#define PROC_WQ_RUN    			"driver/motor_wq_run"
+#define PROC_MOTOR_STATE	    "driver/motor_state"
+#define PROC_MOTOR_KANGLE	    "driver/motor_tk_angle"
 
 static struct MSP430FR2311_info * motor_ctrl = NULL;
 
@@ -417,7 +421,7 @@ static ssize_t motor_param_proc_write(struct file *filp, const char __user *buff
 #define MAX_PARAM_MSG_LEN 100
 	char messages[MAX_PARAM_MSG_LEN]="";
 	char Zen7messages[MAX_PARAM_MSG_LEN]="";
-	uint16_t val[14];
+	uint16_t val[20];
 	uint16_t Zen7Val[20];	//Dir freq*6 step*6 mode*6 EndFlage(0xFD).
 	int rc = 0;
 	
@@ -431,15 +435,16 @@ static ssize_t motor_param_proc_write(struct file *filp, const char __user *buff
 		memcpy(Zen7messages, messages, sizeof(messages));
 	}
 
-	sscanf(messages,"%d %d %d %d %d %d %d %d %d %d %d %d %d %d",&val[0], &val[1], &val[2],&val[3], &val[4], &val[5],&val[6], &val[7], &val[8],&val[9], &val[10], &val[11], &val[12], &val[13]);
-
+	//sscanf(messages,"%d %d %d %d %d %d %d %d %d %d %d %d %d %d",&val[0], &val[1], &val[2],&val[3], &val[4], &val[5],&val[6], &val[7], &val[8],&val[9], &val[10], &val[11], &val[12], &val[13]);
+	sscanf(messages,"%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",&val[0], &val[1], &val[2], &val[3], &val[4], &val[5], &val[6], &val[7], &val[8], &val[9], &val[10], &val[11], &val[12], &val[13], &val[14], &val[15], &val[16], &val[17], &val[18], &val[19]);
+	
 	pr_info("[MCU] dump param write = %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",val[0], val[1], val[2],val[3], val[4], val[5],val[6], val[7], val[8],val[9], val[10], val[11], val[12], val[13]);
 
 	if (val[13] != 0xfe) {
 		//Make sure that, zen7's 'mode value range is 0~10.
 		if(1){	//(((val[13]&0x0F) >= 0) && ((val[13]&0x0F) <= 10))
-			sscanf(messages,"%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",&Zen7Val[0], &Zen7Val[1], &Zen7Val[2], &Zen7Val[3], &Zen7Val[4], &Zen7Val[5], &Zen7Val[6], &Zen7Val[7], &Zen7Val[8], &Zen7Val[9], &Zen7Val[10], &Zen7Val[11], &Zen7Val[12], &Zen7Val[13], &Zen7Val[14], &Zen7Val[15], &Zen7Val[16], &Zen7Val[17], &Zen7Val[18], &Zen7Val[19]);
-
+			//sscanf(messages,"%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d",&Zen7Val[0], &Zen7Val[1], &Zen7Val[2], &Zen7Val[3], &Zen7Val[4], &Zen7Val[5], &Zen7Val[6], &Zen7Val[7], &Zen7Val[8], &Zen7Val[9], &Zen7Val[10], &Zen7Val[11], &Zen7Val[12], &Zen7Val[13], &Zen7Val[14], &Zen7Val[15], &Zen7Val[16], &Zen7Val[17], &Zen7Val[18], &Zen7Val[19]);
+			memcpy(Zen7Val, val, sizeof(val));
 			pr_err("[MCU] long cmd = %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
 				Zen7Val[0], Zen7Val[1], Zen7Val[2], Zen7Val[3], Zen7Val[4], Zen7Val[5], Zen7Val[6], Zen7Val[7], Zen7Val[8], Zen7Val[9], Zen7Val[10], Zen7Val[11], Zen7Val[12], 
 				Zen7Val[13], Zen7Val[14], Zen7Val[15], Zen7Val[16], Zen7Val[17], Zen7Val[18], Zen7Val[19]);
@@ -504,7 +509,7 @@ static ssize_t motor_angle_proc_write(struct file *filp, const char __user *buff
 {
 	ssize_t ret_len;
 	char messages[16]="";
-	uint16_t val[3];
+	uint16_t val[4];
 	int rc = 0;
 
 	ret_len = len;
@@ -518,11 +523,14 @@ static ssize_t motor_angle_proc_write(struct file *filp, const char __user *buff
 		return -EFAULT;
 	}
 
-	sscanf(messages,"%d %d %d",&val[0], &val[1], &val[2]);
+	sscanf(messages,"%d %d %d %d",&val[0], &val[1], &val[2], &val[3]);
 
-    pr_err("%s [MCU] val[0]:%d, val[1]:%d, val[2]:%d\n", __func__, val[0], val[1], val[2]);
+    pr_err("%s [MCU] val[0]:%d, val[1]:%d, val[2]:%d, val[3]:%d\n", __func__, val[0], val[1], val[2], val[3]);
 
-    rc = Zen7_MSP430FR2311_DealAngle(val, 3);
+	if(val[0] == 0x61)
+    	rc = Zen7_MSP430FR2311_DealAngle(val, 4);	//Extend cali cmd to 4 bytes. 
+	else
+		rc = Zen7_MSP430FR2311_DealAngle(val, 3);
 
 	if(rc < 0)
 		g_atd_status = 0;
@@ -710,7 +718,157 @@ static const struct file_operations motor_akm_mode_fops = {
 	.llseek = seq_lseek,
 	.release = single_release,
 };
+
+
+//Proc note for motorK.
+extern uint8_t k_temp[2];
+static int motor_k_proc_read(struct seq_file *buf, void *v)
+{	
+	uint16_t cmd = 0x86;
+	int rc = Zen7_MSP430FR2311_wrMotorK(&cmd, 1);
 	
+	if (rc == 0) {
+		seq_printf(buf, "[MCU] akm cal overflow cnt:%02X %02X\n", k_temp[0], k_temp[1]);
+	} else {
+		seq_printf(buf, "[MCU] Get motorK overflow count fail!\n"); 
+	}
+	
+	return 0;
+}
+
+static int motor_k_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, motor_k_proc_read, NULL);
+}
+
+static ssize_t motor_k_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	return len;
+}
+
+static const struct file_operations motor_k_mode_fops = {
+	.owner = THIS_MODULE,
+	.open = motor_k_proc_open,
+	.read = seq_read,
+	.write = motor_k_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+//Proc note for wq_run.
+uint8_t wq_temp = 0;
+static int wq_run_proc_read(struct seq_file *buf, void *v)
+{	
+	seq_printf(buf, "[MCU] wq_temp:%02X\n", wq_temp);	
+	return 0;
+}
+
+static int wq_run_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, wq_run_proc_read, NULL);
+}
+
+static ssize_t wq_run_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	char messages[4]="";
+	uint16_t val[2];
+
+	ret_len = len;
+	if (len > 4) {
+		len = 4;
+	}
+
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages,"%d", &val[0]);
+	if(val[0] == 1){
+		WQ_Trigger();
+	}
+
+	return ret_len;
+}
+
+static const struct file_operations wq_run_mode_fops = {
+	.owner = THIS_MODULE,
+	.open = wq_run_proc_open,
+	.read = seq_read,
+	.write = wq_run_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+//Proc note for kernel state.
+extern unsigned char KdState(void);
+static int motor_state_proc_read(struct seq_file *buf, void *v)
+{	
+	unsigned char MCU_State = 0;
+
+	MCU_State = KdState();
+	seq_printf(buf, "[MCU] State:%02X\n", MCU_State);
+
+	return 0;
+}
+
+static int motor_state_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, motor_state_proc_read, NULL);
+}
+
+static ssize_t motor_state_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	return len;
+}
+
+static const struct file_operations motor_state_fops = {
+	.owner = THIS_MODULE,
+	.open = motor_state_proc_open,
+	.read = seq_read,
+	.write = motor_state_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+//Proc note for read threshold k angle.
+extern uint8_t akm_Ktemp[20];
+static int motor_Kangle_proc_read(struct seq_file *buf, void *v)
+{	
+	uint16_t cmd = 0x69;
+	int rc = Zen7_MSP430FR2311_wrAKM(&cmd, 1);
+	
+	if (rc == 0) {
+		seq_printf(buf, "[MCU] tk:%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n", 
+		akm_Ktemp[0], akm_Ktemp[1], akm_Ktemp[2], akm_Ktemp[3], akm_Ktemp[4], akm_Ktemp[5], akm_Ktemp[6], akm_Ktemp[7], akm_Ktemp[8], akm_Ktemp[9], akm_Ktemp[10], akm_Ktemp[11], akm_Ktemp[12], akm_Ktemp[13], akm_Ktemp[14], akm_Ktemp[15], akm_Ktemp[16], akm_Ktemp[17], akm_Ktemp[18], akm_Ktemp[19]);
+	} else {
+		seq_printf(buf, "[MCU] Get Kangle fail!\n"); 
+	}
+
+
+	return 0;
+}
+
+static int motor_Kangle_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, motor_Kangle_proc_read, NULL);
+}
+
+static ssize_t motor_Kangle_proc_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	return len;
+}
+
+static const struct file_operations motor_Kangle_fops = {
+	.owner = THIS_MODULE,
+	.open = motor_Kangle_proc_open,
+	.read = seq_read,
+	.write = motor_Kangle_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 //===============Zen7===============
 
 static void create_proc_file(const char *PATH,const struct file_operations* f_ops)
@@ -744,6 +902,10 @@ static void create_motor_proc_files_factory(void)
 		create_proc_file(PROC_MOTOR_ANGLE_MODE, &motor_angle_mode_fops);
 		create_proc_file(PROC_MOTOR_DRV_MODE, &motor_drv_mode_fops);
 		create_proc_file(PROC_MOTOR_AKM_MODE, &motor_akm_mode_fops);
+		create_proc_file(PROC_MOTOR_K, &motor_k_mode_fops);
+		create_proc_file(PROC_WQ_RUN, &wq_run_mode_fops);
+		create_proc_file(PROC_MOTOR_STATE, &motor_state_fops);
+		create_proc_file(PROC_MOTOR_KANGLE, &motor_Kangle_fops);
 		has_created = 1;
 	}
 	else

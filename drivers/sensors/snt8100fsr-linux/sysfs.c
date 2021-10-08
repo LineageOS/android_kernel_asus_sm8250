@@ -1427,6 +1427,47 @@ ssize_t sysfs_chip_reset_store(struct device *dev,
 }
 /* Calibration write data --- */
 
+static int open_other_file(const char* filepath) {
+	struct file *pfile = NULL;
+	loff_t pos;
+	//unsigned char *fw_buf = kmalloc(GRIP_FW_SIZE ,GFP_ATOMIC);
+	static uint8_t fw_buf[128];
+	mm_segment_t old_fs;
+	
+	memset(fw_buf, 0, 128);
+	PRINT_INFO("Read file %s", filepath);
+	if (NULL == pfile) {
+		pfile = filp_open(filepath, O_RDONLY, 0);
+	}
+	if (IS_ERR(pfile)) {
+		PRINT_ERR("error occured while opening file %s", filepath);
+		return -EIO;
+	}
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	pos = 0;
+	vfs_read(pfile, fw_buf, 128, &pos);
+	set_fs(old_fs);
+	filp_close(pfile, NULL);
+	PRINT_INFO("%s", fw_buf);
+
+	if(strstr(fw_buf, "002.0012.161") != NULL){
+		snt8100fsr_g->fw_sec_source = true;
+	}
+	PRINT_INFO("Use sec source fw: %s", snt8100fsr_g->fw_sec_source? "true":"false");
+	return 0;
+}
+
+ssize_t sysfs_version_info_store(struct device *dev,
+                                           struct device_attribute *attr,
+                                           const char *buf,
+                                           size_t count) {
+    PRINT_FUNC("%zu bytes", count);
+	open_other_file(GRIP_FW_VERSION);
+	snt8100fsr_g->fw_info_check = true;
+    return count;
+}
+
 /*
  * SysFS interface for --SetSysParam
  */
@@ -2052,6 +2093,10 @@ static DEVICE_ATTR(chip_reset,
                    SYSFS_PERM_STORE,
                    NULL,
                    sysfs_chip_reset_store);
+static DEVICE_ATTR(version_info,
+                   SYSFS_PERM_STORE,
+                   NULL,
+                   sysfs_version_info_store);
 /* Calibration write data --- */
 
 static struct attribute *sysfs_attrs_static[] = {
@@ -2086,6 +2131,7 @@ static struct attribute *sysfs_attrs_static[] = {
     &dev_attr_boot_init_reg.attr,
     &dev_attr_chip_reset.attr,
 /* Calibration write data --- */
+    &dev_attr_version_info.attr,
     &dev_attr_enable_sensor_evt.attr,
 #ifdef DYNAMIC_PWR_CTL
     &dev_attr_enable_dynamic_pwr_ctl.attr,

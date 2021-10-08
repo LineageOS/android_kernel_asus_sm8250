@@ -1128,17 +1128,14 @@ static long mtp_send_receive_ioctl(struct file *fp, unsigned int code,
 	 * in kernel context, which is necessary for vfs_read and
 	 * vfs_write to use our buffers in the kernel address space.
 	 */
-	dev->xfer_result = 0;
-	if (dev->xfer_file_length) {
-		queue_work(dev->wq, work);
-		/* wait for operation to complete */
-		flush_workqueue(dev->wq);
-
-		/* read the result */
-		smp_rmb();
-	}
-	ret = dev->xfer_result;
+	queue_work(dev->wq, work);
+	/* wait for operation to complete */
+	flush_workqueue(dev->wq);
 	fput(filp);
+
+	/* read the result */
+	smp_rmb();
+	ret = dev->xfer_result;
 
 fail:
 	spin_lock_irq(&dev->lock);
@@ -1592,7 +1589,7 @@ static int debug_mtp_read_stats(struct seq_file *s, void *unused)
 	}
 
 	seq_printf(s, "vfs_write(time in usec) min:%d\t max:%d\t avg:%d\n",
-						min, max, sum / iteration);
+				min, max, (iteration ? (sum / iteration) : 0));
 	min = max = sum = iteration = 0;
 	seq_puts(s, "\n=======================\n");
 	seq_puts(s, "MTP Read Stats:\n");
@@ -1614,7 +1611,7 @@ static int debug_mtp_read_stats(struct seq_file *s, void *unused)
 	}
 
 	seq_printf(s, "vfs_read(time in usec) min:%d\t max:%d\t avg:%d\n",
-						min, max, sum / iteration);
+				min, max, (iteration ? (sum / iteration) : 0));
 	spin_unlock_irqrestore(&dev->lock, flags);
 	return 0;
 }

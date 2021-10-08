@@ -21,6 +21,7 @@
 
 #include <wmi_unified_priv.h>
 #include <wmi_unified_roam_api.h>
+#include "wmi.h"
 
 #ifdef FEATURE_LFR_SUBNET_DETECTION
 /**
@@ -424,6 +425,7 @@ static QDF_STATUS send_roam_scan_filter_cmd_tlv(wmi_unified_t wmi_handle,
 			roam_req->num_bssid_preferred_list;
 	roam_filter->num_rssi_rejection_ap =
 			roam_req->num_rssi_rejection_ap;
+	roam_filter->delta_rssi = roam_req->delta_rssi;
 	buf_ptr += sizeof(wmi_roam_filter_fixed_param);
 
 	WMITLV_SET_HDR((buf_ptr),
@@ -591,8 +593,7 @@ static QDF_STATUS send_plm_stop_cmd_tlv(wmi_unified_t wmi_handle,
  * Return: CDF status
  */
 static QDF_STATUS send_plm_start_cmd_tlv(wmi_unified_t wmi_handle,
-			  const struct plm_req_params *plm,
-			  uint32_t *gchannel_list)
+					 const struct plm_req_params *plm)
 {
 	wmi_vdev_plmreq_start_cmd_fixed_param *cmd;
 	uint32_t *channel_list;
@@ -649,10 +650,7 @@ static QDF_STATUS send_plm_start_cmd_tlv(wmi_unified_t wmi_handle,
 	if (cmd->num_chans) {
 		channel_list = (uint32_t *) buf_ptr;
 		for (count = 0; count < cmd->num_chans; count++) {
-			channel_list[count] = plm->plm_ch_list[count];
-			if (channel_list[count] < WMI_NLO_FREQ_THRESH)
-				channel_list[count] =
-					gchannel_list[count];
+			channel_list[count] = plm->plm_ch_freq_list[count];
 			WMI_LOGD("Ch[%d]: %d MHz", count, channel_list[count]);
 		}
 		buf_ptr += cmd->num_chans * sizeof(uint32_t);
@@ -1313,6 +1311,9 @@ send_roam_scan_offload_mode_cmd_tlv(wmi_unified_t wmi_handle,
 					roam_req->mdid.mobility_domain;
 				roam_offload_11r->adaptive_11r =
 					roam_req->is_adaptive_11r;
+				roam_offload_11r->ft_im_for_deauth =
+					roam_req->enable_ft_im_roaming;
+
 				if (auth_mode == WMI_AUTH_OPEN) {
 					/* If FT-Open ensure pmk length
 					   and r0khid len are zero */

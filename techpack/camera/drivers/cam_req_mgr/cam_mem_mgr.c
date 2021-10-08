@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -177,18 +177,22 @@ static int32_t cam_mem_get_slot(void)
 	int32_t idx;
 
 	mutex_lock(&tbl.m_lock);
-	idx = find_first_zero_bit(tbl.bitmap, tbl.bits);
-	if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0) {
+	if (tbl.bitmap) {
+		idx = find_first_zero_bit(tbl.bitmap, tbl.bits);
+		if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0) {
+			mutex_unlock(&tbl.m_lock);
+			return -ENOMEM;
+		}
+
+		set_bit(idx, tbl.bitmap);
+		tbl.bufq[idx].active = true;
+		mutex_init(&tbl.bufq[idx].q_lock);
 		mutex_unlock(&tbl.m_lock);
-		return -ENOMEM;
+		return idx;
 	}
 
-	set_bit(idx, tbl.bitmap);
-	tbl.bufq[idx].active = true;
-	mutex_init(&tbl.bufq[idx].q_lock);
 	mutex_unlock(&tbl.m_lock);
-
-	return idx;
+	return -EINVAL;
 }
 
 static void cam_mem_put_slot(int32_t idx)

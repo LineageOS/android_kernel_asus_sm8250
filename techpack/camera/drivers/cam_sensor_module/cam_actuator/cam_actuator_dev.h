@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 
@@ -119,6 +119,7 @@ struct cam_actuator_ctrl_t {
 	uint32_t lens_pos;
 	uint8_t debug_node_created;
 	//ASUS_BSP Zhengwei --- "porting actuator"	
+	uint32_t open_cnt;
 };
 
 #endif /* _CAM_ACTUATOR_DEV_H_ */

@@ -562,7 +562,7 @@ void __dynamic_pr_debug(struct _ddebug *descriptor, const char *fmt, ...)
 	vaf.fmt = fmt;
 	vaf.va = &args;
 
-	printk(KERN_INFO "%s%pV", dynamic_emit_prefix(descriptor, buf), &vaf);
+	printk(KERN_DEBUG "%s%pV", dynamic_emit_prefix(descriptor, buf), &vaf);
 
 	va_end(args);
 }
@@ -583,11 +583,11 @@ void __dynamic_dev_dbg(struct _ddebug *descriptor,
 	vaf.va = &args;
 
 	if (!dev) {
-		printk(KERN_INFO "(NULL device *): %pV", &vaf);
+		printk(KERN_DEBUG "(NULL device *): %pV", &vaf);
 	} else {
 		char buf[PREFIX_SIZE];
 
-		dev_printk_emit(LOGLEVEL_INFO, dev, "%s%s %s: %pV",
+		dev_printk_emit(LOGLEVEL_DEBUG, dev, "%s%s %s: %pV",
 				dynamic_emit_prefix(descriptor, buf),
 				dev_driver_string(dev), dev_name(dev),
 				&vaf);
@@ -616,7 +616,7 @@ void __dynamic_netdev_dbg(struct _ddebug *descriptor,
 	if (dev && dev->dev.parent) {
 		char buf[PREFIX_SIZE];
 
-		dev_printk_emit(LOGLEVEL_INFO, dev->dev.parent,
+		dev_printk_emit(LOGLEVEL_DEBUG, dev->dev.parent,
 				"%s%s %s %s%s: %pV",
 				dynamic_emit_prefix(descriptor, buf),
 				dev_driver_string(dev->dev.parent),
@@ -624,10 +624,10 @@ void __dynamic_netdev_dbg(struct _ddebug *descriptor,
 				netdev_name(dev), netdev_reg_state(dev),
 				&vaf);
 	} else if (dev) {
-		printk(KERN_INFO "%s%s: %pV", netdev_name(dev),
+		printk(KERN_DEBUG "%s%s: %pV", netdev_name(dev),
 		       netdev_reg_state(dev), &vaf);
 	} else {
-		printk(KERN_INFO "(NULL net_device): %pV", &vaf);
+		printk(KERN_DEBUG "(NULL net_device): %pV", &vaf);
 	}
 
 	va_end(args);
@@ -954,22 +954,26 @@ static void ddebug_remove_all_tables(void)
 
 static __initdata int ddebug_init_success;
 
-static int __init dynamic_debug_init_debugfs(void)
+static int __init dynamic_debug_init_control(void)
 {
-	struct dentry *dir, *file;
+	struct proc_dir_entry *procfs_dir;
+	struct dentry *debugfs_dir;
 
 	if (!ddebug_init_success)
 		return -ENODEV;
 
-	dir = debugfs_create_dir("dynamic_debug", NULL);
-	if (!dir)
-		return -ENOMEM;
-	file = debugfs_create_file("control", 0644, dir, NULL,
-					&ddebug_proc_fops);
-	if (!file) {
-		debugfs_remove(dir);
-		return -ENOMEM;
+	/* Create the control file in debugfs if it is enabled */
+	if (debugfs_initialized()) {
+		debugfs_dir = debugfs_create_dir("dynamic_debug", NULL);
+		debugfs_create_file("control", 0644, debugfs_dir, NULL,
+				    &ddebug_proc_fops);
 	}
+
+	/* Also create the control file in procfs */
+	procfs_dir = proc_mkdir("dynamic_debug", NULL);
+	if (procfs_dir)
+		proc_create("control", 0644, procfs_dir, &ddebug_proc_fops);
+
 	return 0;
 }
 
@@ -1046,4 +1050,4 @@ out_err:
 early_initcall(dynamic_debug_init);
 
 /* Debugfs setup must be done later */
-fs_initcall(dynamic_debug_init_debugfs);
+fs_initcall(dynamic_debug_init_control);

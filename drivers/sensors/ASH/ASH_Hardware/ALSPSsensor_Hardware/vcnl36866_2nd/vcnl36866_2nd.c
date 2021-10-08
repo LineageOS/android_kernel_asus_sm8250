@@ -34,7 +34,7 @@
 #else
 	#define dbg(fmt, args...)
 #endif
-#define log(fmt, args...) printk(KERN_INFO "[%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,##args)
+#define log(fmt, args...) printk(KERN_INFO "[%s][%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,__func__,##args)
 #define err(fmt, args...) printk(KERN_ERR "[%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,##args)
 
 /*****************************************/
@@ -128,10 +128,6 @@ static int vcnl36866_proximity_hw_set_config(void)
 		if (ret < 0)
 			return ret;
 
-	ret = vcnl36866_proximity_hw_set_led_current(VCNL36866_VCSEL_I_14mA);
-	if(ret < 0)		
-		return ret;
-
 	ret = vcnl36866_proximity_hw_set_led_duty_ratio(VCNL36866_PS_PERIOD_10);
 	if(ret < 0)		
 		return ret;
@@ -140,9 +136,21 @@ static int vcnl36866_proximity_hw_set_config(void)
 	if(ret < 0)		
 		return ret;
 
+#if defined LONG_LENGTH_LOGN_IT_NON_PERF || defined LONG_LENGTH_LOGN_IT_PERF
+	ret = vcnl36866_proximity_hw_set_integration(VCNL36866_PS_IT_4T);
+	if(ret < 0)		
+		return ret;
+	ret = vcnl36866_proximity_hw_set_led_current(VCNL36866_VCSEL_I_17mA);
+	if(ret < 0)		
+		return ret;
+#else
 	ret = vcnl36866_proximity_hw_set_integration(VCNL36866_PS_IT_2T);
 	if(ret < 0)		
 		return ret;
+	ret = vcnl36866_proximity_hw_set_led_current(VCNL36866_VCSEL_I_14mA);
+	if(ret < 0)		
+		return ret;
+#endif
 		
 	ret = vcnl36866_proximity_hw_set_ps_mps(VCNL36866_PS_MPS_2);
 	if(ret < 0)		
@@ -187,16 +195,17 @@ static int vcnl36866_ALSPS_hw_init(struct i2c_client* client)
 
 	g_i2c_client = client;
 	
-	/* Check the Device ID 
-	 * Do Not return when check ID
-	 */
-	ret = vcnl36866_ALSPS_hw_check_ID();
-
 	/*Init regulator setting */
 	ret = vcnl36866_regulator_init();
 	if(ret < 0){
 		return ret;
 	}
+	vcnl36866_regulator_enable();
+	
+	/* Check the Device ID 
+	 * Do Not return when check ID
+	 */
+	ret = vcnl36866_ALSPS_hw_check_ID();
 
 	/*Set Proximity config */
 	ret = vcnl36866_proximity_hw_set_config();
@@ -267,6 +276,13 @@ static int vcnl36866_ALSPS_hw_get_register(uint8_t reg)
 	return value;
 }
 
+static int vcnl36866_ALSPS_hw_close_power(void)
+{
+	//vcnl36866_regulator_disable_1v8();
+	vcnl36866_regulator_disable();
+	return 0;
+}
+
 static int vcnl36866_ALSPS_hw_get_interrupt(void)
 {
 	uint8_t buf[2] = {0};
@@ -308,7 +324,7 @@ static int vcnl36866_ALSPS_hw_get_interrupt(void)
 /*Proximity Part*/
 /******************/
 static struct regulator *reg;
-
+static int enable_3v_count = 0;
 static int vcnl36866_regulator_init(void)
 {
 	int ret = 0;
@@ -319,7 +335,8 @@ static int vcnl36866_regulator_init(void)
         err("Failed to get regulator vcc_psensor %d\n", ret);
         return ret;
     }
-    ret = regulator_set_voltage(reg, 3000000, 3600000);
+    
+    ret = regulator_set_voltage(reg, 3300000, 3300000);
     if (ret) {
         err("Failed to set voltage for vcc_psensor reg %d\n", ret);
         return -1;
@@ -328,7 +345,6 @@ static int vcnl36866_regulator_init(void)
     log("vcc_psensor regulator setting init");
     return ret;
 }
-
 static int vcnl36866_regulator_enable(void)
 {
     int ret = 0, idx = 0;
@@ -338,7 +354,7 @@ static int vcnl36866_regulator_enable(void)
         err("Failed to get regulator vcc_psensor %d\n", ret);
         return ret;
     }
-    
+	
     ret = regulator_set_load(reg, 10000);
     if(ret < 0){
         err("Failed to set load for vcc_psensor reg %d\n", ret);
@@ -361,7 +377,7 @@ static int vcnl36866_regulator_enable(void)
         err("vcc_psensor regulator is enabled fail(retry count >= %d)", idx);
         return -1;
     }
-    
+    enable_3v_count++;
     log("Update vcc_psensor to NPM_mode");
     return ret;
 }
@@ -375,23 +391,24 @@ static int vcnl36866_regulator_disable(void)
         err("Failed to get regulator vcc_psensor %d\n", ret);
         return ret;
     }
-    
+	
     ret = regulator_set_load(reg, 0);
     if(ret < 0){
         err("Failed to set load for vcc_psensor reg %d\n", ret);
         return ret;
     }
-    
-    ret = regulator_disable(reg);
-    if(ret){
-        err("Failed to enable vincentr reg %d\n", ret);
-        return -1;
-    }
+    do{
+	    ret = regulator_disable(reg);
+	    if(ret){
+	        err("Failed to enable vincentr reg %d\n", ret);
+	        return -1;
+	    }
+		enable_3v_count--;
+	}while(enable_3v_count > 0);
     
     log("Update vcc_psensor to LPM_mode");
     return ret;
 }
-
 static int vcnl36866_proximity_hw_turn_onoff(bool bOn)
 {
 	//static int PS_START = 0;
@@ -403,8 +420,13 @@ static int vcnl36866_proximity_hw_turn_onoff(bool bOn)
 		ret = vcnl36866_regulator_enable();
 		if(ret < 0)
 			return ret;
+		/*Set Proximity config */
+		ret = vcnl36866_proximity_hw_set_config();
+		if(ret < 0){		
+			return ret;
+		}
 	} else {
-		ret = vcnl36866_regulator_disable();
+		//ret = vcnl36866_regulator_disable();
 		if(ret < 0)
 			return ret;
 	}
@@ -424,7 +446,7 @@ static int vcnl36866_proximity_hw_turn_onoff(bool bOn)
 		ret = i2c_write_reg_u16(g_i2c_client, PS_CONF1, power_state_data_buf);
 		if(ret < 0){
 			err("Proximity power on ERROR (PS_CONF1)\n");
-			vcnl36866_regulator_disable();
+			//vcnl36866_regulator_disable();
 			return ret;
 		}else{
 			log("Proximity power on (PS_CONF1 : 0x%x -> 0x%x)\n", 
@@ -1244,6 +1266,7 @@ static struct ALSPS_hw ALSPS_hw_vcnl36866 = {
 	.ALSPS_hw_show_allreg = vcnl36866_ALSPS_hw_show_allreg,
 	.ALSPS_hw_set_register = vcnl36866_ALSPS_hw_set_register,
 	.ALSPS_hw_get_register = vcnl36866_ALSPS_hw_get_register,
+	.ALSPS_hw_close_power = vcnl36866_ALSPS_hw_close_power,
 
 	.mpsensor_hw = &psensor_hw_vcnl36866,
 	.mlsensor_hw = &lsensor_hw_vcnl36866,

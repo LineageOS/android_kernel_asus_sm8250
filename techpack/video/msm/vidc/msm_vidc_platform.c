@@ -90,12 +90,12 @@ static struct msm_vidc_codec_data kona_codec_data[] =  {
 };
 
 static struct msm_vidc_codec_data lagoon_codec_data[] =  {
-	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_ENCODER, 0, 675, 320),
-	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_ENCODER, 0, 675, 320),
-	CODEC_ENTRY(V4L2_PIX_FMT_MPEG2, MSM_VIDC_DECODER, 0, 200, 200),
-	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_DECODER, 0, 200, 200),
-	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_DECODER, 0, 200, 200),
-	CODEC_ENTRY(V4L2_PIX_FMT_VP9, MSM_VIDC_DECODER, 0, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_ENCODER, 25, 675, 320),
+	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_ENCODER, 25, 675, 320),
+	CODEC_ENTRY(V4L2_PIX_FMT_MPEG2, MSM_VIDC_DECODER, 25, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_H264, MSM_VIDC_DECODER, 25, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_HEVC, MSM_VIDC_DECODER, 25, 200, 200),
+	CODEC_ENTRY(V4L2_PIX_FMT_VP9, MSM_VIDC_DECODER, 60, 200, 200),
 };
 
 /* Update with SM6150 data */
@@ -270,8 +270,8 @@ static struct msm_vidc_codec_capability lito_capabilities_v0[] = {
 	{CAP_ALLINTRA_MAX_FPS, ENC, H264|HEVC, 1, 240, 1, 30},
 
 	/* Image specific */
-	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 64, 512, 1, 512},
-	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 64, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 128, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 128, 512, 1, 512},
 	{CAP_HEIC_IMAGE_FRAME_WIDTH, ENC, HEVC, 512, 8192, 1, 8192},
 	{CAP_HEIC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 512, 8192, 1, 8192},
 
@@ -366,8 +366,8 @@ static struct msm_vidc_codec_capability lito_capabilities_v1[] = {
 	{CAP_ALLINTRA_MAX_FPS, ENC, H264|HEVC, 1, 240, 1, 30},
 
 	/* Image specific */
-	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 64, 512, 1, 512},
-	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 64, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 128, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 128, 512, 1, 512},
 	{CAP_HEIC_IMAGE_FRAME_WIDTH, ENC, HEVC, 512, 8192, 1, 8192},
 	{CAP_HEIC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 512, 8192, 1, 8192},
 
@@ -589,8 +589,8 @@ static struct msm_vidc_codec_capability lagoon_capabilities_v1[] = {
 
 static struct msm_vidc_codec_capability bengal_capabilities_v0[] = {
 	/* {cap_type, domains, codecs, min, max, step_size, default_value} */
-	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1920},
-	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1080},
+	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1920},
+	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1080},
 	/*  ((1920 * 1088) / 256) */
 	{CAP_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 8160, 1, 8160},
 	/* 1080@30 decode + 1080@30 encode */
@@ -614,8 +614,8 @@ static struct msm_vidc_codec_capability bengal_capabilities_v0[] = {
 	{CAP_MAX_VIDEOCORES, DOMAINS_ALL, CODECS_ALL, 0, 1, 1, 1},
 
 	/* Secure usecase specific */
-	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1920},
-	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1080},
+	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1920},
+	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1080},
 	/* (1920 * 1088) / 256 */
 	{CAP_SECURE_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 8160, 1, 8160},
 	{CAP_SECURE_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 35000000, 1, 20000000},
@@ -624,8 +624,8 @@ static struct msm_vidc_codec_capability bengal_capabilities_v0[] = {
 	{CAP_ALLINTRA_MAX_FPS, ENC, H264|HEVC, 1, 30, 1, 30},
 
 	/* Image specific */
-	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 64, 512, 1, 512},
-	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 64, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 128, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 128, 512, 1, 512},
 	{CAP_HEIC_IMAGE_FRAME_WIDTH, ENC, HEVC, 512, 8192, 1, 8192},
 	{CAP_HEIC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 512, 8192, 1, 8192},
 
@@ -653,8 +653,8 @@ static struct msm_vidc_codec_capability bengal_capabilities_v0[] = {
 
 static struct msm_vidc_codec_capability bengal_capabilities_v1[] = {
 	/* {cap_type, domains, codecs, min, max, step_size, default_value} */
-	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1920},
-	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1080},
+	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1920},
+	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1080},
 	/*  ((1920 * 1088) / 256) */
 	{CAP_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 8160, 1, 8160},
 	/* 1920*1088 @30fps */
@@ -678,8 +678,8 @@ static struct msm_vidc_codec_capability bengal_capabilities_v1[] = {
 	{CAP_MAX_VIDEOCORES, DOMAINS_ALL, CODECS_ALL, 0, 1, 1, 1},
 
 	/* Secure usecase specific */
-	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1920},
-	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 64, 1920, 1, 1080},
+	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1920},
+	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 1920, 1, 1080},
 	/* (1920 * 1088) / 256 */
 	{CAP_SECURE_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 8160, 1, 8160},
 	{CAP_SECURE_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 35000000, 1, 20000000},
@@ -752,8 +752,8 @@ static struct msm_vidc_codec_capability scuba_capabilities[] = {
 	{CAP_ALLINTRA_MAX_FPS, ENC, H264|HEVC, 1, 30, 1, 30},
 
 	/* Image specific */
-	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 64, 512, 1, 512},
-	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 64, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 128, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 128, 512, 1, 512},
 	{CAP_HEIC_IMAGE_FRAME_WIDTH, ENC, HEVC, 512, 8192, 1, 8192},
 	{CAP_HEIC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 512, 8192, 1, 8192},
 
@@ -781,8 +781,8 @@ static struct msm_vidc_codec_capability scuba_capabilities[] = {
 
 static struct msm_vidc_codec_capability kona_capabilities[] = {
 	/* {cap_type, domains, codecs, min, max, step_size, default_value,} */
-	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 64, 8192, 1, 1920},
-	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 64, 8192, 1, 1080},
+	{CAP_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 8192, 1, 1920},
+	{CAP_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 8192, 1, 1080},
 	/* (8192 * 4320) / 256 */
 	{CAP_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 138240, 1, 138240},
 	/* ((1920 * 1088) / 256) * 960 fps */
@@ -814,8 +814,8 @@ static struct msm_vidc_codec_capability kona_capabilities[] = {
 	{CAP_MAX_VIDEOCORES, DOMAINS_ALL, CODECS_ALL, 0, 1, 1, 1},
 
 	/* VP8 specific */
-	{CAP_FRAME_WIDTH, ENC|DEC, VP8, 64, 4096, 1, 1920},
-	{CAP_FRAME_HEIGHT, ENC|DEC, VP8, 64, 4096, 1, 1080},
+	{CAP_FRAME_WIDTH, ENC|DEC, VP8, 128, 4096, 1, 1920},
+	{CAP_FRAME_HEIGHT, ENC|DEC, VP8, 128, 4096, 1, 1080},
 	/* (4096 * 2304) / 256 */
 	{CAP_MBS_PER_FRAME, ENC|DEC, VP8, 64, 36864, 1, 8160},
 	/* ((4096 * 2304) / 256) * 120 */
@@ -827,8 +827,8 @@ static struct msm_vidc_codec_capability kona_capabilities[] = {
 	{CAP_BITRATE, DEC, VP8, 1, 100000000, 1, 20000000},
 
 	/* Mpeg2 decoder specific */
-	{CAP_FRAME_WIDTH, DEC, MPEG2, 64, 1920, 1, 1920},
-	{CAP_FRAME_HEIGHT, DEC, MPEG2, 64, 1920, 1, 1080},
+	{CAP_FRAME_WIDTH, DEC, MPEG2, 128, 1920, 1, 1920},
+	{CAP_FRAME_HEIGHT, DEC, MPEG2, 128, 1920, 1, 1080},
 	/* (1920 * 1088) / 256 */
 	{CAP_MBS_PER_FRAME, DEC, MPEG2, 64, 8160, 1, 8160},
 	/* ((1920 * 1088) / 256) * 30*/
@@ -837,8 +837,8 @@ static struct msm_vidc_codec_capability kona_capabilities[] = {
 	{CAP_BITRATE, DEC, MPEG2, 1, 40000000, 1, 20000000},
 
 	/* Secure usecase specific */
-	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 64, 4096, 1, 1920},
-	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 64, 4096, 1, 1080},
+	{CAP_SECURE_FRAME_WIDTH, DOMAINS_ALL, CODECS_ALL, 128, 4096, 1, 1920},
+	{CAP_SECURE_FRAME_HEIGHT, DOMAINS_ALL, CODECS_ALL, 128, 4096, 1, 1080},
 	/* (4096 * 2304) / 256 */
 	{CAP_SECURE_MBS_PER_FRAME, DOMAINS_ALL, CODECS_ALL, 64, 36864, 1, 36864},
 	{CAP_SECURE_BITRATE, DOMAINS_ALL, CODECS_ALL, 1, 40000000, 1, 20000000},
@@ -849,8 +849,8 @@ static struct msm_vidc_codec_capability kona_capabilities[] = {
 	{CAP_BATCH_MAX_FPS, DEC, CODECS_ALL, 1, 120, 1, 120},
 
 	/* Lossless encoding usecase specific */
-	{CAP_LOSSLESS_FRAME_WIDTH, ENC, H264|HEVC, 64, 4096, 1, 1920},
-	{CAP_LOSSLESS_FRAME_HEIGHT, ENC, H264|HEVC, 64, 4096, 1, 1080},
+	{CAP_LOSSLESS_FRAME_WIDTH, ENC, H264|HEVC, 128, 4096, 1, 1920},
+	{CAP_LOSSLESS_FRAME_HEIGHT, ENC, H264|HEVC, 128, 4096, 1, 1080},
 	/* (4096 * 2304) / 256 */
 	{CAP_LOSSLESS_MBS_PER_FRAME, ENC, H264|HEVC, 64, 36864, 1, 36864},
 
@@ -858,8 +858,8 @@ static struct msm_vidc_codec_capability kona_capabilities[] = {
 	{CAP_ALLINTRA_MAX_FPS, ENC, H264|HEVC, 1, 240, 1, 30},
 
 	/* Image specific */
-	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 64, 512, 1, 512},
-	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 64, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_WIDTH, ENC, HEVC, 128, 512, 1, 512},
+	{CAP_HEVC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 128, 512, 1, 512},
 	{CAP_HEIC_IMAGE_FRAME_WIDTH, ENC, HEVC, 512, 16384, 1, 16384},
 	{CAP_HEIC_IMAGE_FRAME_HEIGHT, ENC, HEVC, 512, 16384, 1, 16384},
 
@@ -931,11 +931,15 @@ static struct msm_vidc_common_data lito_common_data_v0[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 2220544,
+		.value = 1958400,
 		/**
-		 * ((3840x2176)/256)@60 + ((8192x8192)/256)@1fps
-		 * UHD@30 decode + UHD@30 encode + ((8192x8192)/256)@1fps
+		 * ((3840x2176)/256)@60
+		 * UHD@30 decode + UHD@30 encode
 		 */
+	},
+	{
+		.key = "qcom,max-image-load",
+		.value = 262144, /* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-hq-mbs-per-frame",
@@ -1014,10 +1018,14 @@ static struct msm_vidc_common_data lito_common_data_v1[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 1486144,
+		.value = 1224000,
 		/**
-		 * UHD@30 decode + 1080@30 encode + ((8192x8192)/256)@1fps
+		 * UHD@30 decode + 1080@30 encode
 		 */
+	},
+		{
+		.key = "qcom,max-image-load",
+		.value = 262144, /* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-hq-mbs-per-frame",
@@ -1096,11 +1104,15 @@ static struct msm_vidc_common_data lagoon_common_data_v0[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 2220544,
+		.value = 1958400,
 		/**
-		 * ((3840x2176)/256)@60fps decode + ((8192x8192)/256)@1fps
-		 * UHD@30 decode + 1080@30 encode + ((8192x8192)/256)@1fps
+		 * ((3840x2176)/256)@60
+		 * UHD@30 decode + UHD@30 encode
 		 */
+	},
+	{
+		.key = "qcom,max-image-load",
+		.value = 262144,/* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-mbpf",
@@ -1120,7 +1132,7 @@ static struct msm_vidc_common_data lagoon_common_data_v0[] = {
 	},
 	{
 		.key = "qcom,max-b-frame-mbs-per-sec",
-		.value = 244800, /* ((1920x1088)/256) MBs@30fps */
+		.value = 489600, /* ((1920x1088)/256) MBs@60fps */
 	},
 	{
 		.key = "qcom,power-collapse-delay",
@@ -1179,8 +1191,14 @@ static struct msm_vidc_common_data lagoon_common_data_v1[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 1486144,
-		/* UHD@30 decode + 1080@30 encode + ((8192x8192)/256)@1fps */
+		.value = 1224000,
+		/**
+		 * UHD@30 decode + 1080@30 encode
+		 */
+	},
+	{
+		.key = "qcom,max-image-load",
+		.value = 262144, /* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-mbpf",
@@ -1200,7 +1218,7 @@ static struct msm_vidc_common_data lagoon_common_data_v1[] = {
 	},
 	{
 		.key = "qcom,max-b-frame-mbs-per-sec",
-		.value = 244800, /* ((1920x1088)/256) MBs@30fps */
+		.value = 489600, /* ((1920x1088)/256) MBs@60fps */
 	},
 	{
 		.key = "qcom,power-collapse-delay",
@@ -1259,17 +1277,21 @@ static struct msm_vidc_common_data kona_common_data[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 8882176,
+		.value = 7833600,
 		/**
 		 * (7680x4320@60fps, 3840x2176@240fps
 		 * Greater than 4096x2176@120fps,
-		 *  8192x4320@48fps) + ((16384x16384)/256)@1fps
+		 *  8192x4320@48fps)
 		 */
 
 	},
 	{
+		.key = "qcom,max-image-load",
+		.value = 1048576, /* ((16384x16384)/256)@1fps */
+	},
+	{
 		.key = "qcom,max-mbpf",
-		.value = 270000,	/*For TT260846 (7680x4320)/256 + (7680x4320)/256 + (640x352)/256 */
+		.value = 173056,	/* (8192x4320)/256 + (4096x2176)/256*/
 	},
 	{
 		.key = "qcom,max-hq-mbs-per-frame",
@@ -1407,8 +1429,11 @@ static struct msm_vidc_common_data bengal_common_data_v0[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 751744,
-		/* ((1088x1920)/256)@60fps + ((8192x8192)/256)@1fps */
+		.value = 489600, /* ((1088x1920)/256)@60fps */
+	},
+	{
+		.key = "qcom,max-image-load",
+		.value = 262144, /* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-mbpf",
@@ -1463,8 +1488,11 @@ static struct msm_vidc_common_data bengal_common_data_v1[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 506944,
-		/* ((1088x1920)/256)@30fps + ((8192x8192)/256)@1fps */
+		.value = 244800, /* ((1088x1920)/256)@30fps */
+	},
+	{
+		.key = "qcom,max-image-load",
+		.value = 262144, /* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-mbpf",
@@ -1519,8 +1547,12 @@ static struct msm_vidc_common_data scuba_common_data[] = {
 	},
 	{
 		.key = "qcom,max-hw-load",
-		.value = 506944,
-		/* ((1088x1920)/256)@30fps + ((8192x8192)/256)@1fps */
+		.value = 352800,
+		/* ((1088x1920)/256)@30fps + ((720x1280)/256)@30fps*/
+	},
+	{
+		.key = "qcom,max-image-load",
+		.value = 262144, /* ((8192x8192)/256)@1fps */
 	},
 	{
 		.key = "qcom,max-mbpf",
@@ -2099,7 +2131,7 @@ static int msm_vidc_read_rank(
 		d_vpr_e("Failed to get ddr rank of device\n");
 		return num_ranks;
 	} else if (num_ranks == 1)
-		data->sku_version = SKU_VERSION_1;
+		data->sku_version = SKU_VERSION_0;
 
 	d_vpr_h("DDR Rank of device: %u", num_ranks);
 
@@ -2162,9 +2194,6 @@ void *vidc_get_drv_data(struct device *dev)
 			ddr_type, driver_data->ubwc_config ?
 			driver_data->ubwc_config->highest_bank_bit : -1);
 	} else if (!strcmp(match->compatible, "qcom,bengal-vidc")) {
-		d_vpr_h("Disable NOC error recovery");
-		msm_vidc_err_recovery_disable =
-				VIDC_DISABLE_NOC_ERR_RECOV;
 		rc = msm_vidc_read_rank(driver_data, dev);
 		if (rc) {
 			d_vpr_e("Failed to get ddr rank, use Dual Rank DDR\n");

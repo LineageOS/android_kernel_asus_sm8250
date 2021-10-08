@@ -117,6 +117,7 @@
 
 // The location on disk of the firmware to upload to the hardware on boot
 #define FW_PATH   "/vendor/etc/grip_fw/snt8100fsr.image"
+#define FW_PATH_2ND   "/vendor/etc/grip_fw/snt8100fsr.image_2nd"
 
 /* ASUS BSP Clay: load different fw version according to HWID +++ */
 #define ER_FW_PATH   "/vendor/etc/grip_fw/snt8100fsr.image_2.12.43"
@@ -159,6 +160,9 @@
 
 // The location of the flash register partition read file
 #define FRP_CAPTURE_FILE_LOCATION "/data/frp_out.txt"
+
+#define GRIP_FW_VERSION "/vendor/factory/fw_version.txt"
+#define GRIP_FW_SIZE 128
 
 // SPI Bus Settings if not loaded via DeviceTree nodes (bottom of file for chart)
 #define SPI_MAX_SPEED_HZ    1000000

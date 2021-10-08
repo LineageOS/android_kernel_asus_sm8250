@@ -200,6 +200,8 @@ struct wmi_mawc_roam_params {
  *                             AP's, in units of db
  * @num_disallowed_aps: How many APs the target should maintain in its LCA
  *                      list
+ * @delta_rssi: (dB units) when AB in RSSI blacklist improved by at least
+ *              delta_rssi,it will be removed from blacklist
  *
  * This structure holds all the key parameters related to
  * initial connection and roaming connections.
@@ -222,6 +224,7 @@ struct roam_scan_filter_params {
 	uint32_t num_rssi_rejection_ap;
 	struct reject_ap_config_params
 				rssi_rejection_ap[MAX_RSSI_AVOID_BSSID_LIST];
+	uint32_t delta_rssi;
 };
 
 #define WMI_CFG_VALID_CHANNEL_LIST_LEN    100
@@ -245,7 +248,7 @@ struct roam_scan_filter_params {
  * @desired_tx_pwr: desired tx power
  * @mac_addr: MC dest addr
  * @plm_num_ch: channel numbers
- * @plm_ch_list: channel list
+ * @plm_ch_freq_list: channel frequency list
  * @vdev_id: vdev id
  * @enable:  enable/disable
  */
@@ -261,8 +264,8 @@ struct plm_req_params {
 	struct qdf_mac_addr mac_addr;
 	/* no of channels */
 	uint8_t plm_num_ch;
-	/* channel numbers */
-	uint8_t plm_ch_list[WMI_CFG_VALID_CHANNEL_LIST_LEN];
+	/* channel frequency list */
+	uint32_t plm_ch_freq_list[WMI_CFG_VALID_CHANNEL_LIST_LEN];
 	uint8_t vdev_id;
 	bool enable;
 };

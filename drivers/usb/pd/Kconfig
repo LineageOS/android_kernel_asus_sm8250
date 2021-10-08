@@ -28,6 +28,11 @@ config QPNP_USB_PDPHY
 	  The is used to handle the PHY layer communication of the
 	  Power Delivery stack.
 
+config ASUS_HVDCP_LIMIT
+	bool "ASUS CHG QC4 ALLOW PPS"
+	help
+	  Say Y here to enable QC4 PPS.
+
 config ASUS_PD_CHARGER
 	tristate "ASUS CHG USB Power Delivery"
 	help

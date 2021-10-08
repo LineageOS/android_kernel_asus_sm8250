@@ -34,7 +34,23 @@
 #include <wlan_cp_stats_utils_api.h>
 #include <wlan_cp_stats_mc_tgt_api.h>
 #include "../../../umac/cmn_services/utils/inc/wlan_utility.h"
+#include <cdp_txrx_cmn_struct.h>
+#include <cdp_txrx_ops.h>
+#include <cdp_txrx_stats_struct.h>
+#include <cdp_txrx_host_stats.h>
+#include <cds_api.h>
 
+#ifdef WLAN_FEATURE_MIB_STATS
+static void target_if_cp_stats_free_mib_stats(struct stats_event *ev)
+{
+	qdf_mem_free(ev->mib_stats);
+	ev->mib_stats = NULL;
+}
+#else
+static void target_if_cp_stats_free_mib_stats(struct stats_event *ev)
+{
+}
+#endif
 static void target_if_cp_stats_free_stats_event(struct stats_event *ev)
 {
 	qdf_mem_free(ev->pdev_stats);
@@ -51,6 +67,7 @@ static void target_if_cp_stats_free_stats_event(struct stats_event *ev)
 	ev->vdev_summary_stats = NULL;
 	qdf_mem_free(ev->vdev_chain_rssi);
 	ev->vdev_chain_rssi = NULL;
+	target_if_cp_stats_free_mib_stats(ev);
 }
 
 static QDF_STATUS target_if_cp_stats_extract_pdev_stats(
@@ -98,6 +115,8 @@ static void target_if_cp_stats_extract_peer_extd_stats(
 	QDF_STATUS status;
 	uint32_t i;
 	wmi_host_peer_extd_stats peer_extd_stats;
+	void *soc = cds_get_context(QDF_MODULE_ID_SOC);
+	struct cdp_peer_stats *peer_stats;
 
 	if (!stats_param->num_peer_extd_stats)
 		return;
@@ -122,6 +141,20 @@ static void target_if_cp_stats_extract_peer_extd_stats(
 			ev->peer_extended_stats[i].peer_macaddr);
 		ev->peer_extended_stats[i].rx_mc_bc_cnt =
 						peer_extd_stats.rx_mc_bc_cnt;
+
+		peer_stats = qdf_mem_malloc(sizeof(*peer_stats));
+		if (!peer_stats)
+			continue;
+
+		status = cdp_host_get_peer_stats(soc, VDEV_ALL,
+					ev->peer_extended_stats[i].peer_macaddr,
+					peer_stats);
+		if (status == QDF_STATUS_SUCCESS)
+			ev->peer_extended_stats[i].rx_mc_bc_cnt =
+				peer_stats->rx.multicast.num +
+				peer_stats->rx.bcast.num;
+
+		qdf_mem_free(peer_stats);
 	}
 }
 
@@ -229,6 +262,50 @@ static QDF_STATUS target_if_cp_stats_extract_cca_stats(
 	return QDF_STATUS_SUCCESS;
 }
 
+#ifdef WLAN_FEATURE_MIB_STATS
+static QDF_STATUS target_if_cp_stats_extract_mib_stats(
+					struct wmi_unified *wmi_hdl,
+					wmi_host_stats_event *stats_param,
+					struct stats_event *ev, uint8_t *data)
+{
+	QDF_STATUS status;
+
+	if (!stats_param->num_mib_stats)
+		return QDF_STATUS_SUCCESS;
+
+	if (stats_param->num_mib_stats != MAX_MIB_STATS ||
+	    (stats_param->num_mib_extd_stats &&
+	    stats_param->num_mib_extd_stats != MAX_MIB_STATS)) {
+		cp_stats_err("number of mib stats wrong, num_mib_stats %d, num_mib_extd_stats %d",
+			     stats_param->num_mib_stats,
+			     stats_param->num_mib_extd_stats);
+		return QDF_STATUS_E_INVAL;
+	}
+
+	ev->num_mib_stats = stats_param->num_mib_stats;
+
+	ev->mib_stats = qdf_mem_malloc(sizeof(*ev->mib_stats));
+	if (!ev->mib_stats)
+		return QDF_STATUS_E_NOMEM;
+
+	status = wmi_extract_mib_stats(wmi_hdl, data, ev->mib_stats);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		cp_stats_err("wmi_extract_mib_stats failed");
+		return status;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+#else
+static QDF_STATUS target_if_cp_stats_extract_mib_stats(
+					struct wmi_unified *wmi_hdl,
+					wmi_host_stats_event *stats_param,
+					struct stats_event *ev, uint8_t *data)
+{
+	return QDF_STATUS_SUCCESS;
+}
+#endif
+
 static QDF_STATUS target_if_cp_stats_extract_vdev_summary_stats(
 					struct wmi_unified *wmi_hdl,
 					wmi_host_stats_event *stats_param,
@@ -260,6 +337,10 @@ static QDF_STATUS target_if_cp_stats_extract_vdev_summary_stats(
 		bcn_snr = vdev_stats.vdev_snr.bcn_snr;
 		dat_snr = vdev_stats.vdev_snr.dat_snr;
 		ev->vdev_summary_stats[i].vdev_id = vdev_stats.vdev_id;
+
+		cp_stats_debug("vdev %d SNR bcn: %d data: %d",
+			       ev->vdev_summary_stats[i].vdev_id, bcn_snr,
+			       dat_snr);
 
 		for (j = 0; j < 4; j++) {
 			ev->vdev_summary_stats[i].stats.tx_frm_cnt[j]
@@ -355,11 +436,23 @@ static QDF_STATUS target_if_cp_stats_extract_event(struct wmi_unified *wmi_hdl,
 		cp_stats_err("stats param extract failed: %d", status);
 		return status;
 	}
-	cp_stats_nofl_debug("num: pdev: %d, vdev: %d, peer: %d, rssi: %d",
+	cp_stats_nofl_debug("num: pdev: %d, pdev_extd: %d, vdev: %d, peer: %d,"
+			    "peer_extd: %d rssi: %d, mib %d, mib_extd %d, "
+			    "bcnflt: %d, channel: %d, bcn: %d, peer_extd2: %d,"
+			    "last_event: %x",
 			    stats_param.num_pdev_stats,
+			    stats_param.num_pdev_ext_stats,
 			    stats_param.num_vdev_stats,
 			    stats_param.num_peer_stats,
-			    stats_param.num_rssi_stats);
+			    stats_param.num_peer_extd_stats,
+			    stats_param.num_rssi_stats,
+			    stats_param.num_mib_stats,
+			    stats_param.num_mib_extd_stats,
+			    stats_param.num_bcnflt_stats,
+			    stats_param.num_chan_stats,
+			    stats_param.num_bcn_stats,
+			    stats_param.num_peer_adv_stats, stats_param.last_event);
+
 	ev->last_event = stats_param.last_event;
 	status = target_if_cp_stats_extract_pdev_stats(wmi_hdl, &stats_param,
 						       ev, data);
@@ -385,6 +478,12 @@ static QDF_STATUS target_if_cp_stats_extract_event(struct wmi_unified *wmi_hdl,
 	status = target_if_cp_stats_extract_vdev_chain_rssi_stats(wmi_hdl,
 								  &stats_param,
 								  ev, data);
+	if (QDF_IS_STATUS_ERROR(status))
+		return status;
+
+	status = target_if_cp_stats_extract_mib_stats(wmi_hdl,
+						      &stats_param,
+						      ev, data);
 	if (QDF_IS_STATUS_ERROR(status))
 		return status;
 
@@ -589,6 +688,8 @@ static uint32_t get_stats_id(enum stats_req_type type)
 			WMI_REQUEST_PDEV_STAT |
 			WMI_REQUEST_PEER_EXTD2_STAT |
 			WMI_REQUEST_RSSI_PER_CHAIN_STAT);
+	case TYPE_MIB_STATS:
+		return (WMI_REQUEST_MIB_STAT | WMI_REQUEST_MIB_EXTD_STAT);
 	}
 
 	return 0;

@@ -165,6 +165,7 @@ static void _sde_crtc_deinit_events(struct sde_crtc *sde_crtc)
 		return;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static int _sde_debugfs_fps_status_show(struct seq_file *s, void *data)
 {
 	struct sde_crtc *sde_crtc;
@@ -211,6 +212,7 @@ static int _sde_debugfs_fps_status(struct inode *inode, struct file *file)
 	return single_open(file, _sde_debugfs_fps_status_show,
 			inode->i_private);
 }
+#endif
 
 static ssize_t fps_periodicity_ms_store(struct device *device,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -563,7 +565,7 @@ static void _sde_crtc_setup_dim_layer_cfg(struct drm_crtc *crtc,
 						cstate->lm_roi[i].y;
 		}
 
-		SDE_EVT32_VERBOSE(DRMID(crtc),
+		SDE_EVT32(DRMID(crtc), dim_layer->stage,
 				cstate->lm_roi[i].x,
 				cstate->lm_roi[i].y,
 				cstate->lm_roi[i].w,
@@ -1341,8 +1343,8 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 	struct sde_rect plane_crtc_roi;
 	uint32_t stage_idx, lm_idx;
 	int zpos_cnt[SDE_STAGE_MAX + 1] = { 0 };
-	int i, cnt = 0;
-	bool bg_alpha_enable = false;
+	int i, mode, cnt = 0;
+	bool bg_alpha_enable = false, is_secure = false;
 
 	if (!sde_crtc || !crtc->state || !mixer) {
 		SDE_ERROR("invalid sde_crtc or mixer\n");
@@ -1371,6 +1373,12 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 		pstate = to_sde_plane_state(state);
 		fb = state->fb;
 
+		mode = sde_plane_get_property(pstate,
+				PLANE_PROP_FB_TRANSLATION_MODE);
+		is_secure = ((mode == SDE_DRM_FB_SEC) ||
+				(mode == SDE_DRM_FB_SEC_DIR_TRANS)) ?
+				true : false;
+
 		sde_plane_ctl_flush(plane, ctl, true);
 
 		SDE_DEBUG("crtc %d stage:%d - plane %d sspp %d fb %d\n",
@@ -1395,7 +1403,7 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 				state->src_w >> 16, state->src_h >> 16,
 				state->crtc_x, state->crtc_y,
 				state->crtc_w, state->crtc_h,
-				pstate->rotation);
+				pstate->rotation, is_secure);
 
 		stage_idx = zpos_cnt[pstate->stage]++;
 		stage_cfg->stage[pstate->stage][stage_idx] =
@@ -3699,6 +3707,7 @@ static int _sde_crtc_vblank_enable_no_lock(
 	return 0;
 }
 
+extern int asus_current_fps;
 /**
  * sde_crtc_duplicate_state - state duplicate hook
  * @crtc: Pointer to drm crtc structure
@@ -3732,6 +3741,10 @@ static struct drm_crtc_state *sde_crtc_duplicate_state(struct drm_crtc *crtc)
 
 	/* duplicate base helper */
 	__drm_atomic_helper_crtc_duplicate_state(crtc, &cstate->base);
+
+	// ASUS_BSP: update refresh rate to current refresh rate
+	if (asus_current_fps > 0)
+		cstate->base.mode.vrefresh = asus_current_fps;
 
 	return &cstate->base;
 }
@@ -4069,7 +4082,12 @@ static void sde_crtc_enable(struct drm_crtc *crtc,
 	SDE_EVT32_VERBOSE(DRMID(crtc));
 	sde_crtc = to_sde_crtc(crtc);
 
-	drm_crtc_vblank_on(crtc);
+	/*
+	 * Avoid drm_crtc_vblank_on during seamless DMS case
+	 * when CRTC is already in enabled state
+	 */
+	if (!sde_crtc->enabled)
+		drm_crtc_vblank_on(crtc);
 
 	mutex_lock(&sde_crtc->crtc_lock);
 	SDE_EVT32(DRMID(crtc), sde_crtc->enabled);
@@ -4190,6 +4208,9 @@ static int _sde_crtc_check_secure_blend_config(struct drm_crtc *crtc,
 {
 	struct drm_plane *plane;
 	int i;
+	struct drm_crtc_state *old_state = crtc->state;
+	struct sde_crtc_state *old_cstate = to_sde_crtc_state(old_state);
+
 	if (secure == SDE_DRM_SEC_ONLY) {
 		/*
 		 * validate planes - only fb_sec_dir is allowed during sec_crtc
@@ -4250,6 +4271,8 @@ static int _sde_crtc_check_secure_blend_config(struct drm_crtc *crtc,
 		 * - fail empty commit
 		 * - validate dim_layer or plane is staged in the supported
 		 *   blendstage
+		 * - fail if previous commit has no planes staged and
+		 *   no dim layer at highest blendstage.
 		 */
 		if (sde_kms->catalog->sui_supported_blendstage) {
 			int sec_stage = cnt ? pstates[0].sde_pstate->stage :
@@ -4265,6 +4288,14 @@ static int _sde_crtc_check_secure_blend_config(struct drm_crtc *crtc,
 				  "crtc%d: empty cnt%d/dim%d or bad stage%d\n",
 					DRMID(crtc), cnt,
 					cstate->num_dim_layers, sec_stage);
+				return -EINVAL;
+			}
+
+			if (!old_state->plane_mask &&
+				!old_cstate->num_dim_layers) {
+				SDE_ERROR(
+				"crtc%d: no dim layer in nonsecure to secure transition\n",
+					DRMID(crtc));
 				return -EINVAL;
 			}
 		}
@@ -4778,6 +4809,43 @@ end:
 	return rc;
 }
 
+/**
+ * sde_crtc_get_num_datapath - get the number of datapath active
+ *				of primary connector
+ * @crtc: Pointer to DRM crtc object
+ * @connector: Pointer to DRM connector object of WB in CWB case
+ */
+int sde_crtc_get_num_datapath(struct drm_crtc *crtc,
+		struct drm_connector *connector)
+{
+	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
+	struct sde_connector_state *sde_conn_state = NULL;
+	struct drm_connector *conn;
+	struct drm_connector_list_iter conn_iter;
+
+	if (!sde_crtc || !connector) {
+		SDE_DEBUG("Invalid argument\n");
+		return 0;
+	}
+
+	if (sde_crtc->num_mixers)
+		return sde_crtc->num_mixers;
+
+	drm_connector_list_iter_begin(crtc->dev, &conn_iter);
+	drm_for_each_connector_iter(conn, &conn_iter) {
+		if (conn->state && conn->state->crtc == crtc &&
+				 conn != connector)
+			sde_conn_state = to_sde_connector_state(conn->state);
+	}
+
+	drm_connector_list_iter_end(&conn_iter);
+
+	if (sde_conn_state)
+		return sde_conn_state->mode_info.topology.num_lm;
+
+	return 0;
+}
+
 int sde_crtc_vblank(struct drm_crtc *crtc, bool en)
 {
 	struct sde_crtc *sde_crtc;
@@ -4789,6 +4857,7 @@ int sde_crtc_vblank(struct drm_crtc *crtc, bool en)
 	}
 	sde_crtc = to_sde_crtc(crtc);
 
+	mutex_lock(&sde_crtc->vblank_modeset_ctrl_lock);
 	mutex_lock(&sde_crtc->crtc_lock);
 	SDE_EVT32(DRMID(&sde_crtc->base), en, sde_crtc->enabled);
 	ret = _sde_crtc_vblank_enable_no_lock(sde_crtc, en);
@@ -4797,8 +4866,27 @@ int sde_crtc_vblank(struct drm_crtc *crtc, bool en)
 				sde_crtc->name, ret);
 
 	mutex_unlock(&sde_crtc->crtc_lock);
+	mutex_unlock(&sde_crtc->vblank_modeset_ctrl_lock);
 
 	return 0;
+}
+
+static void sde_kms_add_ubwc_info(struct sde_kms_info *info,
+				struct sde_mdss_cfg *catalog)
+{
+	sde_kms_info_add_keyint(info, "UBWC version",
+				catalog->ubwc_version);
+	sde_kms_info_add_keyint(info, "UBWC macrotile_mode",
+				catalog->macrotile_mode);
+	sde_kms_info_add_keyint(info, "UBWC highest banking bit",
+				catalog->mdp[0].highest_bank_bit);
+	sde_kms_info_add_keyint(info, "UBWC swizzle",
+				catalog->mdp[0].ubwc_swizzle);
+
+	if (of_fdt_get_ddrtype() == LP_DDR4_TYPE)
+		sde_kms_info_add_keystr(info, "DDR version", "DDR4");
+	else
+		sde_kms_info_add_keystr(info, "DDR version", "DDR5");
 }
 
 /**
@@ -4949,18 +5037,8 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	if (catalog->qseed_type == SDE_SSPP_SCALER_QSEED3LITE)
 		sde_kms_info_add_keystr(info, "qseed_type", "qseed3lite");
 
-	sde_kms_info_add_keyint(info, "UBWC version", catalog->ubwc_version);
-	sde_kms_info_add_keyint(info, "UBWC macrotile_mode",
-				catalog->macrotile_mode);
-	sde_kms_info_add_keyint(info, "UBWC highest banking bit",
-				catalog->mdp[0].highest_bank_bit);
-	sde_kms_info_add_keyint(info, "UBWC swizzle",
-				catalog->mdp[0].ubwc_swizzle);
-
-	if (of_fdt_get_ddrtype() == LP_DDR4_TYPE)
-		sde_kms_info_add_keystr(info, "DDR version", "DDR4");
-	else
-		sde_kms_info_add_keystr(info, "DDR version", "DDR5");
+	if (catalog->ubwc_version)
+		sde_kms_add_ubwc_info(info, catalog);
 
 	if (sde_is_custom_client()) {
 		/* No support for SMART_DMA_V1 yet */
@@ -6074,6 +6152,7 @@ struct drm_crtc *sde_crtc_init(struct drm_device *dev, struct drm_plane *plane)
 	mutex_init(&sde_crtc->crtc_lock);
 	spin_lock_init(&sde_crtc->spin_lock);
 	atomic_set(&sde_crtc->frame_pending, 0);
+	mutex_init(&sde_crtc->vblank_modeset_ctrl_lock);
 
 	sde_crtc->enabled = false;
 

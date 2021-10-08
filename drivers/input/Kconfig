@@ -23,14 +23,21 @@ config INPUT
 	  To compile this driver as a module, choose M here: the
 	  module will be called input.
 
+if INPUT
+
 config SENSORS_HALL
 	bool "Hall sensor"
-	default y
+	default n
 	---help---
 	 Say y here if you want to use this hall sensor driver, it
 	 is like a switch. For example, lid.
 
-if INPUT
+config SENSORS_HALL2
+	bool "Hall sensor2"
+	default n
+	---help---
+	 Say y here if you want to use this hall sensor driver, it
+	 can get magnetic data form xyz-axis.
 
 config INPUT_LEDS
 	tristate "Export input device LEDs in sysfs"

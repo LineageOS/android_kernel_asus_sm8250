@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include "dp_panel.h"
@@ -76,29 +76,21 @@ struct dp_panel_private {
 };
 
 static const struct dp_panel_info fail_safe = {
-	.h_active = 640,
-	.v_active = 480,
-	.h_back_porch = 48,
-	.h_front_porch = 16,
-	.h_sync_width = 96,
+	.h_active = 1920,
+	.v_active = 1080,
+	.h_back_porch = 148,
+	.h_front_porch = 88,
+	.h_sync_width = 44,
 	.h_active_low = 0,
-	.v_back_porch = 33,
-	.v_front_porch = 10,
-	.v_sync_width = 2,
+	.v_back_porch = 36,
+	.v_front_porch = 4,
+	.v_sync_width = 5,
 	.v_active_low = 0,
 	.h_skew = 0,
 	.refresh_rate = 60,
-	.pixel_clk_khz = 25200,
+	.pixel_clk_khz = 148500,
 	.bpp = 24,
 };
-
-/* ASUS BSP DP +++ */
-extern char *asus_vendor;
-extern uint8_t gDongleType;
-extern bool dp_display_is_hdmi_bridge(struct dp_panel *panel);
-extern struct dp_debug *asus_debug;
-bool dt_hdmi = false;
-/* ASUS BSP DP --- */
 
 /* OEM NAME */
 static const u8 vendor_name[8] = {81, 117, 97, 108, 99, 111, 109, 109};
@@ -407,7 +399,7 @@ static void dp_panel_update_tu_timings(struct dp_tu_calc_input *in,
 	tot_num_dummy_bytes = (nlanes - eoc_bytes) * dsc_num_slices;
 
 	if (dsc_num_bytes == 0)
-		DP_INFO("incorrect no of bytes per slice=%d\n", dsc_num_bytes);
+		DP_DEBUG("incorrect no of bytes per slice=%d\n", dsc_num_bytes);
 
 	dwidth_dsc_bytes = (tot_num_hor_bytes +
 				tot_num_eoc_symbols +
@@ -805,7 +797,7 @@ static void _dp_panel_calc_tu(struct dp_tu_calc_input *in,
 
 	if (tu.dsc_en && compare_result_1 && compare_result_2) {
 		HBLANK_MARGIN += 4;
-		DP_INFO("Info: increase HBLANK_MARGIN to %d\n", HBLANK_MARGIN);
+		DP_DEBUG("Info: increase HBLANK_MARGIN to %d\n", HBLANK_MARGIN);
 	}
 
 tu_size_calc:
@@ -839,7 +831,7 @@ tu_size_calc:
 		tu.n_tus += 1;
 
 	tu.even_distribution_legacy = tu.n_tus % tu.nlanes == 0 ? 1 : 0;
-	DP_INFO("Info: n_sym = %d, num_of_tus = %d\n",
+	DP_DEBUG("Info: n_sym = %d, num_of_tus = %d\n",
 		tu.valid_boundary_link, tu.n_tus);
 
 	_dp_calc_extra_bytes(&tu);
@@ -969,17 +961,17 @@ tu_size_calc:
 	tu_table->lower_boundary_count      = tu.lower_boundary_count;
 	tu_table->tu_size_minus1            = tu.tu_size_minus1;
 
-	DP_INFO("TU: valid_boundary_link: %d\n", tu_table->valid_boundary_link);
-	DP_INFO("TU: delay_start_link: %d\n", tu_table->delay_start_link);
-	DP_INFO("TU: boundary_moderation_en: %d\n",
+	DP_DEBUG("TU: valid_boundary_link: %d\n", tu_table->valid_boundary_link);
+	DP_DEBUG("TU: delay_start_link: %d\n", tu_table->delay_start_link);
+	DP_DEBUG("TU: boundary_moderation_en: %d\n",
 			tu_table->boundary_moderation_en);
-	DP_INFO("TU: valid_lower_boundary_link: %d\n",
+	DP_DEBUG("TU: valid_lower_boundary_link: %d\n",
 			tu_table->valid_lower_boundary_link);
-	DP_INFO("TU: upper_boundary_count: %d\n",
+	DP_DEBUG("TU: upper_boundary_count: %d\n",
 			tu_table->upper_boundary_count);
-	DP_INFO("TU: lower_boundary_count: %d\n",
+	DP_DEBUG("TU: lower_boundary_count: %d\n",
 			tu_table->lower_boundary_count);
-	DP_INFO("TU: tu_size_minus1: %d\n", tu_table->tu_size_minus1);
+	DP_DEBUG("TU: tu_size_minus1: %d\n", tu_table->tu_size_minus1);
 }
 
 static void dp_panel_calc_tu_parameters(struct dp_panel *dp_panel,
@@ -1808,7 +1800,7 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 	struct drm_dp_aux *drm_aux;
 	u8 *dpcd, rx_feature, temp;
 	u32 dfp_count = 0, offset = DP_DPCD_REV;
-	int dpcd_retry = 3; /* ASUS BSP DP +++ */
+	int dpcd_retry = 3; /* ASUS BSP Display +++ */
 
 	if (!dp_panel) {
 		DP_ERR("invalid input\n");
@@ -1832,13 +1824,13 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 		goto skip_dpcd_read;
 	}
 
-	/* ASUS BSP DP +++ */
+	/* ASUS BSP Display, fix TT#260414 +++ */
 	do {
 		rlen = drm_dp_dpcd_read(drm_aux, DP_TRAINING_AUX_RD_INTERVAL, &temp, 1);
 		if (rlen != 1) {
 			if (dpcd_retry > 1) {
 				DP_LOG("retry reading DP_TRAINING_AUX_RD_INTERVAL\n");
-				mdelay(100);
+				mdelay(70);
 			} else {
 				DP_ERR("error reading DP_TRAINING_AUX_RD_INTERVAL\n");
 				rc = -EINVAL;
@@ -1847,10 +1839,9 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel, bool multi_func)
 		} else {
 			break;
 		}
-
 		dpcd_retry--;
 	} while (dpcd_retry > 0);
-	/* ASUS BSP DP --- */
+	/* ASUS BSP Display --- */
 
 	/* check for EXTENDED_RECEIVER_CAPABILITY_FIELD_PRESENT */
 	if (temp & BIT(7)) {
@@ -2036,6 +2027,8 @@ end:
 	edid = dp_panel->edid_ctrl->edid;
 	dp_panel->audio_supported = drm_detect_monitor_audio(edid);
 
+	/* ASUS BSP Display +++ */
+	dp_asus_extract_id(dp_panel);
 	return ret;
 }
 
@@ -2201,17 +2194,11 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 	if (dp_panel->dsc_en)
 		min_supported_bpp = 24;
 
-	/* ASUS BSP DP, to limit output with 8bit@24bpp +++ */
-	//dt_hdmi = dp_display_is_hdmi_bridge(dp_panel);
-	if ((asus_vendor && !strncmp(asus_vendor, "ACR", 3)) || (gDongleType ==  3 && dt_hdmi))
-		bpp = min_t(u32, mode_edid_bpp, DP_PANEL_DEFAULT_BPP);
-	else
-		bpp = min_t(u32, mode_edid_bpp, max_supported_bpp);
-
-	// TT#255578
-	if (mode_edid_bpp > max_supported_bpp)
+	bpp = min_t(u32, mode_edid_bpp, max_supported_bpp);
+	// TT#255578, TT#260643
+	if (mode_edid_bpp > max_supported_bpp || dp_asus_validate_24_bpp(dp_panel))
 		min_supported_bpp = 24;
-	/* ASUS BSP DP, to limit output with 8bit@24bpp --- */
+	/* ASUS BSP Display --- */
 
 	link_info = &dp_panel->link_info;
 	data_rate_khz = link_info->num_lanes * link_info->rate * 8;
@@ -2268,9 +2255,6 @@ static u32 dp_panel_get_mode_bpp(struct dp_panel *dp_panel,
 	else
 		bpp = dp_panel_get_supported_bpp(dp_panel, mode_edid_bpp,
 				mode_pclk_khz);
-
-	if (asus_debug->debug_bpp)
-		bpp = asus_debug->debug_bpp;
 
 	return bpp;
 }
@@ -2650,8 +2634,6 @@ static int dp_panel_init_panel_info(struct dp_panel *dp_panel)
 	* Control Field" (register 0x600).
 	*/
 	usleep_range(1000, 2000);
-
-	drm_dp_link_probe(panel->aux->drm_aux, &dp_panel->link_info);
 end:
 	return rc;
 }
@@ -3453,3 +3435,139 @@ void dp_panel_put(struct dp_panel *dp_panel)
 
 	devm_kfree(panel->dev, panel);
 }
+
+/* ASUS BSP Display +++ */
+bool asus_is_hdmi = false;
+extern uint8_t gDongleType;
+
+bool dp_asus_is_station(void)
+{
+	return (gDongleType == 2);
+}
+
+bool dp_asus_is_dt_dock(void)
+{
+	return (gDongleType == 3);
+}
+
+static bool dp_asus_is_hdmi_bridge(struct dp_panel *dp_panel)
+{
+	return (dp_panel->dpcd[DP_DOWNSTREAMPORT_PRESENT] &
+		0x15);
+}
+
+bool dp_asus_validate_24_bpp(struct dp_panel *dp_panel)
+{
+	if (dp_asus_is_station())
+		return false;
+
+	if (!dp_panel->asus_vendor)
+		return false;
+
+	if (dp_asus_is_hdmi_bridge(dp_panel))
+		return true;
+
+#if 0
+	if (!strncmp(dp_panel->asus_vendor, "ACR", 3))
+
+	// fix TT#260643
+	if (!strncmp(dp_panel->asus_vendor, "ACI", 3))
+		return true;
+#endif
+
+	return false;
+}
+
+bool dp_asus_validate_mode(struct dp_panel *dp_panel,
+		struct drm_display_mode *mode)
+{
+	int min_supported_vrefresh = 60;
+	int max_supported_vrefresh = 144;
+	int max_supported_vrefresh_hdmi = 120;
+	bool status = false;
+
+	if (!dp_panel || !mode) {
+		DP_LOG("invalid params\n");
+		return status;
+	}
+
+	// do not check validate mode of station
+	if (dp_asus_is_station())
+		return true;
+
+	asus_is_hdmi = dp_asus_is_hdmi_bridge(dp_panel);
+
+	// fps limitation if hdmi bridge
+	if (asus_is_hdmi && (mode->vrefresh > max_supported_vrefresh_hdmi))
+		goto end;
+
+	// fps limitation
+	if ((!dp_panel->connector->under_60hz_allowed) &&
+			((mode->vrefresh < min_supported_vrefresh) ||
+			(mode->vrefresh > max_supported_vrefresh)))
+		goto end;
+
+	// monitor size must width > height
+	if (mode->vdisplay > mode->hdisplay)
+		goto end;
+
+	status = true;
+
+end:
+	// if wide aspect allowed, set asus_is_hdmi to false
+	if(dp_panel->connector->wide_aspect_allowed && asus_is_hdmi)
+		asus_is_hdmi = false;
+
+	return status;
+}
+
+// TT-274540
+bool dp_asus_ignore_link_train_failure(struct dp_panel *dp_panel)
+{
+	if (!dp_panel) {
+		DP_LOG("invalid params\n");
+		return false;
+	}
+
+	if (!dp_panel->asus_vendor)
+		return false;
+
+	//SQ PG349Q vendor_id=AUS, codes=343
+	//Bernard PXXX vendor_id=AUS, codes=27b
+	if (!strncmp(dp_panel->asus_vendor, "AUS", 3)) {
+		if (dp_panel->asus_proc_codes == 0x343 ||
+				dp_panel->asus_proc_codes == 0x27b) {
+			DP_LOG("shallow link training on vendor %s, product code 0x%x\n",
+				dp_panel->asus_vendor, dp_panel->asus_proc_codes);
+			return true;
+		}
+	} else {
+		DP_LOG("not shallow link training list, doing normal training\n");
+	}
+
+	return false;
+}
+
+void dp_asus_extract_id(struct dp_panel *dp_panel)
+{
+	struct edid *edid;
+
+	if (!dp_panel || !dp_panel->edid_ctrl) {
+		DP_LOG("invalid input\n");
+		return;
+	}
+
+	edid = dp_panel->edid_ctrl->edid;
+	if (!edid) {
+		DP_LOG("invalid parameter\n");
+		return;
+	}
+
+	dp_panel->asus_proc_codes = ((u32)edid->prod_code[1] << 4) +
+			(edid->prod_code[0] >> 4);
+	dp_panel->asus_vendor = dp_panel->edid_ctrl->vendor_id;
+
+	DP_LOG("vendor_id=%s, prod_codes=0x%x\n",
+		   dp_panel->asus_vendor, dp_panel->asus_proc_codes);
+}
+/* ASUS BSP Display --- */

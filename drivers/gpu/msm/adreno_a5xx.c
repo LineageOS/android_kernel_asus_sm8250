@@ -149,6 +149,9 @@ static void a5xx_platform_setup(struct adreno_device *adreno_dev)
 	/* Set the GPU busy counter to use for frequency scaling */
 	adreno_dev->perfctr_pwr_lo = A5XX_RBBM_PERFCTR_RBBM_0_LO;
 
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_SPTP_PC))
+		set_bit(ADRENO_SPTP_PC_CTRL, &adreno_dev->pwrctrl_flag);
+
 	/* Check efuse bits for various capabilties */
 	a5xx_check_features(adreno_dev);
 }
@@ -350,12 +353,15 @@ static void a5xx_protect_init(struct adreno_device *adreno_dev)
 	/*
 	 * For a530 and a540 the SMMU region is 0x20000 bytes long and 0x10000
 	 * bytes on all other targets. The base offset for both is 0x40000.
-	 * Write it to the next available slot
+	 * Write it to the next available slot. The base offset and length of a
+	 * block must be specified as power of 2 values.
 	 */
 	if (adreno_is_a530(adreno_dev) || adreno_is_a540(adreno_dev))
-		_setprotectreg(device, reg + 1, 0x40000, ilog2(0x20000));
+		_setprotectreg(device, reg + 1, (0x40000 >> 2),
+			ilog2(0x20000 >> 2));
 	else
-		_setprotectreg(device, reg + 1, 0x40000, ilog2(0x10000));
+		_setprotectreg(device, reg + 1, (0x40000 >> 2),
+			ilog2(0x10000 >> 2));
 }
 
 /*
@@ -1508,10 +1514,10 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 
 	/* Program the GMEM VA range for the UCHE path */
 	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MIN_LO,
-			adreno_dev->gpucore->gmem_base);
+			adreno_dev->uche_gmem_base);
 	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MIN_HI, 0x0);
 	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MAX_LO,
-			adreno_dev->gpucore->gmem_base +
+			adreno_dev->uche_gmem_base +
 			adreno_dev->gpucore->gmem_size - 1);
 	kgsl_regwrite(device, A5XX_UCHE_GMEM_RANGE_MAX_HI, 0x0);
 
@@ -1718,15 +1724,12 @@ static int a5xx_post_start(struct adreno_device *adreno_dev)
 		*cmds++ = 0xF;
 	}
 
-	if (adreno_is_preemption_enabled(adreno_dev)) {
+	if (adreno_is_preemption_enabled(adreno_dev))
 		cmds += _preemption_init(adreno_dev, rb, cmds, NULL);
-		rb->_wptr = rb->_wptr - (42 - (cmds - start));
-		ret = adreno_ringbuffer_submit_spin_nosync(rb, NULL, 2000);
-	} else {
-		rb->_wptr = rb->_wptr - (42 - (cmds - start));
-		ret = adreno_ringbuffer_submit_spin(rb, NULL, 2000);
-	}
 
+	rb->_wptr = rb->_wptr - (42 - (cmds - start));
+
+	ret = adreno_ringbuffer_submit_spin(rb, NULL, 2000);
 	if (ret)
 		adreno_spin_idle_debug(adreno_dev,
 				"hw initialization failed to idle\n");
@@ -2035,7 +2038,7 @@ static int _load_firmware(struct kgsl_device *device, const char *fwfile,
 
 	memcpy(firmware->memdesc.hostptr, &fw->data[4], fw->size - 4);
 	firmware->size = (fw->size - 4) / sizeof(uint32_t);
-	firmware->version = adreno_get_ucode_version((u32 *)fw->data);
+	firmware->version = *(unsigned int *)&fw->data[4];
 
 done:
 	release_firmware(fw);

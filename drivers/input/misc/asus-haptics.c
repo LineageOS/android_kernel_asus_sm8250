@@ -355,12 +355,72 @@ static ssize_t qpnp_haptics_store_duration(struct device *dev,
 	return count;
 }
 
+static ssize_t qpnp_haptics_show_playtest(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return -EPERM;
+}
+
+static ssize_t qpnp_haptics_store_playtest(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct qti_hap_chip *qti_data = dev_get_drvdata(dev);
+	u32 val;
+	int rc, tmp;
+	ktime_t rem;
+	s64 time_us;
+	s16 level;
+
+	printk("[vibrator] %s \n",__func__);
+	rc = kstrtouint(buf, 0, &val);
+	if (rc < 0)
+		return rc;
+
+	/* setting 0 on duration is NOP for now */
+	if (val <= 0)
+		return count;
+
+	if (hrtimer_active(&qti_data->hap_disable_timer)) {
+		rem = hrtimer_get_remaining(&qti_data->hap_disable_timer);
+		time_us = ktime_to_us(rem);
+		dev_dbg(qti_data->dev, "waiting for playing clear sequence: %lld us\n", time_us);
+		usleep_range(time_us, time_us + 100);
+	}
+
+	//VMAX_MIN_PLAY_TIME_US		20000
+	//echo 25000
+
+	mutex_lock(&qti_data->param_lock);
+	qti_data->play.length_us = val * USEC_PER_MSEC;
+	level = 0x7fff;
+	//qti_data->config.vmax_mv = 2900;
+	//qti_data->config.play_rate_us = 4166;
+	tmp = level * qti_data->config.vmax_mv;
+	qti_data->play.vmax_mv = tmp / 0x7fff;
+	printk("[vibrator] %s :  length = %dus, vmax_mv=%d \n",__func__,
+		qti_data->play.length_us, qti_data->play.vmax_mv);
+
+	rc = qti_haptics_load_constant_waveform(qti_data);
+	if (rc < 0) {
+		dev_err(qti_data->dev, "Play constant waveform failed, rc=%d\n",rc);
+		return rc;
+	}
+	mutex_unlock(&qti_data->param_lock);
+
+	printk("[vibrator] %s : vibrator_on !!! \n",__func__);
+	rc = qti_haptics_playback(qti_data->input_dev, 0, 1);
+	rc = qti_haptics_config_vmax(qti_data, qti_data->play.vmax_mv);
+
+	return count;
+}
 
 static struct device_attribute vibrator_attrs[] = {
 	__ATTR(vibrator_on, S_IRUGO|S_IWUSR, vibrator_on_show, vibrator_on_store),
 	__ATTR(state, S_IRUGO|S_IWUSR, qpnp_haptics_show_state, qpnp_haptics_store_state),
 	__ATTR(duration, S_IRUGO|S_IWUSR, qpnp_haptics_show_duration,
 		qpnp_haptics_store_duration),
+	__ATTR(playtest, S_IRUGO|S_IWUSR, qpnp_haptics_show_playtest,
+		qpnp_haptics_store_playtest),
 };
 
 
@@ -1656,7 +1716,7 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 	return 0;
 }
 
-#ifdef CONFIG_DEBUG_FS
+//#ifdef CONFIG_DEBUG_FS
 static int play_rate_dbgfs_read(void *data, u64 *val)
 {
 	struct qti_hap_effect *effect = (struct qti_hap_effect *)data;
@@ -1922,7 +1982,7 @@ static ssize_t pattern_dbgfs_read(struct file *filep,
 		return -ENOMEM;
 
 	tmp = kbuf;
-	for (length = 0, i = 0; i < effect->pattern_length; i++) {
+	for (length = 0, i = 0; i < HAP_WAVEFORM_BUFFER_MAX; i++) {
 		len = snprintf(tmp, CHAR_PER_PATTERN, "0x%x ",
 				effect->pattern[i]);
 		tmp += len;
@@ -1966,14 +2026,12 @@ static ssize_t pattern_dbgfs_write(struct file *filep,
 			rc = -EINVAL;
 			goto err;
 		}
-
-		effect->pattern[i++] = val & 0xff;
-
-		if (i >= effect->pattern_length)
-			break;
+		
+		if (i < HAP_WAVEFORM_BUFFER_MAX)
+			effect->pattern[i++] = val & 0xff;
 	}
 
-	for (j = i; j < effect->pattern_length; j++)
+	for (j = i; j < HAP_WAVEFORM_BUFFER_MAX; j++)
 		effect->pattern[j] = 0;
 
 	rc = count;
@@ -2114,7 +2172,7 @@ cleanup:
 	debugfs_remove_recursive(hap_dir);
 	return rc;
 }
-#endif
+//#endif
 
 static int qti_haptics_probe(struct platform_device *pdev)
 {
@@ -2250,9 +2308,9 @@ static int qti_haptics_remove(struct platform_device *pdev)
 {
 	struct qti_hap_chip *chip = dev_get_drvdata(&pdev->dev);
 
-#ifdef CONFIG_DEBUG_FS
+//#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(chip->hap_debugfs);
-#endif
+//#endif
 	mutex_destroy(&chip->param_lock);
 	input_ff_destroy(chip->input_dev);
 	dev_set_drvdata(chip->dev, NULL);

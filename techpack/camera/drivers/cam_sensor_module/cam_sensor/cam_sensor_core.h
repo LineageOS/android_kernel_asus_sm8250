@@ -7,7 +7,7 @@
 #define _CAM_SENSOR_CORE_H_
 
 #include "cam_sensor_dev.h"
-void asus_cam_sensor_init(struct cam_sensor_ctrl_t *s_ctrl);
+
 /**
  * @s_ctrl: Sensor ctrl structure
  *

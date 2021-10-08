@@ -110,7 +110,7 @@ static int32_t cam_actuator_power_up(struct cam_actuator_ctrl_t *a_ctrl)
 		return rc;
 	}
 #endif
-
+	asus_vcm_move_write(1);//ASUS_BSP Jason fix multi actuator write
 	rc = camera_io_init(&a_ctrl->io_master_info);
 	if (rc < 0)
 		CAM_ERR(CAM_ACTUATOR, "cci init failed: rc: %d", rc);
@@ -146,7 +146,7 @@ static int32_t cam_actuator_power_down(struct cam_actuator_ctrl_t *a_ctrl)
 		return rc;
 	}
 #endif
-
+	asus_vcm_move_write(1);//ASUS_BSP Jason fix multi actuator write
 	camera_io_release(&a_ctrl->io_master_info);
     CAM_INFO(CAM_ACTUATOR, "Actuator POWER DOWN!");
 	return rc;
@@ -160,7 +160,7 @@ static void override_i2c_write_setting(struct camera_io_master *io_master_info, 
 	struct cam_actuator_ctrl_t *a_ctrl = container_of(io_master_info,struct cam_actuator_ctrl_t,io_master_info);
 	for(i=0;i<setting->size;i++)
 	{
-		CAM_DBG(CAM_ACTUATOR,"OP %s, [%d/%d], addr[0x%x] = 0x%x",
+		CAM_INFO(CAM_ACTUATOR,"OP %s, [%d/%d], addr[0x%x] = 0x%x",
 					op_string,
 					i+1,setting->size,
 					setting->reg_setting[i].reg_addr,
@@ -175,7 +175,7 @@ static void override_i2c_write_setting(struct camera_io_master *io_master_info, 
 					setting->reg_setting[i].reg_data = 0x1;
 				dac = setting->reg_setting[i].reg_data;
 				a_ctrl->lens_pos = dac;
-				CAM_ERR(CAM_ACTUATOR,"DAC 0x%x, lens_pos %d",
+				CAM_DBG(CAM_ACTUATOR,"DAC 0x%x, lens_pos %d",
 						 setting->reg_setting[i].reg_data,
 						 dac
 						 );
@@ -193,7 +193,7 @@ static void override_i2c_write_setting(struct camera_io_master *io_master_info, 
 				dac = setting->reg_setting[i].reg_data;
 				a_ctrl->lens_pos = dac;
 				setting->reg_setting[i].reg_data = (0x0001<<16)|(dac);
-				CAM_ERR(CAM_ACTUATOR,"DAC 0x%x, lens_pos %d",
+				CAM_DBG(CAM_ACTUATOR,"DAC 0x%x, lens_pos %d",
 						 setting->reg_setting[i].reg_data,
 						 dac
 						 );

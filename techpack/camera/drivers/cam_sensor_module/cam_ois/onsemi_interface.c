@@ -17,7 +17,7 @@
 //#define BURST_LENGTH_FC 		( 64 )	 	// 64 Total: 67Byte Burst
 #define ONE_MSEC_COUNT 15
 #define 	MESOF_NUM		2048				
-#define 	GYROFFSET_H		( 0x06D6 << 16 )	
+#define 	GYROFFSET_H		( 0x1388 << 16 )//ASUS_BSP Byron temp widen thredshold from 0x06D6 to 0x1388
 #define		GSENS			( 4096 << 16 )		
 #define		GSENS_MARG		(GSENS / 4)			
 #define		POSTURETH		(GSENS - GSENS_MARG)	
@@ -31,6 +31,8 @@
 #define		GEA_NUM			512				
 #define		GEA_DIF_HIG		0x0083			
 #define		GEA_DIF_LOW		0x0001	
+
+#define CCI_READ_FAILED -110
 //**************************
 //	Table of download file
 //**************************
@@ -1042,8 +1044,8 @@ UINT_8 ZF7_SetAngleCorrection( struct cam_ois_ctrl_t *ctrl, float DegreeGap, UIN
 UINT_8	ZF7_RdStatus( struct cam_ois_ctrl_t *ctrl, UINT_8 UcStBitChk )
 {
 	UINT_32	UlReadVal ;
-
-	onsemi_read_dword( ctrl, 0xF100 , &UlReadVal );
+	int rc = 0;
+	rc = onsemi_read_dword( ctrl, 0xF100 , &UlReadVal );
 	if( UcStBitChk ){
 		UlReadVal &= READ_STATUS_INI ;
 	}
@@ -1061,6 +1063,12 @@ void	ZF7_OisEna( struct cam_ois_ctrl_t *ctrl )	// OIS ( SMA , VCM ) = ( OFF, ON 
 	onsemi_write_dword( ctrl, 0xF012 , 0x00000001 ) ;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 void	ZF7_OisEna_S( struct cam_ois_ctrl_t *ctrl )	// OIS ( SMA , VCM ) = ( ON, OFF )
@@ -1071,6 +1079,12 @@ void	ZF7_OisEna_S( struct cam_ois_ctrl_t *ctrl )	// OIS ( SMA , VCM ) = ( ON, OF
 	onsemi_write_dword( ctrl, 0xF012 , 0x00010000 ) ;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 void	ZF7_OisEna_SV( struct cam_ois_ctrl_t *ctrl )	// OIS ( SMA , VCM ) = ( ON, ON )
@@ -1081,6 +1095,12 @@ void	ZF7_OisEna_SV( struct cam_ois_ctrl_t *ctrl )	// OIS ( SMA , VCM ) = ( ON, O
 	onsemi_write_dword( ctrl, 0xF012 , 0x00010001 ) ;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1092,6 +1112,12 @@ void	ZF7_OisDis( struct cam_ois_ctrl_t *ctrl )	// OIS ( SMA , VCM ) = ( OFF, OFF
 	onsemi_write_dword( ctrl, 0xF012 , 0x00000000 ) ;
 	while( UcStRd && ( UlStCnt++ < CNT050MS)) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1111,6 +1137,12 @@ void	ZF7_SetPanTiltMode( struct cam_ois_ctrl_t *ctrl, UINT_8 UcPnTmod )
 
 	while( UcStRd && ( UlStCnt++ < CNT050MS)) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1122,6 +1154,12 @@ void	ZF7_SscEna( struct cam_ois_ctrl_t *ctrl )
 	onsemi_write_dword( ctrl, 0xF01C , 0x00000001 ) ;
 	while( UcStRd && ( UlStCnt++ < CNT050MS)) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1133,6 +1171,12 @@ void	ZF7_SscDis( struct cam_ois_ctrl_t *ctrl )
 	onsemi_write_dword( ctrl, 0xF01C , 0x00000000 ) ;
 	while( UcStRd && ( UlStCnt++ < CNT050MS)) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1371,6 +1415,12 @@ void	ZF7_SrvOn( struct cam_ois_ctrl_t *ctrl )
 
 	while( UcStRd && ( UlStCnt++ < CNT200MS)) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1383,6 +1433,12 @@ void	ZF7_SrvOff( struct cam_ois_ctrl_t *ctrl )
 
 	while( UcStRd && ( UlStCnt++ < CNT050MS)) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1409,6 +1465,12 @@ void	ZF7_SetStandbyMode( struct cam_ois_ctrl_t *ctrl )
 	onsemi_write_dword( ctrl, 0xF019 ,	0x00000001 ) ;
 	while( UcStRd && (UlStCnt++ < CNT100MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1421,6 +1483,12 @@ void	ZF7_SetActiveMode( struct cam_ois_ctrl_t *ctrl )
 	onsemi_write_dword( ctrl, 0xF019 ,	0x00000000 ) ;	
 	while( UcStRd && (UlStCnt++ < CNT100MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 
@@ -1433,42 +1501,84 @@ void ZF7_Standby128to150( struct cam_ois_ctrl_t *ctrl )
 	UcStRd = 1;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01305500	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01304500	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01304400	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---s
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01301101	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01301305	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01303E00	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 void ZF7_Active128to150( struct cam_ois_ctrl_t *ctrl )
@@ -1480,36 +1590,72 @@ void ZF7_Active128to150( struct cam_ois_ctrl_t *ctrl )
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x0130111F	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01304400	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01304500	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01305500	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01302408	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 }
 void ZF7_DeviceReset128to150( struct cam_ois_ctrl_t *ctrl )
@@ -1521,6 +1667,12 @@ void ZF7_DeviceReset128to150( struct cam_ois_ctrl_t *ctrl )
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			goto end; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	delay_ms( 1 ) ;											
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01303201	 ) ;
@@ -1528,13 +1680,27 @@ void ZF7_DeviceReset128to150( struct cam_ois_ctrl_t *ctrl )
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS ) ) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			goto end;  
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_WR_ACCS ,0x01302408	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS )) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			goto end; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
+	end:
+		return;
 }
 
 UINT_8 ZF7_VcmRemap( struct cam_ois_ctrl_t *ctrl )
@@ -1561,12 +1727,24 @@ UINT_8 ZF7_SetPD128to150( struct cam_ois_ctrl_t *ctrl )
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS ) ) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_write_dword( ctrl, CMD_GYRO_RD_ACCS ,0x01000000	 ) ;
 	UcStRd = 1;
 	UlStCnt = 0;
 	while( UcStRd && (UlStCnt++ < CNT050MS ) ) {
 		UcStRd = ZF7_RdStatus(ctrl, 1);
+				//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
+		//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 	}
 	onsemi_read_dword( ctrl, CMD_GYRO_RD_ACCS ,&UlRdData	 ) ;
 	if( UlRdData == 0x00000011 ){
@@ -1575,6 +1753,12 @@ UINT_8 ZF7_SetPD128to150( struct cam_ois_ctrl_t *ctrl )
 		UlStCnt = 0;
 		while( UcStRd && (UlStCnt++ < CNT050MS ) ) {
 			UcStRd = ZF7_RdStatus(ctrl, 1);
+						//ASUS_BSP Byron Add for Avoid Hang if cci crash +++
+			if(ctrl->cci_status == CCI_READ_FAILED) {
+				pr_err("%s, cci read failed break directly\n",__func__);
+				break; 
+			}
+			//ASUS_BSP Byron Add for Avoid Hang if cci crash ---
 		}
 	}else{
 		UcRtnval = 1;
@@ -1596,6 +1780,10 @@ uint8_t ZF7_WaitProcess(struct cam_ois_ctrl_t *ctrl, uint32_t sleep_us, const ch
 	while(1)
 	{
 		status = ZF7_RdStatus(ctrl, 1);
+		if(ctrl->cci_status == CCI_READ_FAILED) {
+			pr_err("%s, cci read failed break directly\n",__func__);
+			break; 
+		}
 		if(status == 0)
 		{
 			do_gettimeofday(&current_time);
@@ -2311,11 +2499,22 @@ int32_t ZF7_update_fw(struct cam_ois_ctrl_t *ctrl, uint32_t mode,
 int32_t onsemi_OV08A_poweroff_setting(struct cam_ois_ctrl_t * ctrl)
 {
 	int32_t rc = 0;
+	ZF7_SscDis(ctrl); //SSC off
+	if(ctrl->cci_status == CCI_READ_FAILED) goto end;
 	ZF7_OisDis(ctrl);//OIS off
+	if(ctrl->cci_status == CCI_READ_FAILED) goto end;
 	onsemi_write_dword(ctrl, 0xF01F, 0x00000000);//SMA off
+	if(ctrl->cci_status == CCI_READ_FAILED) goto end;
 	ZF7_SrvOff(ctrl);//VCM off
+	if(ctrl->cci_status == CCI_READ_FAILED) goto end;
 	ZF7_DeviceReset128to150(ctrl);
+	if(ctrl->cci_status == CCI_READ_FAILED) goto end;
 	rc = ZF7_VcmRemap(ctrl);
+
+end:
+	if(ctrl->cci_status == CCI_READ_FAILED) {
+		pr_err("cci status(%d) error\n",ctrl->cci_status);
+	}
 	if(rc != 0)
 		pr_err("%s: failed",__func__);
 	

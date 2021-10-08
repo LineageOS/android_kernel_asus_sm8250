@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -103,7 +103,6 @@ static inline unsigned int is_auth_valid(struct mac_context *mac,
  *
  * Return: QDF_STATUS
  */
-#ifdef CRYPTO_SET_KEY_CONVERGED
 static QDF_STATUS lim_get_wep_key_sap(struct pe_session *pe_session,
 				      struct wlan_mlme_wep_cfg *wep_params,
 				      uint8_t key_id,
@@ -116,20 +115,6 @@ static QDF_STATUS lim_get_wep_key_sap(struct pe_session *pe_session,
 				default_key,
 				key_len);
 }
-#else
-static QDF_STATUS lim_get_wep_key_sap(struct pe_session *pe_session,
-				      struct wlan_mlme_wep_cfg *wep_params,
-				      uint8_t key_id,
-				      uint8_t *default_key,
-				      qdf_size_t *key_len)
-{
-	*key_len = pe_session->WEPKeyMaterial[key_id].key[0].keyLength;
-	qdf_mem_copy(default_key, pe_session->WEPKeyMaterial[key_id].key[0].key,
-		     *key_len);
-
-	return QDF_STATUS_SUCCESS;
-}
-#endif
 
 static void lim_process_auth_shared_system_algo(struct mac_context *mac_ctx,
 		tpSirMacMgmtHdr mac_hdr,
@@ -353,6 +338,64 @@ static void lim_external_auth_add_pre_auth_node(struct mac_context *mac_ctx,
 	lim_add_pre_auth_node(mac_ctx, auth_node);
 }
 
+void lim_sae_auth_cleanup_retry(struct mac_context *mac_ctx,
+				uint8_t vdev_id)
+{
+	struct pe_session *pe_session;
+
+	pe_session = pe_find_session_by_vdev_id(mac_ctx, vdev_id);
+	if (!pe_session) {
+		pe_err("session not found for given vdev_id %d", vdev_id);
+		return;
+	}
+
+	pe_debug("sae auth cleanup for vdev_id %d", vdev_id);
+	lim_deactivate_and_change_timer(mac_ctx, eLIM_AUTH_RETRY_TIMER);
+	mlme_free_sae_auth_retry(pe_session->vdev);
+}
+
+#define SAE_AUTH_ALGO_BYTES 2
+#define SAE_AUTH_SEQ_NUM_BYTES 2
+#define SAE_AUTH_SEQ_OFFSET 1
+
+/**
+ * lim_is_sae_auth_algo_match()- Match SAE auth seq in queued SAE auth and
+ * SAE auth rx frame
+ * @queued_frame: Pointer to queued SAE auth retry frame
+ * @q_len: length of queued sae auth retry frame
+ * @rx_pkt_info: Rx packet
+ *
+ * Return: True if SAE auth seq is mached else false
+ */
+static bool lim_is_sae_auth_algo_match(uint8_t *queued_frame, uint16_t q_len,
+				       uint8_t *rx_pkt_info)
+{
+	tpSirMacMgmtHdr qmac_hdr = (tpSirMacMgmtHdr)queued_frame;
+	uint16_t *rxbody_ptr, *qbody_ptr, rxframe_len, min_len;
+
+	min_len = sizeof(tSirMacMgmtHdr) + SAE_AUTH_ALGO_BYTES +
+			SAE_AUTH_SEQ_NUM_BYTES;
+
+	rxframe_len = WMA_GET_RX_PAYLOAD_LEN(rx_pkt_info);
+	if (rxframe_len < min_len || q_len < min_len) {
+		pe_debug("rxframe_len %d, queued_frame_len %d, min_len %d",
+			 rxframe_len, q_len, min_len);
+		return false;
+	}
+
+	rxbody_ptr = (uint16_t *)WMA_GET_RX_MPDU_DATA(rx_pkt_info);
+	qbody_ptr = (uint16_t *)((uint8_t *)qmac_hdr + sizeof(tSirMacMgmtHdr));
+
+	pe_debug("sae_auth : rx pkt auth seq %d queued pkt auth seq %d",
+		 rxbody_ptr[SAE_AUTH_SEQ_OFFSET],
+		 qbody_ptr[SAE_AUTH_SEQ_OFFSET]);
+	if (rxbody_ptr[SAE_AUTH_SEQ_OFFSET] ==
+	    qbody_ptr[SAE_AUTH_SEQ_OFFSET])
+		return true;
+
+	return false;
+}
+
 /**
  * lim_process_sae_auth_frame()-Process SAE authentication frame
  * @mac_ctx: MAC context
@@ -368,6 +411,7 @@ static void lim_process_sae_auth_frame(struct mac_context *mac_ctx,
 	uint32_t frame_len;
 	uint8_t *body_ptr;
 	enum rxmgmt_flags rx_flags = RXMGMT_FLAG_NONE;
+	struct sae_auth_retry *sae_retry;
 
 	mac_hdr = WMA_GET_RX_MAC_HEADER(rx_pkt_info);
 	body_ptr = WMA_GET_RX_MPDU_DATA(rx_pkt_info);
@@ -404,10 +448,20 @@ static void lim_process_sae_auth_frame(struct mac_context *mac_ctx,
 		}
 	}
 
+	sae_retry = mlme_get_sae_auth_retry(pe_session->vdev);
+	if (LIM_IS_STA_ROLE(pe_session) && sae_retry &&
+	    sae_retry->sae_auth.data) {
+		if (lim_is_sae_auth_algo_match(
+		    sae_retry->sae_auth.data, sae_retry->sae_auth.len,
+		     rx_pkt_info))
+			lim_sae_auth_cleanup_retry(mac_ctx,
+						   pe_session->vdev_id);
+	}
 	lim_send_sme_mgmt_frame_ind(mac_ctx, mac_hdr->fc.subType,
 				    (uint8_t *)mac_hdr,
-				    frame_len + sizeof(tSirMacMgmtHdr), 0,
-				    WMA_GET_RX_CH(rx_pkt_info), pe_session,
+				    frame_len + sizeof(tSirMacMgmtHdr),
+				    pe_session->smeSessionId,
+				    WMA_GET_RX_FREQ(rx_pkt_info), pe_session,
 				    WMA_GET_RX_RSSI_NORMALIZED(rx_pkt_info),
 				    rx_flags);
 }
@@ -483,9 +537,9 @@ static void lim_process_auth_frame_type1(struct mac_context *mac_ctx,
 #endif
 		   ) {
 			pe_err("STA is already connected but received auth frame"
-					"Send the Deauth and lim Delete Station Context"
-					"(staId: %d, associd: %d) ",
-				sta_ds_ptr->staIndex, associd);
+			       "Send the Deauth and lim Delete Station Context"
+			       "(associd: %d) sta mac" QDF_MAC_ADDR_STR,
+			       associd, QDF_MAC_ADDR_ARRAY(mac_hdr->sa));
 			lim_send_deauth_mgmt_frame(mac_ctx,
 				eSIR_MAC_UNSPEC_FAILURE_REASON,
 				(uint8_t *) mac_hdr->sa,
@@ -547,8 +601,9 @@ static void lim_process_auth_frame_type1(struct mac_context *mac_ctx,
 			&& !sta_ds_ptr->rmfEnabled
 #endif
 		   ) {
-			pe_debug("lim Delete Station Context staId: %d associd: %d",
-				sta_ds_ptr->staIndex, associd);
+			pe_debug("lim Del Sta Ctx associd: %d sta mac"
+				 QDF_MAC_ADDR_STR, associd,
+				 QDF_MAC_ADDR_ARRAY(sta_ds_ptr->staAddr));
 			lim_send_deauth_mgmt_frame(mac_ctx,
 				eSIR_MAC_UNSPEC_FAILURE_REASON,
 				(uint8_t *)auth_node->peerMacAddr,
@@ -581,9 +636,15 @@ static void lim_process_auth_frame_type1(struct mac_context *mac_ctx,
 	if (lim_is_auth_algo_supported(mac_ctx,
 			(tAniAuthType) rx_auth_frm_body->authAlgoNumber,
 			pe_session)) {
+		struct wlan_objmgr_vdev *vdev;
 
-		if (lim_get_session_by_macaddr(mac_ctx, mac_hdr->sa)) {
-
+		vdev =
+		  wlan_objmgr_get_vdev_by_macaddr_from_pdev(mac_ctx->pdev,
+							    mac_hdr->sa,
+							    WLAN_LEGACY_MAC_ID);
+		/* SA is same as any of the device vdev, return failure */
+		if (vdev) {
+			wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_MAC_ID);
 			auth_frame->authAlgoNumber =
 				rx_auth_frm_body->authAlgoNumber;
 			auth_frame->authTransactionSeqNumber =
@@ -1635,8 +1696,9 @@ bool lim_process_sae_preauth_frame(struct mac_context *mac, uint8_t *rx_pkt)
 
 	lim_send_sme_mgmt_frame_ind(mac, dot11_hdr->fc.subType,
 				    (uint8_t *)dot11_hdr,
-				    frm_len + sizeof(tSirMacMgmtHdr), 0,
-				    WMA_GET_RX_CH(rx_pkt), NULL,
+				    frm_len + sizeof(tSirMacMgmtHdr),
+				    SME_SESSION_ID_ANY,
+				    WMA_GET_RX_FREQ(rx_pkt), NULL,
 				    WMA_GET_RX_RSSI_NORMALIZED(rx_pkt),
 				    RXMGMT_FLAG_NONE);
 	return true;

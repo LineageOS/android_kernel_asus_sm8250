@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
  */
 
 #ifndef __QG_CORE_H__
@@ -66,6 +66,7 @@ struct qg_dt {
 	bool			esr_disable;
 	bool			esr_discharge_enable;
 	bool			qg_ext_sense;
+	bool			use_cp_iin_sns;
 	bool			use_s7_ocv;
 	bool			qg_sleep_config;
 	bool			qg_fast_chg_cfg;
@@ -112,6 +113,7 @@ struct qpnp_qg {
 	struct votable		*good_ocv_irq_disable_votable;
 	u32			qg_base;
 	u8			qg_subtype;
+	u8			qg_mode;
 
 	/* local data variables */
 	u32			batt_id_ohm;
@@ -121,10 +123,12 @@ struct qpnp_qg {
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
 	struct power_supply	*parallel_psy;
+	struct power_supply	*cp_psy;
 	struct qg_esr_data	esr_data[QG_MAX_ESR_COUNT];
 
 	/* status variable */
 	u32			*debug_mask;
+	u32			qg_version;
 	bool			qg_device_open;
 	bool			profile_loaded;
 	bool			battery_missing;
@@ -157,6 +161,7 @@ struct qpnp_qg {
 	int			tcss_entry_count;
 	int			max_fcc_limit_ma;
 	int			bsoc_bass_entry;
+	int			qg_v_ibat;
 	u32			fifo_done_count;
 	u32			wa_flags;
 	u32			seq_no;
@@ -167,6 +172,7 @@ struct qpnp_qg {
 	u32			s2_state_mask;
 	u32			soc_fvss_entry;
 	u32			vbat_fvss_entry;
+	u32			max_fifo_length;
 	ktime_t			last_user_update_time;
 	ktime_t			last_fifo_update_time;
 	unsigned long		last_maint_soc_update_time;
@@ -254,5 +260,14 @@ enum qg_wa_flags {
 	QG_PON_OCV_WA = BIT(3),
 };
 
+enum qg_version {
+	QG_PMIC5,
+	QG_LITE,
+};
+
+enum qg_mode {
+	QG_V_I_MODE,
+	QG_V_MODE,
+};
 
 #endif /* __QG_CORE_H__ */

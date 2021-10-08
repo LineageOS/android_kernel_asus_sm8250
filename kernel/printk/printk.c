@@ -485,6 +485,7 @@ static void *memcpy_nc(void *dest, const void *src, size_t n)
 static int write_to_asus_log_buffer(const char *text, size_t text_len,
 				enum log_flags lflags) {
 	static ulong log_write_index = 0; /* the index to write the log in asus log buffer */
+	ulong *printk_buffer_slot2_addr = (ulong *)PRINTK_BUFFER_SLOT2;
 
 	if (!asus_log_buf) {
 		return -1;
@@ -510,6 +511,8 @@ static int write_to_asus_log_buffer(const char *text, size_t text_len,
 		log_write_index = log_write_index % PRINTK_BUFFER_SLOT_SIZE;
 	}
 
+	*(printk_buffer_slot2_addr + 1) = log_write_index; /* Remeber log buffer index */
+
 	return text_len;
 }
 
@@ -531,6 +534,7 @@ static u32 log_next_idx;
 /* the next printk record to write to the console */
 static u64 console_seq;
 static u32 console_idx;
+static u64 exclusive_console_stop_seq;
 
 /* the next printk record to read after the last 'clear' command */
 static u64 clear_seq;
@@ -545,6 +549,7 @@ static u32 clear_idx;
 /* record buffer */
 #define LOG_ALIGN __alignof__(struct printk_log)
 #define __LOG_BUF_LEN (1 << CONFIG_LOG_BUF_SHIFT)
+#define LOG_BUF_LEN_MAX (u32)(1 << 31)
 static char __log_buf[__LOG_BUF_LEN] __aligned(LOG_ALIGN);
 static char *log_buf = __log_buf;
 static u32 log_buf_len = __LOG_BUF_LEN;
@@ -1146,18 +1151,23 @@ void log_buf_vmcoreinfo_setup(void)
 static unsigned long __initdata new_log_buf_len;
 
 /* we practice scaling the ring buffer by powers of 2 */
-static void __init log_buf_len_update(unsigned size)
+static void __init log_buf_len_update(u64 size)
 {
+	if (size > (u64)LOG_BUF_LEN_MAX) {
+		size = (u64)LOG_BUF_LEN_MAX;
+		pr_err("log_buf over 2G is not supported.\n");
+	}
+
 	if (size)
 		size = roundup_pow_of_two(size);
 	if (size > log_buf_len)
-		new_log_buf_len = size;
+		new_log_buf_len = (unsigned long)size;
 }
 
 /* save requested log_buf_len since it's too early to process it */
 static int __init log_buf_len_setup(char *str)
 {
-	unsigned int size;
+	u64 size;
 
 	if (!str)
 		return -EINVAL;
@@ -1207,7 +1217,7 @@ void __init setup_log_buf(int early)
 {
 	unsigned long flags;
 	char *new_log_buf;
-	int free;
+	unsigned int free;
 
 	if (log_buf != __log_buf)
 		return;
@@ -1227,7 +1237,7 @@ void __init setup_log_buf(int early)
 	}
 
 	if (unlikely(!new_log_buf)) {
-		pr_err("log_buf_len: %ld bytes not available\n",
+		pr_err("log_buf_len: %lu bytes not available\n",
 			new_log_buf_len);
 		return;
 	}
@@ -1240,8 +1250,8 @@ void __init setup_log_buf(int early)
 	memcpy(log_buf, __log_buf, __LOG_BUF_LEN);
 	logbuf_unlock_irqrestore(flags);
 
-	pr_info("log_buf_len: %d bytes\n", log_buf_len);
-	pr_info("early log buf free: %d(%d%%)\n",
+	pr_info("log_buf_len: %u bytes\n", log_buf_len);
+	pr_info("early log buf free: %u(%u%%)\n",
 		free, (free * 100) / __LOG_BUF_LEN);
 }
 
@@ -2066,8 +2076,9 @@ asmlinkage int vprintk_emit(int facility, int level,
 			    const char *fmt, va_list args)
 {
 	int printed_len;
-	bool in_sched = false;
+	bool in_sched = false, pending_output;
 	unsigned long flags;
+	u64 curr_log_seq;
 
 	if (level == LOGLEVEL_SCHED) {
 		level = LOGLEVEL_DEFAULT;
@@ -2079,11 +2090,13 @@ asmlinkage int vprintk_emit(int facility, int level,
 
 	/* This stops the holder of console_sem just where we want him */
 	logbuf_lock_irqsave(flags);
+	curr_log_seq = log_next_seq;
 	printed_len = vprintk_store(facility, level, dict, dictlen, fmt, args);
+	pending_output = (curr_log_seq != log_next_seq);
 	logbuf_unlock_irqrestore(flags);
 
 	/* If called from the scheduler, we can not call up(). */
-	if (!in_sched) {
+	if (!in_sched && pending_output) {
 		/*
 		 * Disable preemption to avoid being preempted while holding
 		 * console_sem which would prevent anyone from printing to
@@ -2100,7 +2113,8 @@ asmlinkage int vprintk_emit(int facility, int level,
 		preempt_enable();
 	}
 
-	wake_up_klogd();
+	if (pending_output)
+		wake_up_klogd();
 	return printed_len;
 }
 EXPORT_SYMBOL(vprintk_emit);
@@ -2196,6 +2210,7 @@ static u64 syslog_seq;
 static u32 syslog_idx;
 static u64 console_seq;
 static u32 console_idx;
+static u64 exclusive_console_stop_seq;
 static u64 log_first_seq;
 static u32 log_first_idx;
 static u64 log_next_seq;
@@ -2363,11 +2378,11 @@ MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
  */
 void suspend_console(void)
 {
-	nSuspendInProgress = 1;
 	ASUSEvtlog("[UTS] System Suspend\n");
+	nSuspendInProgress = 1;
 	if (!console_suspend_enabled)
 		return;
-	printk("Suspending console(s) (use no_console_suspend to debug)\n");
+	pr_err("Suspending console(s) (use no_console_suspend to debug)\n");
 	console_lock();
 	console_suspended = 1;
 	up_console_sem();
@@ -2376,6 +2391,7 @@ void suspend_console(void)
 void resume_console(void)
 {
 	nSuspendInProgress = 0;
+
 	ASUSEvtlog("[UTS] System Resume\n");
 
 //ASUS_BSP +++ [PM]Show GIC_IRQ wakeup information in AsusEvtlog
@@ -2557,8 +2573,9 @@ again:
 		printk_safe_enter_irqsave(flags);
 		raw_spin_lock(&logbuf_lock);
 		if (console_seq < log_first_seq) {
-			len = sprintf(text, "** %u printk messages dropped **\n",
-				      (unsigned)(log_first_seq - console_seq));
+			len = sprintf(text,
+				      "** %llu printk messages dropped **\n",
+				      log_first_seq - console_seq);
 
 			/* messages are gone, move to first one */
 			console_seq = log_first_seq;
@@ -2580,6 +2597,12 @@ skip:
 			console_idx = log_next(console_idx);
 			console_seq++;
 			goto skip;
+		}
+
+		/* Output to all consoles once old messages replayed. */
+		if (unlikely(exclusive_console &&
+			     console_seq >= exclusive_console_stop_seq)) {
+			exclusive_console = NULL;
 		}
 
 		len += msg_print_text(msg,
@@ -2623,10 +2646,6 @@ skip:
 	}
 
 	console_locked = 0;
-
-	/* Release the exclusive_console once it is used */
-	if (unlikely(exclusive_console))
-		exclusive_console = NULL;
 
 	raw_spin_unlock(&logbuf_lock);
 
@@ -2903,15 +2922,20 @@ void register_console(struct console *newcon)
 		 * for us.
 		 */
 		logbuf_lock_irqsave(flags);
-		console_seq = syslog_seq;
-		console_idx = syslog_idx;
-		logbuf_unlock_irqrestore(flags);
 		/*
 		 * We're about to replay the log buffer.  Only do this to the
 		 * just-registered console to avoid excessive message spam to
 		 * the already-registered consoles.
+		 *
+		 * Set exclusive_console with disabled interrupts to reduce
+		 * race window with eventual console_flush_on_panic() that
+		 * ignores console_lock.
 		 */
 		exclusive_console = newcon;
+		exclusive_console_stop_seq = console_seq;
+		console_seq = syslog_seq;
+		console_idx = syslog_idx;
+		logbuf_unlock_irqrestore(flags);
 	}
 	console_unlock();
 	console_sysfs_notify();

@@ -40,9 +40,9 @@
 #define DP_ERR(fmt, ...)                                    \
 	pr_err("[drm:%s][msm-dp-err][%-4d]"fmt, __func__,   \
 		       current->pid, ##__VA_ARGS__)
-/* ASUS BSP DP +++ */
-#define DP_LOG(fmt, ...)                                   \
-	pr_err("[msm-dp] " fmt, ##__VA_ARGS__)
+/* ASUS BSP Display +++ */
+#define DP_LOG(fmt, ...)                                    \
+    pr_err("[Display][msm-dp:%s] "fmt, __func__, ##__VA_ARGS__)
 
 /**
  * struct dp_debug
@@ -89,14 +89,8 @@ struct dp_debug {
 
 	u8 *(*get_edid)(struct dp_debug *dp_debug);
 	void (*abort)(struct dp_debug *dp_debug);
-
-	/* ASUS BSP DP +++ */
+	/* ASUS BSP Display +++ */
 	bool aux_err;
-	u32 debug_bpp;
-	u8 debug_swing;
-	u8 debug_pre_emp;
-	bool debug_lt; // link training
-	/* ASUS BSP DP --- */
 };
 
 /**

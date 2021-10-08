@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/types.h>
@@ -89,6 +89,8 @@ enum notification_status {
 	NOTIFY_CONNECT_IRQ_HPD,
 	NOTIFY_DISCONNECT_IRQ_HPD,
 };
+
+extern bool dp_asus_is_station(void);
 
 static void dp_ctrl_idle_patterns_sent(struct dp_ctrl_private *ctrl)
 {
@@ -196,12 +198,12 @@ static int dp_ctrl_update_sink_vx_px(struct dp_ctrl_private *ctrl)
 	u32 max_level_reached = 0;
 
 	if (v_level == DP_LINK_VOLTAGE_MAX) {
-		DP_DEBUG("max voltage swing level reached %d\n", v_level);
+		printk("[drm-dp] max voltage swing level reached %d\n", v_level);
 		max_level_reached |= DP_TRAIN_MAX_SWING_REACHED;
 	}
 
 	if (p_level == DP_LINK_PRE_EMPHASIS_MAX) {
-		DP_DEBUG("max pre-emphasis level reached %d\n", p_level);
+		printk("[drm-dp] max pre-emphasis level reached %d\n", p_level);
 		max_level_reached |= DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
 	}
 
@@ -210,7 +212,7 @@ static int dp_ctrl_update_sink_vx_px(struct dp_ctrl_private *ctrl)
 	for (i = 0; i < size; i++)
 		buf[i] = v_level | p_level | max_level_reached;
 
-	DP_DEBUG("lanes: %d, swing: 0x%x, pre-emp: 0x%x\n",
+	printk("[drm-dp] lanes: %d, swing: 0x%x, pre-emp: 0x%x\n",
 			size, v_level, p_level);
 
 	ret = drm_dp_dpcd_write(ctrl->aux->drm_aux,
@@ -237,7 +239,7 @@ static int dp_ctrl_update_sink_pattern(struct dp_ctrl_private *ctrl, u8 pattern)
 	u8 buf = pattern;
 	int ret;
 
-	DP_DEBUG("sink: pattern=%x\n", pattern);
+	DP_ERR("sink: pattern=%x\n", pattern);
 
 	if (pattern && pattern != DP_TRAINING_PATTERN_4)
 		buf |= DP_LINK_SCRAMBLING_DISABLE;
@@ -334,6 +336,7 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 
 	tries = 0;
 	old_v_level = ctrl->link->phy_params.v_level;
+	printk("[drm-dp] training from v_level %d\n",  old_v_level);
 	while (!atomic_read(&ctrl->aborted)) {
 		/* update hardware with current swing/pre-emp values */
 		dp_ctrl_update_hw_vx_px(ctrl);
@@ -365,8 +368,15 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 		else
 			break;
 
+		// skip clock recovery if in station mode
+		if (dp_asus_is_station()) {
+			printk("[drm-dp] clock recovery failure, skip it in station\n");
+			ret = 0;
+			break;
+		}
+
 		if (ctrl->link->phy_params.v_level == DP_LINK_VOLTAGE_MAX) {
-			pr_err_ratelimited("max v_level reached\n");
+			pr_err_ratelimited("[drm-dp] max v_level reached\n");
 			break;
 		}
 
@@ -381,8 +391,9 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 			old_v_level = ctrl->link->phy_params.v_level;
 		}
 
-		DP_DEBUG("clock recovery not done, adjusting vx px\n");
+		printk("[drm-dp] clock recovery not done, adjusting vx px\n");
 
+		//calling dp_link_adjust_levels
 		ctrl->link->adjust_levels(ctrl->link, link_status);
 	}
 
@@ -520,6 +531,7 @@ static int dp_ctrl_link_train(struct dp_ctrl_private *ctrl)
 	u8 const encoding = 0x1, downspread = 0x00;
 	struct drm_dp_link link_info = {0};
 
+	DP_ERR("[drm-dp] reset p_level and v_level\n");
 	ctrl->link->phy_params.p_level = 0;
 	ctrl->link->phy_params.v_level = 0;
 
@@ -640,8 +652,6 @@ static void dp_ctrl_disable_link_clock(struct dp_ctrl_private *ctrl)
 	ctrl->power->clk_enable(ctrl->power, DP_LINK_PM, false);
 }
 
-extern bool force_dp_version; /* ASUS BSP DP +++ */
-
 static void dp_ctrl_select_training_pattern(struct dp_ctrl_private *ctrl,
 						bool downgrade)
 {
@@ -653,13 +663,6 @@ static void dp_ctrl_select_training_pattern(struct dp_ctrl_private *ctrl,
 		pattern = DP_TRAINING_PATTERN_3;
 	else
 		pattern = DP_TRAINING_PATTERN_2;
-
-	/* ASUS BSP DP, for PA329C +++ */
-	if (force_dp_version) {
-		DP_LOG("set training pattern to PATTERN_3");
-		pattern = DP_TRAINING_PATTERN_3;
-	}
-	/* ASUS BSP DP, for PA329c --- */
 
 	if (!downgrade)
 		goto end;
@@ -732,8 +735,10 @@ static int dp_ctrl_link_setup(struct dp_ctrl_private *ctrl, bool shallow)
 			break;
 		}
 
-		if (!link_train_max_retries || atomic_read(&ctrl->aborted))
+		if (!link_train_max_retries || atomic_read(&ctrl->aborted)) {
+			dp_ctrl_disable_link_clock(ctrl);
 			break;
+		}
 
 		if (rc != -EAGAIN)
 			dp_ctrl_link_rate_down_shift(ctrl);
@@ -1177,6 +1182,11 @@ static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 
 	ctrl = container_of(dp_ctrl, struct dp_ctrl_private, dp_ctrl);
 
+	if (!ctrl->power_on) {
+		DP_ERR("ctrl off\n");
+		return -EINVAL;
+	}
+
 	rc = dp_ctrl_enable_stream_clocks(ctrl, panel);
 	if (rc) {
 		DP_ERR("failure on stream clock enable\n");
@@ -1323,7 +1333,8 @@ static int dp_ctrl_on(struct dp_ctrl *dp_ctrl, bool mst_mode,
 	ctrl->initial_bw_code = ctrl->link->link_params.bw_code;
 
 	rc = dp_ctrl_link_setup(ctrl, shallow);
-	ctrl->power_on = true;
+	if (!rc)
+		ctrl->power_on = true;
 end:
 	return rc;
 }

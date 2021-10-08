@@ -13,175 +13,6 @@
 	qcom,board-id = <20 0>;
 };
 
-// ASUS_BSP Deeo : Inbox AURA ML51 +++
-&qupv3_se1_i2c {
-       ml51fb9ae@15 {
-               nuvoton,aura_3p3_en = <&tlmm 67 0x0>;
-               nuvoton,fan_pwr_on = <&tlmm 100 0x0>;
-       };
-
-       ms51@16 {
-               nuvoton,remove_aura_3p3_en;
-               nuvoton,ms51_on = <&tlmm 100 0x0>;
-       };
-
-};
-
-&tlmm{
-	pogo-fan-on {
-		pogo_fan_on_default{
-			mux {
-				pins = "gpio100";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio100";
-				drive-strength = <8>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-
-	pogo-aura-en {
-		pogo_aura_en_default{
-			mux {
-				pins = "gpio67";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio67";
-				drive-strength = <8>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-};
-// ASUS_BSP Deeo : Inbox AURA ML51 ---
-
-// ASUS_BSP Deeo : DT ACCY driver +++
-&qupv3_se1_i2c {
-    ene8k41_dock@40 {
-        ene8k41,check-3v-gpio =<&tlmm 67 0>;
-    };
-};
-
-&qupv3_se3_i2c {
-    ene8k41_power@41 {
-		ene8k41,switch-mode-gpio = <&tlmm 100 0x0>;
-	};
-};
-
-&tlmm{
-	check-3v {
-		check_3v_default{
-			mux {
-				pins = "gpio67";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio67";
-				drive-strength = <2>;
-				bias-no-pull;
-			};
-		};
-	};
-
-	switch-mode-gpio {
-		switch_mode_default{
-			mux {
-				pins = "gpio100";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio100";
-				drive-strength = <2>;
-				bias-no-pull;
-			};
-		};
-	};
-};
-// ASUS_BSP Deeo : DT ACCY driver ---
-
-// ASUS_BSP Deeo : Station Power Key +++
-&soc {
-	station_keys: station_keys_asus {
-		compatible = "station-keys";
-		label = "station-keys";
-
-		pinctrl-names = "station_key_active","station_key_suspend","station_key_remove";
-		pinctrl-0 = <&station_key_active>;
-		pinctrl-1 = <&station_key_suspend>;
-		pinctrl-2 = <&station_key_remove>;
-
-		station_key {
-			label = "station_key";
-			gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
-			linux,input-type = <1>;
-			linux,code = <116>;
-			gpio-key,wakeup;
-			debounce-interval = <15>;
-			linux,can-disable;
-		};
-
-	};
-
-};
-
-&tlmm{
-	tlmm_gpio_key {
-		station_key_active: station_key_active {
-			mux {
-				pins = "gpio100";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio100";
-				drive-strength = <2>;
-				bias-pull-up;
-			};
-		};
-
-		station_key_suspend: station_key_suspend {
-			mux {
-				pins = "gpio100";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio100";
-				drive-strength = <2>;
-				bias-pull-up;
-			};
-		};
-
-		station_key_remove: station_key_remove {
-			mux {
-				pins = "gpio100";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio100";
-				drive-strength = <2>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-};
-// ASUS_BSP Deeo : Station Power Key ---
-
-// ASUS_BSP Deeo : EC_Driver +++
-&soc {
-	ec_hid {
-		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
-	};
-};
-// ASUS_BSP Deeo : EC_Driver ---
-
 //Beryl "station touch"
 &qupv3_se1_i2c {
 	status = "ok";
@@ -286,30 +117,106 @@
 };
 // ASUS display SR overlay ---
 
-&soc {
-	wlansr: qcom,cnss-qca6390@b0000000 {
-		compatible = "qcom,cnss-qca6390";
-		status = "okay";
-		vdd-wlan-aon-supply = <&pm8150_s6>;
-		qcom,vdd-wlan-aon-config = <950000 950000 0 0 1>;
-		vdd-wlan-io-supply = <&pm8150_s4>;
-		qcom,vdd-wlan-io-config = <1800000 1800000 0 0 1>;
-		vdd-wlan-rfa1-supply = <&pm8150_s5>;
-		qcom,vdd-wlan-rfa1-config = <1900000 1900000 0 0 1>;
-		vdd-wlan-rfa2-supply = <&pm8150a_s8>;
-		qcom,vdd-wlan-rfa2-config = <1350000 1350000 0 0 1>;
-		vdd-wlan-dig-supply = <&pm8150_s6>;
-		qcom,vdd-wlan-dig-config = <950000 952000 0 0 1>;
+// ASUS_BSP Charger dtsi overlay +++
+&chg_output_lo_default {
+	mux {
+		pins = "gpio11", "gpio71", "gpio98", "gpio117";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio11", "gpio71", "gpio98", "gpio117";
+		drive-strength = <2>;
+		bias-disable;
+		output-low;
 	};
 };
 
-&vendor {
-	bluetoothsr: bt_qca6390 {
-		compatible = "qca,qca6390";
-		qca,bt-vdd-dig-supply = <&pm8150_s6>;
-		qca,bt-vdd-dig-voltage-level = <950000 950000>;
+&pm8150l_vadc {
+	asus_adapter_vadc {
+		reg = <ADC_GPIO4>;
+		label = "asus_adapter_vadc";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+	
+	side_conn_temp {
+		reg = <ADC_AMUX_THM3>;
+		label = "side_conn_temp";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+	
+	btm_conn_temp {
+		reg = <ADC_GPIO1>;
+		label = "btm_conn_temp";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+};
+
+&pm8150b_charger {
+	io-channels = <&pm8150b_vadc ADC_MID_CHG_DIV6>,
+		      <&pm8150b_vadc ADC_USB_IN_I>,
+		      <&pm8150b_vadc ADC_SBUx>,
+		      <&pm8150b_vadc ADC_VPH_PWR>,
+		      <&pm8150b_vadc ADC_CHG_TEMP>,
+		      <&pm8150l_vadc ADC_GPIO4>,
+		      <&pm8150l_vadc ADC_AMUX_THM3>,
+		      <&pm8150l_vadc ADC_GPIO1>;
+	io-channel-names = "mid_voltage",
+			   "usb_in_current",
+			   "sbux_res",
+			   "vph_voltage",
+			   "chg_temp",
+			   "asus_adapter_vadc",
+			   "side_conn_temp",
+			   "btm_conn_temp";
+
+	ADC_SW_EN = <&tlmm 98 0x0>;
+	ADC_VH_EN_5 = <&tlmm 117 0x0>;
+};
+// ASUS_BSP Charger dtsi overlay ---
+
+//ASUS_BSP: aw haptic +++
+&qupv3_se4_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <1000000>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	aw8697_haptic@5B {
+		compatible = "awinic,aw8697_haptic";
+		reg = <0x5B>;
+		status = "disabled";
 	};
 
+	aw8697_haptic@5A {
+		compatible = "awinic,aw8697_haptic";
+		reg = <0x5A>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <77 0>; // set type in driver IRQ_TYPE_NONE
+		irq-gpio = <&tlmm 77 0>; // set type in driver IRQ_TYPE_NONE
+		vib_mode = < 0 >;   /*mode:   RAM mode->0; CONT mode -> 1*/
+		vib_f0_pre = < 1500 >; // 150Hz
+		vib_f0_cali_percen = < 7 >;
+		vib_cont_drv_lev = < 100 >; // 2*1.414*255/6.1
+		vib_cont_drv_lvl_ov = < 100 >;
+		vib_cont_td = < 0x006c >;
+		vib_cont_zc_thr = < 0x0ff1 >;
+		vib_cont_num_brk = < 3 >;
+		vib_f0_coeff = < 260 >; /*Don't modify it    2.604167*/
+		vib_f0_trace_parameter = < 0x05 0x03 0x02 0x0f >;
+		vib_bemf_config = < 0x10 0x08 0x03 0xf8 >;
+		vib_sw_brake = < 0x2c >;
+		vib_tset = < 0x12 >;
+		vib_r_spare = < 0x68 >;
+		vib_bstdbg = < 0x30 0xeb 0xd4 0 0 0 >;
+		pinctrl-names = "default";
+		pinctrl-states = "default";
+		pinctrl-0 = <&vib_irq_default>;
+		status = "okay";
+	};
 };
 
 // Aura Sync on phone +++
@@ -343,7 +250,7 @@
 			qcom,alsps-gpio = <&tlmm 122 0x0>;
 		};
 };
-
+	
 &tlmm {
 	// ASUS_BSP +++ ClayWang vcnl36866
 	vcnl36866_int_sr_pin {
@@ -617,103 +524,199 @@
 			USB3_DP_PCS_USB3_RXEQTRAINING_DFE_TIME_S2 0x07 0
 			0xffffffff 0xffffffff 0x00>;
 };
-// ASUS_BSP Charger dtsi overlay +++
-&chg_output_lo_default {
-	mux {
-		pins = "gpio11", "gpio71", "gpio98", "gpio117";
-		function = "gpio";
-	};
 
-	config {
-		pins = "gpio11", "gpio71", "gpio98", "gpio117";
-		drive-strength = <2>;
-		bias-disable;
-		output-low;
-	};
-};
-
-&pm8150l_vadc {
-	asus_adapter_vadc {
-		reg = <ADC_GPIO4>;
-		label = "asus_adapter_vadc";
-		qcom,hw-settle-time = <200>;
-		qcom,pre-scaling = <1 1>;
-	};
-	
-	side_conn_temp {
-		reg = <ADC_AMUX_THM3>;
-		label = "side_conn_temp";
-		qcom,hw-settle-time = <200>;
-		qcom,pre-scaling = <1 1>;
-	};
-	
-	btm_conn_temp {
-		reg = <ADC_GPIO1>;
-		label = "btm_conn_temp";
-		qcom,hw-settle-time = <200>;
-		qcom,pre-scaling = <1 1>;
-	};
-};
-
-&pm8150b_charger {
-	io-channels = <&pm8150b_vadc ADC_MID_CHG_DIV6>,
-		      <&pm8150b_vadc ADC_USB_IN_I>,
-		      <&pm8150b_vadc ADC_SBUx>,
-		      <&pm8150b_vadc ADC_VPH_PWR>,
-		      <&pm8150b_vadc ADC_CHG_TEMP>,
-		      <&pm8150l_vadc ADC_GPIO4>,
-		      <&pm8150l_vadc ADC_AMUX_THM3>,
-		      <&pm8150l_vadc ADC_GPIO1>;
-	io-channel-names = "mid_voltage",
-			   "usb_in_current",
-			   "sbux_res",
-			   "vph_voltage",
-			   "chg_temp",
-			   "asus_adapter_vadc",
-			   "side_conn_temp",
-			   "btm_conn_temp";
-
-	ADC_SW_EN = <&tlmm 98 0x0>;
-	ADC_VH_EN_5 = <&tlmm 117 0x0>;
-};
-// ASUS_BSP Charger dtsi overlay ---
-
-//ASUS_BSP: aw haptic +++
-&qupv3_se4_i2c {
-	status = "ok";
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	aw8697_haptic@5B {
-		compatible = "awinic,aw8697_haptic";
-		reg = <0x5B>;
-		status = "disabled";
-	};
-
-	aw8697_haptic@5A {
-		compatible = "awinic,aw8697_haptic";
-		reg = <0x5A>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <77 0>; // set type in driver IRQ_TYPE_NONE
-		irq-gpio = <&tlmm 77 0>; // set type in driver IRQ_TYPE_NONE
-		vib_mode = < 0 >;   /*mode:   RAM mode->0; CONT mode -> 1*/
-		vib_f0_pre = < 1500 >; // 150Hz
-		vib_f0_cali_percen = < 7 >;
-		vib_cont_drv_lev = < 100 >; // 2*1.414*255/6.1
-		vib_cont_drv_lvl_ov = < 100 >;
-		vib_cont_td = < 0x006c >;
-		vib_cont_zc_thr = < 0x0ff1 >;
-		vib_cont_num_brk = < 3 >;
-		vib_f0_coeff = < 260 >; /*Don't modify it    2.604167*/
-		vib_f0_trace_parameter = < 0x05 0x03 0x02 0x0f >;
-		vib_bemf_config = < 0x10 0x08 0x03 0xf8 >;
-		vib_sw_brake = < 0x2c >;
-		vib_tset = < 0x12 >;
-		vib_r_spare = < 0x68 >;
-		vib_bstdbg = < 0x30 0xeb 0xd4 0 0 0 >;
-		pinctrl-names = "default";
-		pinctrl-states = "default";
-		pinctrl-0 = <&vib_irq_default>;
+//ASUS BSP: BT Wifi +++
+&soc {
+	wlansr: qcom,cnss-qca6390@b0000000 {
+		compatible = "qcom,cnss-qca6390";
 		status = "okay";
+		vdd-wlan-aon-supply = <&pm8150_s6>;
+		qcom,vdd-wlan-aon-config = <950000 950000 0 0 1>;
+		vdd-wlan-io-supply = <&pm8150_s4>;
+		qcom,vdd-wlan-io-config = <1800000 1800000 0 0 1>;
+		vdd-wlan-rfa1-supply = <&pm8150_s5>;
+		qcom,vdd-wlan-rfa1-config = <1900000 1900000 0 0 1>;
+		vdd-wlan-rfa2-supply = <&pm8150a_s8>;
+		qcom,vdd-wlan-rfa2-config = <1350000 1350000 0 0 1>;
+		vdd-wlan-dig-supply = <&pm8150_s6>;
+		qcom,vdd-wlan-dig-config = <950000 952000 0 0 1>;
 	};
 };
+&vendor {
+	bluetoothsr: bt_qca6390 {
+		compatible = "qca,qca6390";
+		qca,bt-vdd-dig-supply = <&pm8150_s6>;
+		qca,bt-vdd-dig-voltage-level = <950000 950000>;
+	};
+
+};
+//ASUS BSP: BT Wifi ---
+
+// ASUS_BSP Deeo : Inbox AURA ML51 +++
+&qupv3_se1_i2c {
+       ml51fb9ae@15 {
+               nuvoton,aura_3p3_en = <&tlmm 67 0x0>;
+               nuvoton,fan_pwr_on = <&tlmm 100 0x0>;
+       };
+
+       ms51@16 {
+               nuvoton,remove_aura_3p3_en;
+               nuvoton,ms51_on = <&tlmm 100 0x0>;
+       };
+
+};
+
+&tlmm{
+	pogo-fan-on {
+		pogo_fan_on_default{
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio100";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+
+	pogo-aura-en {
+		pogo_aura_en_default{
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio67";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : Inbox AURA ML51 ---
+
+// ASUS_BSP Deeo : DT ACCY driver +++
+&qupv3_se1_i2c {
+    ene8k41_dock@40 {
+        ene8k41,check-3v-gpio =<&tlmm 67 0>;
+    };
+};
+
+&qupv3_se3_i2c {
+    ene8k41_power@41 {
+		ene8k41,switch-mode-gpio = <&tlmm 100 0x0>;
+	};
+};
+
+&tlmm{
+	check-3v {
+		check_3v_default{
+			mux {
+				pins = "gpio67";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio67";
+				drive-strength = <2>;
+				bias-no-pull;
+			};
+		};
+	};
+
+	switch-mode-gpio {
+		switch_mode_default{
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				bias-no-pull;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : DT ACCY driver ---
+
+// ASUS_BSP Deeo : Station Power Key +++
+&soc {
+	station_keys: station_keys_asus {
+		compatible = "station-keys";
+		label = "station-keys";
+
+		pinctrl-names = "station_key_active","station_key_suspend","station_key_remove";
+		pinctrl-0 = <&station_key_active>;
+		pinctrl-1 = <&station_key_suspend>;
+		pinctrl-2 = <&station_key_remove>;
+
+		station_key {
+			label = "station_key";
+			gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <116>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+			linux,can-disable;
+		};
+
+	};
+
+};
+
+&tlmm{
+	tlmm_gpio_key {
+		station_key_active: station_key_active {
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		station_key_suspend: station_key_suspend {
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		station_key_remove: station_key_remove {
+			mux {
+				pins = "gpio100";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio100";
+				drive-strength = <2>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : Station Power Key ---
+
+// ASUS_BSP Deeo : EC_Driver +++
+&soc {
+	ec_hid {
+		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
+	};
+};
+// ASUS_BSP Deeo : EC_Driver ---

@@ -340,8 +340,6 @@ static int usb_transfer_small_packet(struct qdss_request *usb_req,
 			goto out;
 		}
 
-		init_completion(&usb_req->write_done);
-
 		actual = tmc_etr_buf_get_data(etr_buf, drvdata->offset,
 					req_size, &usb_req->buf);
 		usb_req->length = actual;
@@ -362,7 +360,7 @@ static int usb_transfer_small_packet(struct qdss_request *usb_req,
 				devm_kfree(tmcdrvdata->dev, usb_req);
 				usb_req = NULL;
 				drvdata->usb_req = NULL;
-				dev_err(tmcdrvdata->dev,
+				dev_err_ratelimited(tmcdrvdata->dev,
 					"Write data failed:%d\n", ret);
 				goto out;
 			}
@@ -425,7 +423,6 @@ static void usb_read_work_fn(struct work_struct *work)
 						sizeof(*usb_req), GFP_KERNEL);
 			if (!usb_req)
 				return;
-			init_completion(&usb_req->write_done);
 			usb_req->sg = devm_kzalloc(tmcdrvdata->dev,
 					sizeof(*(usb_req->sg)) * req_sg_num,
 					GFP_KERNEL);
@@ -445,7 +442,8 @@ static void usb_read_work_fn(struct work_struct *work)
 							usb_req->sg);
 					devm_kfree(tmcdrvdata->dev, usb_req);
 					usb_req = NULL;
-					dev_err(tmcdrvdata->dev, "No data in ETR\n");
+					dev_err_ratelimited(tmcdrvdata->dev,
+						 "No data in ETR\n");
 					return;
 				}
 
@@ -476,7 +474,7 @@ static void usb_read_work_fn(struct work_struct *work)
 					devm_kfree(tmcdrvdata->dev, usb_req);
 					usb_req = NULL;
 					drvdata->usb_req = NULL;
-					dev_err(tmcdrvdata->dev,
+					dev_err_ratelimited(tmcdrvdata->dev,
 						"Write data failed:%d\n", ret);
 					if (ret == -EAGAIN)
 						continue;
@@ -520,9 +518,16 @@ void usb_bypass_notifier(void *priv, unsigned int event,
 	if (!drvdata)
 		return;
 
+	if (tmcdrvdata->out_mode != TMC_ETR_OUT_MODE_USB
+				|| tmcdrvdata->mode == CS_MODE_DISABLED) {
+		dev_err(&tmcdrvdata->csdev->dev,
+		"%s: ETR is not USB mode, or ETR is disabled.\n", __func__);
+		return;
+	}
+
 	switch (event) {
 	case USB_QDSS_CONNECT:
-		usb_qdss_alloc_req(ch, USB_BUF_NUM, 0);
+		usb_qdss_alloc_req(ch, USB_BUF_NUM);
 		usb_bypass_start(drvdata);
 		queue_work(drvdata->usb_wq, &(drvdata->read_work));
 		break;

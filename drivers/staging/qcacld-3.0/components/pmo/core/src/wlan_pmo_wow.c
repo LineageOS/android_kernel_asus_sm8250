@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -426,6 +426,9 @@ void pmo_set_sta_wow_bitmask(uint32_t *bitmask, uint32_t wow_bitmap_size)
 	pmo_set_wow_event_bitmap(WOW_ROAM_PREAUTH_START_EVENT,
 				 wow_bitmap_size,
 				 bitmask);
+	pmo_set_wow_event_bitmap(WOW_ROAM_PMKID_REQUEST_EVENT,
+				 wow_bitmap_size,
+				 bitmask);
 }
 
 void pmo_set_sap_wow_bitmask(uint32_t *bitmask, uint32_t wow_bitmap_size)
@@ -479,3 +482,16 @@ uint8_t pmo_get_num_wow_filters(struct wlan_objmgr_psoc *psoc)
 	return PMO_WOW_FILTERS_PKT_OR_APF;
 }
 
+#ifdef WLAN_FEATURE_NAN
+void pmo_set_ndp_wow_bitmask(uint32_t *bitmask, uint32_t wow_bitmap_size)
+{
+	/* wake up host when Nan Management Frame is received */
+	pmo_set_wow_event_bitmap(WOW_NAN_DATA_EVENT,
+				 wow_bitmap_size,
+				 bitmask);
+	/* wake up host when NDP data packet is received */
+	pmo_set_wow_event_bitmap(WOW_PATTERN_MATCH_EVENT,
+				 wow_bitmap_size,
+				 bitmask);
+}
+#endif

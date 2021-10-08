@@ -68,9 +68,6 @@ static struct cnss_fw_files FW_FILES_DEFAULT = {
 /* ASUS_BSP+++ for wifi antenna switch */
 #define default_wifi_antenna_switch		"1101"
 #define GPIO_LOOKUP_STATE		"wifi_ant_gpio"
-char *do_wifi_antenna_switch = default_wifi_antenna_switch;
-module_param(do_wifi_antenna_switch, charp, 0664);
-MODULE_PARM_DESC(do_wifi_antenna_switch, "Wifi antenna switch flag");
 
 int wlan_asus_ant_10_gpio = 0;
 int wlan_asus_ant_15_gpio = 0;
@@ -87,7 +84,6 @@ MODULE_PARM_DESC(do_antenna_switch, "Switch VREG_L13A_3P0 flag");
 struct antenna_switch_vreg antenna_switch_vreg = {NULL, "vdd-3.0-wifi-antenna", 3000000, 3000000, 0, false};
 /* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
 #endif
-
 
 /* ASUS_BSP+++ for wlan driver add debug log level */
 static char do_wlan_driver_log_level[256];
@@ -222,6 +218,7 @@ int cnss_request_bus_bandwidth(struct device *dev, int bandwidth)
 	case CNSS_BUS_WIDTH_MEDIUM:
 	case CNSS_BUS_WIDTH_HIGH:
 	case CNSS_BUS_WIDTH_VERY_HIGH:
+	case CNSS_BUS_WIDTH_LOW_LATENCY:
 		ret = msm_bus_scale_client_update_request
 			(bus_bw_info->bus_client, bandwidth);
 		if (!ret)
@@ -248,6 +245,8 @@ int cnss_get_platform_cap(struct device *dev, struct cnss_platform_cap *cap)
 
 	if (cap)
 		*cap = plat_priv->cap;
+
+	cnss_pr_dbg("Platform cap_flag is 0x%x\n", cap->cap_flag);
 
 	return 0;
 }
@@ -709,6 +708,11 @@ int cnss_idle_restart(struct device *dev)
 		return -ENODEV;
 	}
 
+	if (!mutex_trylock(&plat_priv->driver_ops_lock)) {
+		cnss_pr_dbg("Another driver operation is in progress, ignore idle restart\n");
+		return -EBUSY;
+	}
+
 	cnss_pr_dbg("Doing idle restart\n");
 
 	reinit_completion(&plat_priv->power_up_complete);
@@ -732,7 +736,8 @@ int cnss_idle_restart(struct device *dev)
 
 	timeout = cnss_get_boot_timeout(dev);
 	ret = wait_for_completion_timeout(&plat_priv->power_up_complete,
-					  msecs_to_jiffies(timeout) << 2);
+					  msecs_to_jiffies((timeout << 1) +
+							   WLAN_WD_TIMEOUT_MS));
 	if (!ret) {
 		cnss_pr_err("Timeout waiting for idle restart to complete\n");
 		ret = -ETIMEDOUT;
@@ -746,9 +751,11 @@ int cnss_idle_restart(struct device *dev)
 		goto out;
 	}
 
+	mutex_unlock(&plat_priv->driver_ops_lock);
 	return 0;
 
 out:
+	mutex_unlock(&plat_priv->driver_ops_lock);
 	return ret;
 }
 EXPORT_SYMBOL(cnss_idle_restart);
@@ -776,7 +783,7 @@ int cnss_idle_shutdown(struct device *dev)
 
 	reinit_completion(&plat_priv->recovery_complete);
 	ret = wait_for_completion_timeout(&plat_priv->recovery_complete,
-					  RECOVERY_TIMEOUT);
+					  msecs_to_jiffies(RECOVERY_TIMEOUT));
 	if (!ret) {
 		cnss_pr_err("Timeout waiting for recovery to complete\n");
 		CNSS_ASSERT(0);
@@ -1074,6 +1081,14 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 		if (test_bit(LINK_DOWN_SELF_RECOVERY,
 			     &plat_priv->ctrl_params.quirks))
 			goto self_recovery;
+		if (!cnss_bus_recover_link_down(plat_priv)) {
+			/* clear recovery bit here to avoid skipping
+			 * the recovery work for RDDM later
+			 */
+			clear_bit(CNSS_DRIVER_RECOVERY,
+				  &plat_priv->driver_state);
+			return 0;
+		}
 		break;
 	case CNSS_REASON_RDDM:
 		cnss_bus_collect_dump_info(plat_priv, false);
@@ -1096,7 +1111,13 @@ static int cnss_do_recovery(struct cnss_plat_data *plat_priv,
 	return 0;
 
 self_recovery:
+	cnss_pr_dbg("Going for self recovery\n");
 	cnss_bus_dev_shutdown(plat_priv);
+
+	if (test_bit(LINK_DOWN_SELF_RECOVERY, &plat_priv->ctrl_params.quirks))
+		clear_bit(LINK_DOWN_SELF_RECOVERY,
+			  &plat_priv->ctrl_params.quirks);
+
 	cnss_bus_dev_powerup(plat_priv);
 
 	return 0;
@@ -1126,6 +1147,7 @@ static int cnss_driver_recovery_hdlr(struct cnss_plat_data *plat_priv,
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state)) {
 		cnss_pr_err("Recovery is already in progress\n");
+		CNSS_ASSERT(0);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1178,7 +1200,8 @@ void cnss_schedule_recovery(struct device *dev,
 	struct cnss_recovery_data *data;
 	int gfp = GFP_KERNEL;
 
-	cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
+	if (!test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
+		cnss_bus_update_status(plat_priv, CNSS_FW_DOWN);
 
 	if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state) ||
 	    test_bit(CNSS_DRIVER_IDLE_SHUTDOWN, &plat_priv->driver_state)) {
@@ -1930,7 +1953,7 @@ int cnss_minidump_add_region(struct cnss_plat_data *plat_priv,
 		    md_entry.name, va, &pa, size);
 
 	ret = msm_minidump_add_region(&md_entry);
-	if (ret)
+	if (ret < 0)
 		cnss_pr_err("Failed to add mini dump region, err = %d\n", ret);
 
 	return ret;
@@ -2012,16 +2035,17 @@ static void cnss_unregister_bus_scale(struct cnss_plat_data *plat_priv)
 		msm_bus_scale_unregister_client(bus_bw_info->bus_client);
 }
 
-static ssize_t shutdown_store(struct kobject *kobj,
-			      struct kobj_attribute *attr,
+static ssize_t shutdown_store(struct device *dev,
+			      struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
-	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
 
 	if (plat_priv) {
 		set_bit(CNSS_IN_REBOOT, &plat_priv->driver_state);
 		del_timer(&plat_priv->fw_boot_timer);
 		complete_all(&plat_priv->power_up_complete);
+		complete_all(&plat_priv->cal_complete);
 	}
 
 	cnss_pr_dbg("Received shutdown notification\n");
@@ -2072,54 +2096,68 @@ static ssize_t fs_ready_store(struct device *dev,
 	return count;
 }
 
-static struct kobj_attribute shutdown_attribute = __ATTR_WO(shutdown);
 static DEVICE_ATTR_WO(fs_ready);
+static DEVICE_ATTR_WO(shutdown);
 
-static int cnss_create_shutdown_sysfs(struct cnss_plat_data *plat_priv)
+static struct attribute *cnss_attrs[] = {
+	&dev_attr_fs_ready.attr,
+	&dev_attr_shutdown.attr,
+	NULL,
+};
+
+static struct attribute_group cnss_attr_group = {
+	.attrs = cnss_attrs,
+};
+
+static int cnss_create_sysfs_link(struct cnss_plat_data *plat_priv)
 {
-	int ret = 0;
+	struct device *dev = &plat_priv->plat_dev->dev;
+	int ret;
 
-	plat_priv->shutdown_kobj = kobject_create_and_add("shutdown_wlan",
-							  kernel_kobj);
-	if (!plat_priv->shutdown_kobj) {
-		cnss_pr_err("Failed to create shutdown_wlan kernel object\n");
-		return -ENOMEM;
-	}
-
-	ret = sysfs_create_file(plat_priv->shutdown_kobj,
-				&shutdown_attribute.attr);
+	ret = sysfs_create_link(kernel_kobj, &dev->kobj, "cnss");
 	if (ret) {
-		cnss_pr_err("Failed to create sysfs shutdown file, err = %d\n",
+		cnss_pr_err("Failed to create cnss link, err = %d\n",
 			    ret);
-		kobject_put(plat_priv->shutdown_kobj);
-		plat_priv->shutdown_kobj = NULL;
+		goto out;
 	}
 
+	/* This is only for backward compatibility. */
+	ret = sysfs_create_link(kernel_kobj, &dev->kobj, "shutdown_wlan");
+	if (ret) {
+		cnss_pr_err("Failed to create shutdown_wlan link, err = %d\n",
+			    ret);
+		goto del_cnss_link;
+	}
+
+	return 0;
+
+del_cnss_link:
+	sysfs_delete_link(kernel_kobj, &dev->kobj, "cnss");
+out:
 	return ret;
 }
 
-static void cnss_remove_shutdown_sysfs(struct cnss_plat_data *plat_priv)
+static void cnss_remove_sysfs_link(struct cnss_plat_data *plat_priv)
 {
-	if (plat_priv->shutdown_kobj) {
-		sysfs_remove_file(plat_priv->shutdown_kobj,
-				  &shutdown_attribute.attr);
-		kobject_put(plat_priv->shutdown_kobj);
-		plat_priv->shutdown_kobj = NULL;
-	}
+	struct device *dev = &plat_priv->plat_dev->dev;
+
+	sysfs_delete_link(kernel_kobj, &dev->kobj, "shutdown_wlan");
+	sysfs_delete_link(kernel_kobj, &dev->kobj, "cnss");
 }
 
 static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 
-	ret = device_create_file(&plat_priv->plat_dev->dev, &dev_attr_fs_ready);
+	ret = devm_device_add_group(&plat_priv->plat_dev->dev,
+				    &cnss_attr_group);
 	if (ret) {
-		cnss_pr_err("Failed to create device fs_ready file, err = %d\n",
+		cnss_pr_err("Failed to create cnss device group, err = %d\n",
 			    ret);
 		goto out;
 	}
 
-	cnss_create_shutdown_sysfs(plat_priv);
+	cnss_create_sysfs_link(plat_priv);
 
 	return 0;
 out:
@@ -2128,8 +2166,8 @@ out:
 
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
-	cnss_remove_shutdown_sysfs(plat_priv);
-	device_remove_file(&plat_priv->plat_dev->dev, &dev_attr_fs_ready);
+	cnss_remove_sysfs_link(plat_priv);
+	devm_device_remove_group(&plat_priv->plat_dev->dev, &cnss_attr_group);
 }
 
 static int cnss_event_work_init(struct cnss_plat_data *plat_priv)
@@ -2163,6 +2201,7 @@ static int cnss_reboot_notifier(struct notifier_block *nb,
 	set_bit(CNSS_IN_REBOOT, &plat_priv->driver_state);
 	del_timer(&plat_priv->fw_boot_timer);
 	complete_all(&plat_priv->power_up_complete);
+	complete_all(&plat_priv->cal_complete);
 	cnss_pr_dbg("Reboot is in progress with action %d\n", action);
 
 	return NOTIFY_DONE;
@@ -2195,6 +2234,7 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	init_completion(&plat_priv->rddm_complete);
 	init_completion(&plat_priv->recovery_complete);
 	mutex_init(&plat_priv->dev_lock);
+	mutex_init(&plat_priv->driver_ops_lock);
 
 	return 0;
 }
@@ -2236,6 +2276,12 @@ static void cnss_get_wlaon_pwr_ctrl_info(struct cnss_plat_data *plat_priv)
 		    plat_priv->set_wlaon_pwr_ctrl);
 }
 
+static bool cnss_use_fw_path_with_prefix(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+				     "qcom,converged-dt");
+}
+
 static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qca6174", .driver_data = QCA6174_DEVICE_ID, },
 	{ .name = "qca6290", .driver_data = QCA6290_DEVICE_ID, },
@@ -2267,6 +2313,53 @@ cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				     "use-nv-mac");
 }
+
+/* ASUS_BSP--- for for wifi antenna switch*/
+#if defined ASUS_ZS661KS_PROJECT
+static ssize_t do_wifi_antenna_switch_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int antenna_gpio = 0;
+	int antenna_gpio_10 = 0;
+	int antenna_gpio_15 = 0;
+	int antenna_gpio_136 = 0;
+	int antenna_gpio_137 = 0;
+
+	struct pinctrl *key_pinctrl;
+
+	kstrtoint(buf,10,&antenna_gpio);
+
+	key_pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR_OR_NULL(key_pinctrl)) {
+	    pr_err("[cnss] get_pinctrl failed");
+	}
+
+	cnss_pr_info("[cnss]: wifi_antenna_switch_start = %d, GPIO(10/15/136/137) = %d%d%d%d.\n", antenna_gpio, gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
+
+	if( antenna_gpio <= 1111 ) {
+		antenna_gpio_10 = antenna_gpio / 1000;
+		gpio_set_value(wlan_asus_ant_10_gpio, antenna_gpio_10);
+
+		antenna_gpio = antenna_gpio % 1000;
+		antenna_gpio_15 = antenna_gpio / 100;
+		gpio_set_value(wlan_asus_ant_15_gpio, antenna_gpio_15);
+
+		antenna_gpio = antenna_gpio % 100;
+		antenna_gpio_136 = antenna_gpio / 10;
+		gpio_set_value(wlan_asus_ant_136_gpio, antenna_gpio_136);
+
+		antenna_gpio_137 = antenna_gpio % 10;
+		gpio_set_value(wlan_asus_ant_137_gpio, antenna_gpio_137);
+	}
+
+	cnss_pr_info("[cnss]: wifi_antenna_switch_end GPIO = %d%d%d%d.\n", gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
+
+	return count;
+}
+
+static DEVICE_ATTR(do_wifi_antenna_switch, 0644, NULL, do_wifi_antenna_switch_store);
+#endif
+/* ASUS_BSP--- for for wifi antenna switch*/
 
 static int cnss_probe(struct platform_device *plat_dev)
 {
@@ -2311,6 +2404,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->device_id = device_id->driver_data;
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
 	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
+	plat_priv->use_fw_path_with_prefix =
+		cnss_use_fw_path_with_prefix(plat_priv);
 	cnss_set_plat_priv(plat_dev, plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
@@ -2370,9 +2465,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto deinit_event_work;
 
-	ret = cnss_debugfs_create(plat_priv);
-	if (ret)
-		goto deinit_qmi;
+	cnss_debugfs_create(plat_priv);
 
 	ret = cnss_misc_init(plat_priv);
 	if (ret)
@@ -2401,6 +2494,10 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret != 0) {
 		printk("[cnss]: icnss_probe, antenna_switch_enable_vreg ret=%d.\n", ret);
 	}
+
+	ret = device_create_file(&plat_dev->dev, &dev_attr_do_wifi_antenna_switch);
+	if (ret)
+		pr_err("[cnss]: sysfs node create failed error:%d\n", ret);
 
 	wlan_asus_ant_10_gpio = of_get_named_gpio(dev->of_node,"wlan-asus_ant_10",0);
 	if (wlan_asus_ant_10_gpio < 0) {
@@ -2499,7 +2596,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 destroy_debugfs:
 	cnss_debugfs_destroy(plat_priv);
-deinit_qmi:
 	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
 	cnss_event_work_deinit(plat_priv);
@@ -2619,48 +2715,6 @@ int cnss_setAntennaSwitch(void)
 	return do_antenna_switch;
 }
 EXPORT_SYMBOL(cnss_setAntennaSwitch);
-
-int cnss_setWifiAntenna(void)
-{
-	int antenna_gpio_10 = 0;
-	int antenna_gpio_15 = 0;
-	int antenna_gpio_136 = 0;
-	int antenna_gpio_137 = 0;
-
-        int antenna_temp = 0;
-
-	cnss_pr_info("[cnss]: wifi_antenna_switch_start = %s, GPIO(10/15/136/137) = %d%d%d%d.\n", do_wifi_antenna_switch, gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
-
-	if( sscanf(do_wifi_antenna_switch, "%d\n", &antenna_temp) ){
-		cnss_pr_info("[cnss] parsed antenna %d", antenna_temp);
-	}
-
-	if( antenna_temp <= 1111 ) {
-		antenna_gpio_10 = antenna_temp / 1000;
-		gpio_set_value(wlan_asus_ant_10_gpio, antenna_gpio_10);
-
-		antenna_temp = antenna_temp % 1000;
-		antenna_gpio_15 = antenna_temp / 100;
-		gpio_set_value(wlan_asus_ant_15_gpio, antenna_gpio_15);
-
-		antenna_temp = antenna_temp % 100;
-		antenna_gpio_136 = antenna_temp / 10;
-		gpio_set_value(wlan_asus_ant_136_gpio, antenna_gpio_136);
-
-		antenna_gpio_137 = antenna_temp % 10;
-		gpio_set_value(wlan_asus_ant_137_gpio, antenna_gpio_137);
-	}
-
-	//ASUS_BSP+++ "for /data/log/ASUSEvtlog"
-//	ASUSEvtlog("[wlan]: wifi_antenna_switch GPIO(79/80/64/67) = %d%d%d%d.\n", gpio_get_value(79),gpio_get_value(80),gpio_get_value(64),gpio_get_value(67));
-	//ASUS_BSP--- "for /data/log/ASUSEvtlog"
-
-	cnss_pr_info("[cnss]: wifi_antenna_switch_end = %s, GPIO(10/15/136/137) = %d%d%d%d.\n", do_wifi_antenna_switch, gpio_get_value(wlan_asus_ant_10_gpio),gpio_get_value(wlan_asus_ant_15_gpio),gpio_get_value(wlan_asus_ant_136_gpio),gpio_get_value(wlan_asus_ant_137_gpio));
-
-	return 0;
-
-}
-EXPORT_SYMBOL(cnss_setWifiAntenna);
 #endif
 /* ASUS_BSP--- for for wifi antenna switch*/
 

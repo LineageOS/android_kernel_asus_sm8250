@@ -69,9 +69,9 @@ int parseItems=0;
 	for(offset=0; offset<bufLen; offset++){
 		if(buf[offset]=='@'){
 			SegCnt++;
-			pr_err("[MCU] %s SegCnt:%d", __func__, SegCnt);
 		}		
 	}
+	pr_err("[MCU] %s SegCnt:%d", __func__, SegCnt);
 	MAX_MSP_SEGMENT = SegCnt;
 	Zen7MAX_MSP_SEGMENT = MAX_MSP_SEGMENT;
 

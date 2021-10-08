@@ -54,6 +54,16 @@
 		};
 	};
 
+	key_confirm {
+		key_confirm_default: key_confirm_default {
+			pins = "gpio7";
+			function = "normal";
+			input-enable;
+			bias-pull-up;
+			power-source = <0>;
+		};
+	};
+
 	usb2_vbus_boost {
 		usb2_vbus_boost_default: usb2_vbus_boost_default {
 			pins = "gpio9";
@@ -174,6 +184,10 @@
 
 &usb0 {
 	extcon = <&pm8150b_pdphy>, <&eud>;
+};
+
+&usb_qmp_dp_phy {
+	 extcon = <&pm8150b_pdphy>;
 };
 
 &sde_dp {

@@ -95,7 +95,7 @@ static void lid2_report_function(struct work_struct *work)
 	if(!value){
 		pr_info("[ASUS_LID2] Froce close Bumper LED\n");
 		bumper_switch(0);
-	}
+	} 
 
 	pr_info("[ASUS_LID2] %s : SW_CAMERA_LENS_COVER report value = %d\n",  __func__, value);
 }

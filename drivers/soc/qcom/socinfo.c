@@ -33,6 +33,11 @@
 #define SMEM_IMAGE_VERSION_OEM_SIZE 33
 #define SMEM_IMAGE_VERSION_OEM_OFFSET 95
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
+//ASUS_BSP Eason: check high/low level camera device+++
+#ifdef ZS670KS_PROJECT
+	extern uint8_t eeprom_camera_specs;
+#endif
+//ASUS_BSP Eason: check high/low level camera device---
 
 static DECLARE_RWSEM(current_image_rwsem);
 enum {
@@ -117,6 +122,25 @@ const char *hw_platform_subtype[] = {
 	[PLATFORM_SUBTYPE_STRANGE_2A] = "strange_2a",
 	[PLATFORM_SUBTYPE_INVALID] = "Invalid",
 };
+
+//ASUS_BSP Eason: check high/low level camera device +++
+/*
+* check eeprom_camera to use different soft magnetometer paramerter
+* High level camera 0x6B => 107
+* Low  level camera 0x71 => 113
+*/
+#ifdef ZS670KS_PROJECT
+enum {
+	PLATFORM_SUBTYPE_CAM_H = 0x6B,
+	PLATFORM_SUBTYPE_CAM_L = 0x71,
+};
+
+const char *hw_platform_subtype_cam[] = {
+	[PLATFORM_SUBTYPE_CAM_H] = "CamH",
+	[PLATFORM_SUBTYPE_CAM_L] = "CamL",
+};
+#endif
+//ASUS_BSP Eason: check high/low level camera device ---
 
 /* Used to parse shared memory.  Must match the modem. */
 struct socinfo_v0_1 {
@@ -295,6 +319,9 @@ static struct msm_soc_info cpu_of_id[] = {
 	[305] = {MSM_CPU_8996, "MSM8996pro"},
 	[312] = {MSM_CPU_8996, "APQ8096pro"},
 
+	/* SDM660 ID */
+	[317] = {MSM_CPU_SDM660, "SDM660"},
+
 	/* sm8150 ID */
 	[339] = {MSM_CPU_SM8150, "SM8150"},
 
@@ -318,6 +345,7 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* kona ID */
 	[356] = {MSM_CPU_KONA, "KONA"},
+	[455] = {MSM_CPU_KONA, "KONA"},
 
 	/* Lito ID */
 	[400] = {MSM_CPU_LITO, "LITO"},
@@ -332,9 +360,17 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* Bengalp ID */
 	[445] = {MSM_CPU_BENGALP, "BENGALP"},
+	[420] = {MSM_CPU_BENGALP, "BENGALP"},
 
 	/* Scuba ID */
 	[441] = {MSM_CPU_SCUBA, "SCUBA"},
+	[471] = {MSM_CPU_SCUBA, "SCUBA"},
+
+	/* QCM4290 ID */
+	[469] = {MSM_CPU_QCM4290, "QCM4290"},
+
+	/* QCS4290 ID */
+	[470] = {MSM_CPU_QCS4290, "QCS4290"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	 * MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -710,8 +746,21 @@ msm_get_platform_subtype(struct device *dev,
 			pr_err("Invalid hardware platform subtype\n");
 			hw_subtype = PLATFORM_SUBTYPE_INVALID;
 		}
+//ASUS_BSP Eason: check high/low level camera device +++		
+#ifdef ZS670KS_PROJECT
+		if( PLATFORM_SUBTYPE_CAM_H == eeprom_camera_specs){
+				hw_subtype = PLATFORM_SUBTYPE_CAM_H;
+		}else{
+				hw_subtype = PLATFORM_SUBTYPE_CAM_L;
+		}
+		printk("subtype_id: hw_subtype %d, eeprom_camera %d",hw_subtype, eeprom_camera_specs);
+		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+			hw_platform_subtype_cam[hw_subtype]);
+#else			
 		return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 			hw_platform_subtype[hw_subtype]);
+#endif
+//ASUS_BSP Eason: check high/low level camera device ---
 	}
 }
 
@@ -1187,6 +1236,10 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 310;
 		strlcpy(dummy_socinfo.build_id, "msm8996-auto - ",
 		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sdm660()) {
+		dummy_socinfo.id = 317;
+		strlcpy(dummy_socinfo.build_id, "sdm660 - ",
+		sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_sm8150()) {
 		dummy_socinfo.id = 339;
 		strlcpy(dummy_socinfo.build_id, "sm8150 - ",
@@ -1238,6 +1291,14 @@ static void * __init setup_dummy_socinfo(void)
 	} else if (early_machine_is_sdmmagpie()) {
 		dummy_socinfo.id = 365;
 		strlcpy(dummy_socinfo.build_id, "sdmmagpie - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_qcm4290()) {
+		dummy_socinfo.id = 469;
+		strlcpy(dummy_socinfo.build_id, "qcm4290 - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_qcs4290()) {
+		dummy_socinfo.id = 470;
+		strlcpy(dummy_socinfo.build_id, "qcs4290 - ",
 		sizeof(dummy_socinfo.build_id));
 	} else
 		strlcat(dummy_socinfo.build_id, "Dummy socinfo",

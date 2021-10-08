@@ -4,6 +4,7 @@
  */
 
 #include <asm/dma-iommu.h>
+#include <linux/dma-iommu.h>
 #include <linux/iommu.h>
 #include <linux/of.h>
 #include <linux/slab.h>
@@ -777,6 +778,9 @@ int read_platform_resources_from_drv_data(
 	res->max_load = find_key_value(platform_data,
 			"qcom,max-hw-load");
 
+	res->max_image_load = find_key_value(platform_data,
+			"qcom,max-image-load");
+
 	res->max_mbpf = find_key_value(platform_data,
 			"qcom,max-mbpf");
 
@@ -1008,6 +1012,13 @@ static int msm_vidc_setup_context_bank(struct msm_vidc_platform_resources *res,
 	}
 
 	 cb->domain = iommu_get_domain_for_dev(cb->dev);
+
+	/*
+	 * When memory is fragmented, below configuration increases the
+	 * possibility to get a mapping for buffer in the configured CB.
+	 */
+	if (!strcmp(cb->name, "venus_ns"))
+		iommu_dma_enable_best_fit_algo(cb->dev);
 
 	 /*
 	 * configure device segment size and segment boundary to ensure

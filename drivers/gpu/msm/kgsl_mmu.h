@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2002,2007-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_MMU_H
 #define __KGSL_MMU_H
@@ -135,6 +135,8 @@ struct kgsl_mmu_pt_ops {
 #define KGSL_MMU_NEED_GUARD_PAGE BIT(9)
 /* The device supports IO coherency */
 #define KGSL_MMU_IO_COHERENT BIT(10)
+/* The device supports aperture programming from secure world */
+#define KGSL_MMU_SMMU_APERTURE BIT(11)
 
 /**
  * struct kgsl_mmu - Master definition for KGSL MMU devices
@@ -144,6 +146,7 @@ struct kgsl_mmu_pt_ops {
  * @defaultpagetable: Default pagetable object for the MMU
  * @securepagetable: Default secure pagetable object for the MMU
  * @mmu_ops: Function pointers for the MMU sub-type
+ * @globalpt_mapped: True if global pagetable entries mapped
  * @secured: True if the MMU needs to be secured
  * @feature: Static list of MMU features
  * @secure_aligned_mask: Mask that secure buffers need to be aligned to
@@ -156,6 +159,7 @@ struct kgsl_mmu {
 	struct kgsl_pagetable *defaultpagetable;
 	struct kgsl_pagetable *securepagetable;
 	const struct kgsl_mmu_ops *mmu_ops;
+	bool globalpt_mapped;
 	bool secured;
 	unsigned long features;
 	unsigned int secure_align_mask;

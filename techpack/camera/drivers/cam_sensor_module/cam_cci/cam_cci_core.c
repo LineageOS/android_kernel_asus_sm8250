@@ -1541,7 +1541,7 @@ static int32_t cam_cci_i2c_write_async(struct v4l2_subdev *sd,
 
 	return rc;
 }
-
+extern uint8_t g_cam_cci_check;  //ASUS_BSP Jason "Add for camera cci debug"
 static int32_t cam_cci_read_bytes(struct v4l2_subdev *sd,
 	struct cam_cci_ctrl *c_ctrl)
 {
@@ -1609,6 +1609,7 @@ static int32_t cam_cci_read_bytes(struct v4l2_subdev *sd,
 		}
 		if (rc) {
 			CAM_ERR(CAM_CCI, "failed to read rc:%d", rc);
+			g_cam_cci_check=1;//ASUS_BSP Jason "Add for camera cci debug"
 			goto ERROR;
 		}
 

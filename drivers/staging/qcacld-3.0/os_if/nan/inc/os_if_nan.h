@@ -78,13 +78,11 @@ int os_if_nan_register_lim_callbacks(struct wlan_objmgr_psoc *psoc,
  * @psoc: pointer to psoc object
  * @vdev_id: vdev id of ndi
  * @success: if create was success or failure
- * @sta_id: sta_id of the NDI
  *
  * Return: None
  */
 void os_if_nan_post_ndi_create_rsp(struct wlan_objmgr_psoc *psoc,
-				   uint8_t vdev_id, bool success,
-				   uint8_t sta_id);
+				   uint8_t vdev_id, bool success);
 
 /**
  * os_if_nan_post_ndi_delete_rsp: os_if api to pos ndi delete rsp to umac nan
@@ -149,18 +147,6 @@ static inline QDF_STATUS os_if_nan_set_ndp_delete_transaction_id(
 }
 
 /**
- * os_if_nan_legacy_req: os_if api to handle NAN requests attached to the vendor
- * command QCA_NL80211_VENDOR_SUBCMD_NAN
- * @psoc: pointer to psoc object
- * @data: request data. contains vendor cmd tlvs
- * @data_len: length of data
- *
- * Return: status of operation
- */
-int os_if_nan_legacy_req(struct wlan_objmgr_psoc *psoc, const void *data,
-			 int data_len);
-
-/**
  * os_if_process_nan_req: os_if api to handle NAN requests attached to the
  * vendor command QCA_NL80211_VENDOR_SUBCMD_NAN_EXT
  * @psoc: pointer to psoc object
@@ -174,8 +160,7 @@ int os_if_process_nan_req(struct wlan_objmgr_psoc *psoc,
 #else
 
 static inline void os_if_nan_post_ndi_create_rsp(struct wlan_objmgr_psoc *psoc,
-						 uint8_t vdev_id, bool success,
-						 uint8_t sta_id)
+						 uint8_t vdev_id, bool success)
 {
 }
 

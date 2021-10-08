@@ -1121,17 +1121,6 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 	}
 
 	if (level->notify_rpm) {
-		/*
-		 * Print the clocks and regulators which are enabled during
-		 * system suspend.  This debug information is useful to know
-		 * which resources are enabled and preventing the system level
-		 * LPMs (XO and Vmin).
-		 */
-		if (!from_idle) {
-			clock_debug_print_enabled();
-			regulator_debug_print_enabled();
-		}
-
 		cpu = get_next_online_cpu(from_idle);
 		cpumask_copy(&cpumask, cpumask_of(cpu));
 		clear_predict_history();
@@ -1214,7 +1203,8 @@ static void cluster_prepare(struct lpm_cluster *cluster,
 	if (cluster_configure(cluster, i, from_idle, predicted))
 		goto failed;
 
-	cluster->stats->sleep_time = start_time;
+	if (!IS_ERR_OR_NULL(cluster->stats))
+		cluster->stats->sleep_time = start_time;
 	cluster_prepare(cluster->parent, &cluster->num_children_in_sync, i,
 			from_idle, start_time);
 
@@ -1222,7 +1212,8 @@ static void cluster_prepare(struct lpm_cluster *cluster,
 	return;
 failed:
 	spin_unlock(&cluster->sync_lock);
-	cluster->stats->sleep_time = 0;
+	if (!IS_ERR_OR_NULL(cluster->stats))
+		cluster->stats->sleep_time = 0;
 }
 
 static void cluster_unprepare(struct lpm_cluster *cluster,
@@ -1261,7 +1252,7 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 	if (!first_cpu || cluster->last_level == cluster->default_level)
 		goto unlock_return;
 
-	if (cluster->stats->sleep_time)
+	if (!IS_ERR_OR_NULL(cluster->stats) && cluster->stats->sleep_time)
 		cluster->stats->sleep_time = end_time -
 			cluster->stats->sleep_time;
 	lpm_stats_cluster_exit(cluster->stats, cluster->last_level, success);
@@ -1371,7 +1362,7 @@ static bool psci_enter_sleep(struct lpm_cpu *cpu, int idx, bool from_idle)
 		if (cpu->bias)
 			biastimer_start(cpu->bias);
 		stop_critical_timings();
-		wfi();
+		cpu_do_idle();
 		start_critical_timings();
 		return true;
 	}
@@ -1700,6 +1691,9 @@ static void register_cluster_lpm_stats(struct lpm_cluster *cl,
 
 	cl->stats = lpm_stats_config_level(cl->cluster_name, level_name,
 			cl->nlevels, parent ? parent->stats : NULL, NULL);
+	if (IS_ERR_OR_NULL(cl->stats))
+		pr_info("Cluster (%s) stats not registered\n",
+			cl->cluster_name);
 
 	kfree(level_name);
 
@@ -1713,8 +1707,17 @@ static void register_cluster_lpm_stats(struct lpm_cluster *cl,
 		register_cluster_lpm_stats(child, cl);
 }
 
+uint64_t enter_time;
+uint64_t total_suspend_time;
+
 static int lpm_suspend_prepare(void)
 {
+
+	struct timespec ts;
+
+	getnstimeofday(&ts);
+	enter_time = timespec_to_ns(&ts);
+
 	suspend_in_progress = true;
 	lpm_stats_suspend_enter();
 
@@ -1723,6 +1726,17 @@ static int lpm_suspend_prepare(void)
 
 static void lpm_suspend_wake(void)
 {
+	struct timespec ts;
+	uint64_t suspend_time = 0;
+	uint32_t ns;
+
+	getnstimeofday(&ts);
+	suspend_time = timespec_to_ns(&ts) - enter_time;
+	total_suspend_time += suspend_time;
+	ns = do_div(suspend_time, NSEC_PER_SEC);
+	pr_info("Suspended for %lld.%09u secs. total %lld secs.\n", suspend_time, ns, total_suspend_time/NSEC_PER_SEC);
+	ASUSEvtlog("[PM] Suspended for %lld.%09u secs. total %lld secs.\n", suspend_time, ns, total_suspend_time/NSEC_PER_SEC);
+
 	suspend_in_progress = false;
 	lpm_stats_suspend_exit();
 }
@@ -1744,6 +1758,16 @@ static int lpm_suspend_enter(suspend_state_t state)
 		pr_err("Failed suspend\n");
 		return 0;
 	}
+
+	/*
+	 * Print the clocks and regulators which are enabled during
+	 * system suspend.  This debug information is useful to know
+	 * which resources are enabled and preventing the system level
+	 * LPMs (XO and Vmin).
+	 */
+	clock_debug_print_enabled();
+	regulator_debug_print_enabled();
+
 	cpu_prepare(lpm_cpu, idx, false);
 	cluster_prepare(cluster, cpumask, idx, false, 0);
 
@@ -1843,8 +1867,11 @@ static int lpm_probe(struct platform_device *pdev)
 	md_entry.phys_addr = lpm_debug_phys;
 	md_entry.size = size;
 	md_entry.id = MINIDUMP_DEFAULT_ID;
-	if (msm_minidump_add_region(&md_entry))
+	if (msm_minidump_add_region(&md_entry) < 0)
 		pr_info("Failed to add lpm_debug in Minidump\n");
+
+	enter_time = 0;
+	total_suspend_time = 0;
 
 	return 0;
 failed:

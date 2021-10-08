@@ -11,7 +11,7 @@ menuconfig INPUT_TOUCHSCREEN
 
 if INPUT_TOUCHSCREEN
 
-source "drivers/input/touchscreen/focaltech_touch_ft8719/Kconfig"
+source "drivers/input/touchscreen/focaltech_touch_3518U/Kconfig"
 
 config TOUCHSCREEN_FTS
 	bool "Focaltech Touchscreens"
@@ -1364,5 +1364,7 @@ config TOUCHSCREEN_SYNAPTICS_TCM
 source "drivers/input/touchscreen/synaptics_tcm/Kconfig"
 
 source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+
+source "drivers/input/touchscreen/nt36xxx/Kconfig"
 
 endif

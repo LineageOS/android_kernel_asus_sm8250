@@ -20,6 +20,7 @@
 #include <linux/rwsem.h>
 #include <linux/ipc_logging.h>
 #include <linux/uidgid.h>
+#include <linux/pm_wakeup.h>
 
 #include <net/sock.h>
 #include <uapi/linux/sched/types.h>
@@ -159,6 +160,8 @@ static struct work_struct qrtr_backup_work;
  * @kworker: worker thread for recv work
  * @task: task to run the worker thread
  * @read_data: scheduled work for recv work
+ * @say_hello: scheduled work for initiating hello
+ * @ws: wakeupsource avoid system suspend
  * @ilc: ipc logging context reference
  */
 struct qrtr_node {
@@ -168,6 +171,7 @@ struct qrtr_node {
 	unsigned int nid;
 	unsigned int net_id;
 	atomic_t hello_sent;
+	atomic_t hello_rcvd;
 
 	struct radix_tree_root qrtr_tx_flow;
 	struct wait_queue_head resume_tx;
@@ -179,6 +183,9 @@ struct qrtr_node {
 	struct kthread_worker kworker;
 	struct task_struct *task;
 	struct kthread_work read_data;
+	struct kthread_work say_hello;
+
+	struct wakeup_source *ws;
 
 	void *ilc;
 };
@@ -195,6 +202,128 @@ struct qrtr_tx_flow {
 
 #define QRTR_TX_FLOW_HIGH	10
 #define QRTR_TX_FLOW_LOW	5
+
+/*AS-K Log Modem Wake Up QMI Info+*/
+extern int modem_resume_irq_flag_function(void);
+static const struct {
+	unsigned int service;
+	const char *name;
+} common_names[] = {
+	{ 0, "Control service" },
+	{ 1, "Wireless Data Service" },
+	{ 2, "Device Management Service" },
+	{ 3, "Network Access Service" },
+	{ 4, "Quality Of Service service" },
+	{ 5, "Wireless Messaging Service" },
+	{ 6, "Position Determination Service" },
+	{ 7, "Authentication service" },
+	{ 8, "AT service" },
+	{ 9, "Voice service" },
+	{ 10, "Card Application Toolkit service (v2)" },
+	{ 11, "User Identity Module service" },
+	{ 12, "Phonebook Management service" },
+	{ 13, "QCHAT service" },
+	{ 14, "Remote file system service" },
+	{ 15, "Test service" },
+	{ 16, "Location service (~ PDS v2)" },
+	{ 17, "Service access proxy service" },
+	{ 18, "IMS settings service" },
+	{ 19, "Analog to digital converter driver service" },
+	{ 20, "Core sound driver service" },
+	{ 21, "Modem embedded file system service" },
+	{ 22, "Time service" },
+	{ 23, "Thermal sensors service" },
+	{ 24, "Thermal mitigation device service" },
+	{ 25, "Service access proxy service" },
+	{ 26, "Wireless data administrative service" },
+	{ 27, "TSYNC control service" },
+	{ 28, "Remote file system access service" },
+	{ 29, "Circuit switched videotelephony service" },
+	{ 30, "QTI mobile access point service" },
+	{ 31, "IMS presence service" },
+	{ 32, "IMS videotelephony service" },
+	{ 33, "IMS application service" },
+	{ 34, "Coexistence service" },
+	{ 36, "Persistent device configuration service" },
+	{ 38, "Simultaneous transmit service" },
+	{ 39, "Bearer independent transport service" },
+	{ 40, "IMS RTP service" },
+	{ 41, "RF radiated performance enhancement service" },
+	{ 42, "Data system determination service" },
+	{ 43, "Subsystem control service" },
+	{ 48, "Data Filter Service" },
+	{ 49, "IPA control service" },
+	{ 51, "CoreSight remote tracing service" },
+	{ 64, "Service registry locator service" },
+	{ 66, "Service registry notification service" },
+	{ 69, "ATH10k WLAN firmware service" },
+	{ 78, "Data Flow Control service" },
+	{ 224, "Card Application Toolkit service (v1)" },
+	{ 225, "Remote Management Service" },
+	{ 226, "Open Mobile Alliance device management service" },
+	{ 312, "QBT1000 Ultrasonic Fingerprint Sensor service" },
+	{ 769, "SLIMbus control service" },
+	{ 771, "Peripheral Access Control Manager service" },
+	{ 4097, "DIAG service" },
+};
+struct server_info {
+	int count;
+	struct qrtr_ctrl_pkt server_data[256];
+};
+static struct server_info server_store;
+static void StoreServerInfo(struct qrtr_ctrl_pkt *pkt) {
+	int index=0;
+
+	/*New Server Re-Connect after Modem Reset*/
+	for(index=0 ; index<server_store.count ; index++) {
+		if ((server_store.server_data[index].server.service == pkt->server.service)
+		&& (server_store.server_data[index].server.instance == pkt->server.instance)
+		&& (server_store.server_data[index].server.node == pkt->server.node))
+			break;
+	}
+
+	server_store.server_data[index].server.service = pkt->server.service;
+	server_store.server_data[index].server.instance = pkt->server.instance;
+	server_store.server_data[index].server.node = pkt->server.node;
+	server_store.server_data[index].server.port = pkt->server.port;
+
+	if (index >= server_store.count) {
+		server_store.count++;
+	}
+}
+
+static const char *SearchServicebyServerInfo(struct qrtr_cb *cb) {
+	int index=0;
+	unsigned int service;
+	const char *name = NULL;
+
+	for (index=0; index<server_store.count; index++) {
+		if ((le32_to_cpu(server_store.server_data[index].server.node) == cb->src_node) &&
+			(le32_to_cpu(server_store.server_data[index].server.port) == cb->src_port)) {
+			break;
+		}
+	}
+
+	if (index < server_store.count) {/*Found the Service*/
+		service = le32_to_cpu(server_store.server_data[index].server.service);
+		for (index=0; index<sizeof(common_names)/sizeof(common_names[0]); index++) {
+			if (service == common_names[index].service) {
+				name = common_names[index].name;
+				break;
+			}
+		}
+	}
+
+	if (name==NULL) {
+		pr_err("[WakeUpInfo-QRTR] <unknown> service id = %u src[0x%x:0x%x] dst[0x%x:0x%x]\n",
+			service, cb->src_node, cb->src_port, cb->dst_node, cb->dst_port);
+		ASUSEvtlog("[WakeUpInfo-QRTR] <unknown> service id = %u src[0x%x:0x%x] dst[0x%x:0x%x]\n",
+			service, cb->src_node, cb->src_port, cb->dst_node, cb->dst_port);
+	}
+
+	return name ? name : "<unknown>";
+}
+/*AS-K Log Modem Wake Up QMI Info-*/
 
 static struct sk_buff *qrtr_alloc_ctrl_packet(struct qrtr_ctrl_pkt **pkt);
 static int qrtr_local_enqueue(struct qrtr_node *node, struct sk_buff *skb,
@@ -268,8 +397,24 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
 			  cb->dst_node, cb->dst_port,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+
+		/*AS-K Log Modem Wake Up QMI Info+*/
+	      	if (modem_resume_irq_flag_function()) {
+			pr_warn("[WakeUpInfo-QRTR] src[0x%x:0x%x] dst[0x%x:0x%x], svc=%s, type=%d, msg=%d\n",
+				cb->src_node, cb->src_port, cb->dst_node, cb->dst_port,
+				SearchServicebyServerInfo(cb), (uint8_t)(pl_buf>>0), (uint8_t)(pl_buf>>24));
+			ASUSEvtlog("[WakeUpInfo-QRTR] src[0x%x:0x%x] dst[0x%x:0x%x], svc=%s, type=%d, msg=%d\n",
+				cb->src_node, cb->src_port, cb->dst_node, cb->dst_port,
+				SearchServicebyServerInfo(cb), (uint8_t)(pl_buf>>0), (uint8_t)(pl_buf>>24));
+		}
+		/*AS-K Log Modem Wake Up QMI Info-*/
 	} else {
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
+		/*AS-K Log Modem Wake Up QMI Info+*/
+		if (modem_resume_irq_flag_function()) {
+			pr_err("[WakeUpInfo-QRTR] RX CTRL: cmd:0x%x\n", cb->type);
+		}
+		/*AS-K Log Modem Wake Up QMI Info-*/
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
 		    cb->type == QRTR_TYPE_DEL_SERVER)
 			QRTR_INFO(node->ilc,
@@ -357,6 +502,7 @@ static void __qrtr_node_release(struct kref *kref)
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
 
+	wakeup_source_unregister(node->ws);
 	kthread_flush_worker(&node->kworker);
 	kthread_stop(node->task);
 
@@ -524,6 +670,10 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 		kfree_skb(skb);
 		return rc;
 	}
+	if (atomic_read(&node->hello_sent) && type == QRTR_TYPE_HELLO) {
+		kfree_skb(skb);
+		return 0;
+	}
 
 	/* If sk is null, this is a forwarded packet and should not wait */
 	if (!skb->sk) {
@@ -635,10 +785,16 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 	}
 	up_write(&qrtr_node_lock);
 
+	snprintf(name, sizeof(name), "qrtr_%d", nid);
 	if (!node->ilc) {
-		snprintf(name, sizeof(name), "qrtr_%d", nid);
 		node->ilc = ipc_log_context_create(QRTR_LOG_PAGE_CNT, name, 0);
 	}
+	/* create wakeup source for only NID = 3,0 or 7.
+	 * From other nodes sensor service stream samples
+	 * cause APPS suspend problems and power drain issue.
+	 */
+	if (!node->ws && (nid == 0 || nid == 3 || nid == 7))
+		node->ws = wakeup_source_register(NULL, name);
 }
 
 /**
@@ -821,10 +977,11 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	    cb->type != QRTR_TYPE_RESUME_TX)
 		goto err;
 
+	pm_wakeup_ws_event(node->ws, 0, true);
+
 	skb->data_len = size;
 	skb->len = size;
 	skb_store_bits(skb, 0, data + hdrlen, size);
-
 	qrtr_log_rx_msg(node, skb);
 
 	skb_queue_tail(&node->rx_queue, skb);
@@ -954,6 +1111,30 @@ static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
 	qrtr_node_enqueue(node, skb, cb->type, &from, &to, 0);
 	qrtr_node_release(node);
 }
+
+static void qrtr_sock_queue_skb(struct qrtr_node *node, struct sk_buff *skb,
+				struct qrtr_sock *ipc)
+{
+	struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
+	int rc;
+
+	/* Don't queue HELLO if control port already received */
+	if (cb->type == QRTR_TYPE_HELLO) {
+		if (atomic_read(&node->hello_rcvd)) {
+			kfree_skb(skb);
+			return;
+		}
+		atomic_inc(&node->hello_rcvd);
+	}
+
+	rc = sock_queue_rcv_skb(&ipc->sk, skb);
+	if (rc) {
+		pr_err("%s: qrtr pkt dropped flow[%d] rc[%d]\n",
+		       __func__, cb->confirm_rx, rc);
+		kfree_skb(skb);
+	}
+}
+
 /* Handle and route a received packet.
  *
  * This will auto-reply with resume-tx packet as necessary.
@@ -979,6 +1160,7 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 		    skb->len == sizeof(pkt)) {
 			skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 			qrtr_node_assign(node, le32_to_cpu(pkt.server.node));
+			StoreServerInfo(&pkt);/*AS-K Log Modem Wake Up QMI Info - Store New Server Info+*/
 		}
 
 		if (cb->type == QRTR_TYPE_RESUME_TX) {
@@ -996,16 +1178,38 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 			if (!ipc) {
 				kfree_skb(skb);
 			} else {
-				if (sock_queue_rcv_skb(&ipc->sk, skb)) {
-					pr_err("%s qrtr pkt dropped flow[%d]\n",
-					       __func__, cb->confirm_rx);
-					kfree_skb(skb);
-				}
-
+				qrtr_sock_queue_skb(node, skb, ipc);
 				qrtr_port_put(ipc);
 			}
 		}
 	}
+}
+
+static void qrtr_hello_work(struct kthread_work *work)
+{
+	struct sockaddr_qrtr from = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
+	struct sockaddr_qrtr to = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
+	struct qrtr_ctrl_pkt *pkt;
+	struct qrtr_node *node;
+	struct qrtr_sock *ctrl;
+	struct sk_buff *skb;
+
+	ctrl = qrtr_port_lookup(QRTR_PORT_CTRL);
+	if (!ctrl)
+		return;
+
+	skb = qrtr_alloc_ctrl_packet(&pkt);
+	if (!skb) {
+		qrtr_port_put(ctrl);
+		return;
+	}
+
+	node = container_of(work, struct qrtr_node, say_hello);
+	pkt->cmd = cpu_to_le32(QRTR_TYPE_HELLO);
+	from.sq_node = qrtr_local_nid;
+	to.sq_node = node->nid;
+	qrtr_node_enqueue(node, skb, QRTR_TYPE_HELLO, &from, &to, 0);
+	qrtr_port_put(ctrl);
 }
 
 /**
@@ -1036,8 +1240,10 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	node->nid = QRTR_EP_NID_AUTO;
 	node->ep = ep;
 	atomic_set(&node->hello_sent, 0);
+	atomic_set(&node->hello_rcvd, 0);
 
 	kthread_init_work(&node->read_data, qrtr_node_rx_work);
+	kthread_init_work(&node->say_hello, qrtr_hello_work);
 	kthread_init_worker(&node->kworker);
 	node->task = kthread_run(kthread_worker_fn, &node->kworker, "qrtr_rx");
 	if (IS_ERR(node->task)) {
@@ -1059,6 +1265,7 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	up_write(&qrtr_node_lock);
 	ep->node = node;
 
+	kthread_queue_work(&node->kworker, &node->say_hello);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qrtr_endpoint_register);
@@ -1340,6 +1547,17 @@ static int __qrtr_bind(struct socket *sock,
 		qrtr_reset_ports();
 	mutex_unlock(&qrtr_port_lock);
 
+	if (port == QRTR_PORT_CTRL) {
+		struct qrtr_node *node;
+
+		down_write(&qrtr_node_lock);
+		list_for_each_entry(node, &qrtr_all_epts, item) {
+			atomic_set(&node->hello_sent, 0);
+			atomic_set(&node->hello_rcvd, 0);
+		}
+		up_write(&qrtr_node_lock);
+	}
+
 	/* unbind previous, if any */
 	if (!zapped)
 		qrtr_port_remove(ipc);
@@ -1439,7 +1657,7 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 
 	down_read(&qrtr_node_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
-		if (node->nid == QRTR_EP_NID_AUTO)
+		if (node->nid == QRTR_EP_NID_AUTO && type != QRTR_TYPE_HELLO)
 			continue;
 		skbn = skb_clone(skb, GFP_KERNEL);
 		if (!skbn)

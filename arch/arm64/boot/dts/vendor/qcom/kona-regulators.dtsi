@@ -780,7 +780,7 @@
 		BOB: pm8150a_bob: regulator-pm8150a-bob {
 			regulator-name = "pm8150a_bob";
 			qcom,set = <RPMH_REGULATOR_SET_ALL>;
-			regulator-min-microvolt = <2800000>;
+			regulator-min-microvolt = <3008000>;
 			regulator-max-microvolt = <3960000>;
 			qcom,init-voltage = <3312000>;
 			qcom,init-mode = <RPMH_REGULATOR_MODE_PASS>;

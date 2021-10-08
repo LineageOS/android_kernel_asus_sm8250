@@ -133,7 +133,6 @@
 				<8 SPKR_R_VI 0x3>;
 			qcom,swr-num-dev = <2>;
 			wsa881x_0211: wsa881x@20170211 {
-				status = "disabled";
 				compatible = "qcom,wsa881x";
 				reg = <0x10 0x20170211>;
 				qcom,spkr-sd-n-node = <&wsa_spkr_en1>;
@@ -141,7 +140,6 @@
 			};
 
 			wsa881x_0212: wsa881x@20170212 {
-				status = "disabled";
 				compatible = "qcom,wsa881x";
 				reg = <0x10 0x20170212>;
 				qcom,spkr-sd-n-node = <&wsa_spkr_en2>;
@@ -149,7 +147,6 @@
 			};
 
 			wsa881x_0213: wsa881x@21170213 {
-				status = "disabled";
 				compatible = "qcom,wsa881x";
 				reg = <0x10 0x21170213>;
 				qcom,spkr-sd-n-node = <&wsa_spkr_en1>;
@@ -157,7 +154,6 @@
 			};
 
 			wsa881x_0214: wsa881x@21170214 {
-				status = "disabled";
 				compatible = "qcom,wsa881x";
 				reg = <0x10 0x21170214>;
 				qcom,spkr-sd-n-node = <&wsa_spkr_en2>;
@@ -271,18 +267,18 @@
 		"VA_AIF1 CAP", "VA_SWR_CLK",
 		"VA_AIF2 CAP", "VA_SWR_CLK",
 		"VA_AIF3 CAP", "VA_SWR_CLK",
-		"VA MIC BIAS", "Digital Mic0",
-		"VA MIC BIAS", "Digital Mic1",
-		"VA MIC BIAS", "Digital Mic2",
-		"VA MIC BIAS", "Digital Mic3",
-		"VA MIC BIAS", "Digital Mic4",
-		"VA MIC BIAS", "Digital Mic5",
-		"VA DMIC0", "VA MIC BIAS",
-		"VA DMIC1", "VA MIC BIAS",
-		"VA DMIC2", "VA MIC BIAS",
-		"VA DMIC3", "VA MIC BIAS",
-		"VA DMIC4", "VA MIC BIAS",
-		"VA DMIC5", "VA MIC BIAS",
+		"VA MIC BIAS3", "Digital Mic0",
+		"VA MIC BIAS3", "Digital Mic1",
+		"VA MIC BIAS1", "Digital Mic2",
+		"VA MIC BIAS1", "Digital Mic3",
+		"VA MIC BIAS4", "Digital Mic4",
+		"VA MIC BIAS4", "Digital Mic5",
+		"VA DMIC0", "VA MIC BIAS3",
+		"VA DMIC1", "VA MIC BIAS3",
+		"VA DMIC2", "VA MIC BIAS1",
+		"VA DMIC3", "VA MIC BIAS1",
+		"VA DMIC4", "VA MIC BIAS4",
+		"VA DMIC5", "VA MIC BIAS4",
 		"VA SWR_ADC0", "VA_SWR_CLK",
 		"VA SWR_ADC1", "VA_SWR_CLK",
 		"VA SWR_ADC2", "VA_SWR_CLK",
@@ -315,6 +311,11 @@
 	asoc-codec  = <&stub_codec>, <&bolero>, <&ext_disp_audio_codec>;
 	asoc-codec-names = "msm-stub-codec.1", "bolero_codec",
 			   "msm-ext-disp-audio-codec-rx";
+	qcom,wsa-max-devs = <2>;
+	qcom,wsa-devs = <&wsa881x_0211>, <&wsa881x_0212>,
+			<&wsa881x_0213>, <&wsa881x_0214>;
+	qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrRight",
+				  "SpkrLeft", "SpkrRight";
 	qcom,codec-max-aux-devs = <1>;
 	qcom,codec-aux-devs = <&wcd938x_codec>;
 	qcom,msm_audio_ssr_devs = <&audio_apr>, <&q6core>, <&lpi_tlmm>,

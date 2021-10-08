@@ -12,13 +12,16 @@
 #define	PROC_VCM_ENABLE	"driver/vcm_enable"
 #define	PROC_VCM_VALUE	"driver/vcm"
 #define	PROC_DSI_CHECK	"driver/cam_csi_check"  //ASUS_BSP Bryant "Add for camera csi debug"
-#ifdef ASUS_DXO
-#define VCM_NUMBER 3 //ASUS_BSP for jason_yeh support multi camera vcm
+#define	PROC_CCI_CHECK	"driver/cam_cci_check"  //ASUS_BSP Jason "Add for camera cci debug"
+#if defined(ASUS_DXO) ||defined(ZS670KS)
+#define VCM_NUMBER 9 //ASUS_BSP for jason_yeh support multi camera vcm
+static uint16_t vcm_dac_reg_addr[VCM_NUMBER]={0x84,0x084,0x084,0xF01A,0x84,0x084,0x084,0x084,0x084}; //imx686,imx363,ov08a //ASUS_BSP for jason_yeh support multi camera vcm
 #else
 #define VCM_NUMBER 1 //ASUS_BSP for jason_yeh support multi camera vcm
+static uint16_t vcm_dac_reg_addr[VCM_NUMBER]={0x84}; //imx686,imx363,ov08a //ASUS_BSP for jason_yeh support multi camera vcm
 #endif
 static struct cam_actuator_ctrl_t * actuator_ctrl = NULL;
-static struct cam_actuator_ctrl_t * g_actuator_ctrl[3] ; //ASUS_BSP for jason_yeh support multi camera vcm
+static struct cam_actuator_ctrl_t * g_actuator_ctrl[VCM_NUMBER] ; //ASUS_BSP for jason_yeh support multi camera vcm
 
 static struct mutex g_busy_job_mutex;
 
@@ -26,7 +29,7 @@ uint8_t g_actuator_power_state = 0;
 uint8_t g_actuator_camera_open = 0;
 
 static uint8_t g_atd_status = 0;//fail
-static uint16_t vcm_dac_reg_addr[3]={0x84,0x084,0xF01A}; //imx686,imx363,ov08a //ASUS_BSP for jason_yeh support multi camera vcm
+
 
 #ifdef ASUS_DXO
 static uint16_t g_reg_addr = 0xF01A;
@@ -39,12 +42,14 @@ static uint16_t g_slave_id = 0x72;
 static uint32_t g_reg_val = 0;
 static uint8_t g_vcm_enabled = 1;
 uint8_t g_cam_csi_check = 0;  //ASUS_BSP Bryant "Add for camera csi debug"
-
+uint8_t g_cam_cci_check=0; //ASUS_BSP Jason "Add for camera cci debug"
 static enum camera_sensor_i2c_type g_data_type = CAMERA_SENSOR_I2C_TYPE_WORD; //word
 static enum camera_sensor_i2c_type g_addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
 
 static uint8_t g_operation = 0;//read
-
+#if defined(ASUS_DXO) ||defined(ZS670KS)
+extern uint8_t  eeprom_camera_specs; //ASUS_BSP jason add support ZF7 Entry ov08a
+#endif 
 void actuator_lock(void)
 {
 	if(actuator_ctrl == NULL)
@@ -178,7 +183,7 @@ static int actuator_i2c_debug_read(struct seq_file *buf, void *v)
 	if(g_actuator_power_state)
 	{
 		//F40_WaitProcess(ois_ctrl,0,__func__);
-		actuator_ctrl->io_master_info.cci_client->sid = g_slave_id;
+//		actuator_ctrl->io_master_info.cci_client->sid = g_slave_id; //ASUS_BSP jason add support ZF7 Entry ov08a
 		switch(g_data_type)
 		{
 			case CAMERA_SENSOR_I2C_TYPE_BYTE:
@@ -253,8 +258,13 @@ static ssize_t actuator_i2c_debug_write(struct file *filp, const char __user *bu
 	}
 
 	n = sscanf(messages,"%x %x %x %x",&val[0],&val[1],&val[2],&val[3]);
-
-	mutex_lock(&actuator_ctrl->actuator_mutex);
+//ASUS_BSP +++ jason add support ZF7 Entry ov08a
+#if defined(ASUS_DXO) ||defined(ZS670KS)
+	if(eeprom_camera_specs==0x71)
+		vcm_dac_reg_addr[3]=0x03;
+#endif	
+//ASUS_BSP ---jason add support ZF7 Entry ov08a
+//	mutex_lock(&actuator_ctrl->actuator_mutex); //ASUS_BSP Jason fix multi actuator write
 
 	if(n == 1)
 	{
@@ -291,14 +301,14 @@ static ssize_t actuator_i2c_debug_write(struct file *filp, const char __user *bu
 		}
 		else {
 			pr_err("camera_dir=%d not define FAIL\n",val[3]);
-			mutex_unlock(&actuator_ctrl->actuator_mutex);
+			//mutex_unlock(&actuator_ctrl->actuator_mutex); //ASUS_BSP Jason fix multi actuator write
 			return ret_len;
 		}
 //ASUS_BSP for jason_yeh --- support multi camera vcm
 		g_operation = 1;
 	}
 
-
+	mutex_lock(&actuator_ctrl->actuator_mutex);//ASUS_BSP Jason fix multi actuator write
 
 	if(g_data_type != 1 && g_data_type != 2 && g_data_type != 4 )
 		g_data_type = 4;//default dword
@@ -477,7 +487,16 @@ static int actuator_read_vcm_dac_open(struct inode *inode, struct  file *file)
 	temp[0]=vcm_file_name[strlen(vcm_file_name)-1];
 	temp[1]='\0';
 	ret=kstrtol(temp, 10, &vcm_open_number) ;
-      pr_info(" actuator_read_vcm_dac_open descriptor for file %s strlen=%d result=%d test=%d\n",temp,strlen(temp),vcm_open_number,ret);
+
+//ASUS_BSP +++ jason add support ZF7 Entry ov08a
+#if defined(ASUS_DXO) ||defined(ZS670KS)
+      pr_info(" actuator_read_vcm_dac_open descriptor for file %s strlen=%d result=%d test=%d eeprom_camera_specs=%x\n",temp,strlen(temp),vcm_open_number,ret,eeprom_camera_specs);
+	if(eeprom_camera_specs==0x71)
+		vcm_dac_reg_addr[3]=0x03;
+#else
+      pr_info(" actuator_read_vcm_dac_open descriptor for file %s strlen=%d result=%d test=%d \n",temp,strlen(temp),vcm_open_number,ret);
+#endif	
+//ASUS_BSP --- jason add support ZF7 Entry ov08a
 	actuator_ctrl= g_actuator_ctrl[vcm_open_number];
 	g_reg_addr=vcm_dac_reg_addr[vcm_open_number];
 //ASUS_BSP for jason_yeh ---support multi camera vcm
@@ -538,6 +557,51 @@ static struct file_operations cam_csi_check_fops = {
 	.write = cam_csi_check_write,
 };
 //ASUS_BSP Bryant --- "Add for camera csi debug"
+//ASUS_BSP Jason +++ "Add for camera cci debug"
+static ssize_t cam_cci_check_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff;
+
+	buff = kzalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	pr_err("camera cci check %d\n", g_cam_cci_check);
+
+	len += sprintf(buff, "%d\n", g_cam_cci_check);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+
+static ssize_t cam_cci_check_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (strncmp(messages, "0", 1) == 0) {
+		g_cam_cci_check = 0;
+		pr_err("[CAM] write g_cam_cci_check is %d\n", g_cam_cci_check);
+	}
+
+	return len;
+}
+
+
+static struct file_operations cam_cci_check_fops = {
+	.read  = cam_cci_check_read,
+	.write = cam_cci_check_write,
+};
+//ASUS_BSP Jason +++ "Add for camera cci debug"
 
 
 static int ois_actuator_power_read(struct seq_file *buf, void *v)
@@ -726,11 +790,19 @@ void actuator_probe_check(void)
 
 	actuator_power_down(actuator_ctrl);
 }
-
+//ASUS_BSP Jason +++fix multi actuator write
 uint8_t asus_allow_vcm_move(void)
 {
 	return g_vcm_enabled;
 }
+//ASUS_BSP Jason ---fix multi actuator write
+
+void asus_vcm_move_write(int enable)
+{
+	 g_vcm_enabled=enable;
+	 printk("%s g_vcm_enabled=%d\n",__func__,g_vcm_enabled);
+}
+
 
 static void create_actuator_proc_files_factory(int index)
 {
@@ -742,6 +814,7 @@ static void create_actuator_proc_files_factory(int index)
 		create_proc_file(PROC_I2C_RW,&actuator_i2c_debug_fops);//ATD
 		create_proc_file(PROC_VCM_ENABLE, &actuator_allow_vcm_move_fops);
 		create_proc_file(PROC_DSI_CHECK, &cam_csi_check_fops);  //ASUS_BSP Bryant "Add for camera csi debug"
+		create_proc_file(PROC_CCI_CHECK, &cam_cci_check_fops);  //ASUS_BSP Jason "Add for camera cci debug"		
 		has_created = 1;
 	}
 	else//ASUS_BSP for jason_yeh +++ support multi camera vcm
@@ -763,6 +836,11 @@ void asus_actuator_init(struct cam_actuator_ctrl_t * ctrl)
 //ASUS_BSP for jason_yeh +++ support multi camera vcm
 		actuator_ctrl= ctrl;
 		g_actuator_ctrl[ctrl->soc_info.index]= ctrl;
+#if defined(ASUS_DXO) ||defined(ZS670KS)		
+		pr_info("%s g_actuator_ctrl=%x index=%d eeprom_camera_specs %x\n",__func__,g_actuator_ctrl[ctrl->soc_info.index],ctrl->soc_info.index,eeprom_camera_specs);
+#else
+		pr_info("%s g_actuator_ctrl=%x index=%d \n",__func__,g_actuator_ctrl[ctrl->soc_info.index],ctrl->soc_info.index);
+#endif
 //ASUS_BSP for jason_yeh --- support multi camera vcm
 	}
 	else
@@ -777,6 +855,7 @@ void asus_actuator_init(struct cam_actuator_ctrl_t * ctrl)
 
 int get_current_lens_position(uint32_t *dac_value,uint32_t index)
 {
+	#if defined(ASUS_DXO) ||defined(ZS670KS)
 	if(index == 0) {
 		if(g_actuator_ctrl[CAMERA_0])
 		{
@@ -790,11 +869,11 @@ int get_current_lens_position(uint32_t *dac_value,uint32_t index)
 			return -1;
 		}
 	}else if(index == 1) {
-		if(g_actuator_ctrl[CAMERA_2])
+		if(g_actuator_ctrl[CAMERA_3])
 		{
-			mutex_lock(&(g_actuator_ctrl[CAMERA_2]->actuator_mutex));
-			*dac_value = g_actuator_ctrl[CAMERA_2]->lens_pos;
-			mutex_unlock(&(g_actuator_ctrl[CAMERA_2]->actuator_mutex));
+			mutex_lock(&(g_actuator_ctrl[CAMERA_3]->actuator_mutex));
+			*dac_value = g_actuator_ctrl[CAMERA_3]->lens_pos;
+			mutex_unlock(&(g_actuator_ctrl[CAMERA_3]->actuator_mutex));
 		}
 		else
 		{
@@ -807,6 +886,7 @@ int get_current_lens_position(uint32_t *dac_value,uint32_t index)
 		return -1;
 	}
 	//pr_info("ois index(%u) dac_value(%u)\n",index,*dac_value);
+	#endif
 	return 0;
 }
 

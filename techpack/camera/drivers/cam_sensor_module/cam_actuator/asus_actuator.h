@@ -22,6 +22,7 @@ extern int actuator_power_up(struct cam_actuator_ctrl_t *actuator_ctrl);
 extern int actuator_power_down(struct cam_actuator_ctrl_t *actuator_ctrl);
 extern void actuator_probe_check(void);
 extern uint8_t asus_allow_vcm_move(void);
+extern void asus_vcm_move_write(int enable); //ASUS_BSP Jason fix multi actuator write
 extern int get_current_lens_position(uint32_t *dac_value,uint32_t index);
 
 #endif

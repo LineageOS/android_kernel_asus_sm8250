@@ -61,10 +61,6 @@ static struct device_attribute tcpc_device_attributes[] = {
 	TCPC_DEVICE_ATTR(timer, 0664),
 	TCPC_DEVICE_ATTR(caps_info, 0444),
 	TCPC_DEVICE_ATTR(pe_ready, 0444),
-	TCPC_DEVICE_ATTR(TypeC_status, 0444),
-	TCPC_DEVICE_ATTR(TypeC_CC_Top, 0444),
-	TCPC_DEVICE_ATTR(TypeC_CC_Bottom, 0444),
-	TCPC_DEVICE_ATTR(TypeC_Side_Detect, 0444),
 	TCPC_DEVICE_ATTR(Aura_Screen_On, 0664),
 };
 
@@ -76,10 +72,6 @@ enum {
 	TCPC_DESC_TIMER,
 	TCPC_DESC_CAP_INFO,
 	TCPC_DESC_PE_READY,
-	TCPC_DESC_TYPEC_STATUS,
-	TCPC_DESC_TYPEC_CC_TOP,
-	TCPC_DESC_TYPEC_CC_BOTTOM,
-	TCPC_DESC_TYPEC_SIDE_DETECT,
 	TCPC_DESC_AURA_SCREEN_ON,
 };
 
@@ -106,8 +98,7 @@ static ssize_t tcpc_show_property(struct device *dev,
 {
 	struct tcpc_device *tcpc = to_tcpc_device(dev);
 	const ptrdiff_t offset = attr - tcpc_device_attributes;
-	int i = 0, result, cc1, cc2;
-	uint16_t power_status = 0;
+	int i = 0;
 #ifdef CONFIG_USB_POWER_DELIVERY
 	struct pe_data *pe_data;
 	struct pd_port *pd_port;
@@ -192,67 +183,6 @@ static ssize_t tcpc_show_property(struct device *dev,
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "1.5");
 		else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_3_0)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "3.0");
-		break;
-	case TCPC_DESC_TYPEC_STATUS:
-		if (tcpci_get_power_status(tcpc, &power_status) < 0)
-		{
-			pr_info("%s get power status fail\n", __func__);
-			result = 0;
-		} else {
-			pr_info("%s power status: %d\r\n", __func__, power_status);
-			result = 1;
-		}
-		snprintf(buf, 256, "%d\n", result);
-		break;
-	case TCPC_DESC_TYPEC_CC_TOP:
-		if (tcpci_get_cc(tcpc) < 0)
-		{
-			pr_info("%s get CC top side status fail\n", __func__);
-			result = -1;
-		} else {
-			cc1 = tcpc->typec_remote_cc[0];
-			cc2 = tcpc->typec_remote_cc[1];
-			pr_info("%s CC1/CC2 status: %d/%d\r\n", __func__, cc1, cc2);
-			if (cc1 > 0)
-				result = 1;
-			else
-				result = 0;
-		}
-		snprintf(buf, 256, "%d\n", result);
-		break;
-	case TCPC_DESC_TYPEC_CC_BOTTOM:
-		if (tcpci_get_cc(tcpc) < 0)
-		{
-			pr_info("%s get CC bottom side status fail\n", __func__);
-			result = -1;
-		} else {
-			cc1 = tcpc->typec_remote_cc[0];
-			cc2 = tcpc->typec_remote_cc[1];
-			pr_info("%s CC1/CC2 status: %d/%d\r\n", __func__, cc1, cc2);
-			if (cc2 > 0)
-				result = 1;
-			else
-				result = 0;
-		}
-		snprintf(buf, 256, "%d\n", result);
-		break;
-	case TCPC_DESC_TYPEC_SIDE_DETECT:
-		if (tcpci_get_cc(tcpc) < 0)
-		{
-			pr_info("%s get CC status fail\n", __func__);
-			result = -1;
-		} else {
-			cc1 = tcpc->typec_remote_cc[0];
-			cc2 = tcpc->typec_remote_cc[1];
-			pr_info("%s CC1/CC2 status: %d/%d\r\n", __func__, cc1, cc2);
-			if (cc1 > 0 && cc2 <=0)
-				result = 1;
-			else if (cc2 > 0 && cc1 <=0)
-				result = 2;
-			else
-				result = 0;
-		}
-		snprintf(buf, 256, "%d\n", result);
 		break;
 #ifdef CONFIG_USB_POWER_DELIVERY
 	case TCPC_DESC_PE_READY:
@@ -508,10 +438,10 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 	/* If system support "WAKE_LOCK_IDLE",
 	 * please use it instead of "WAKE_LOCK_SUSPEND"
 	 */
-	wakeup_source_init(&tcpc->attach_wake_lock,
-		"tcpc_attach_wakelock");
-	wakeup_source_init(&tcpc->dettach_temp_wake_lock,
-		"tcpc_detach_wakelock");
+	tcpc->attach_wake_lock =
+		wakeup_source_register(NULL, "tcpc_attach_wakelock");
+	tcpc->dettach_temp_wake_lock=
+		wakeup_source_register(NULL, "tcpc_detach_wakelock");
 
 	tcpci_timer_init(tcpc);
 #ifdef CONFIG_USB_POWER_DELIVERY
@@ -884,8 +814,11 @@ void tcpc_device_unregister(struct device *dev, struct tcpc_device *tcpc)
 
 	tcpc_typec_deinit(tcpc);
 
-	wakeup_source_trash(&tcpc->dettach_temp_wake_lock);
-	wakeup_source_trash(&tcpc->attach_wake_lock);
+#ifdef CONFIG_USB_POWER_DELIVERY
+	wakeup_source_unregister(tcpc->pd_port.pps_request_wake_lock);
+#endif
+	wakeup_source_unregister(tcpc->dettach_temp_wake_lock);
+	wakeup_source_unregister(tcpc->attach_wake_lock);
 
 	device_unregister(&tcpc->dev);
 

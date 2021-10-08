@@ -11,7 +11,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/mutex.h>
 #include <linux/kernel.h>
-#include <linux/wakelock.h>
+#include <linux/pm_wakeup.h>
 
 static u32 g_red;
 static u32 g_green;
@@ -76,7 +76,7 @@ struct ene_8k41_platform_data {
 	struct i2c_client *client;
 
 	// wake lock
-	struct wake_lock	aura_wake_lock;
+	struct wakeup_source	aura_wake_lock;
 
 	int on_ms;
 	int off_ms;

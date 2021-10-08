@@ -105,7 +105,6 @@
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
-extern void fork_init(void);
 extern void radix_tree_init(void);
 
 /*
@@ -429,12 +428,12 @@ EXPORT_SYMBOL(g_is_country_code_US);
 static int check_country_code(char *str)
 {
 
-    if ( strcmp("EU", str) == 0 ) {
-        g_is_country_code_EU = true;
-    } else if ( strcmp("RU", str) == 0 ) {
-        g_is_country_code_RU = true;
-    } else if ( strcmp("WW", str) == 0 ) {
-        g_is_country_code_WW = true;
+	if ( strcmp("EU", str) == 0 ) {
+		g_is_country_code_EU = true;
+	} else if ( strcmp("RU", str) == 0 ) {
+		g_is_country_code_RU = true;
+	} else if ( strcmp("WW", str) == 0 ) {
+        	g_is_country_code_WW = true;
 	}
 
     if (strcmp("US", str) == 0)
@@ -448,25 +447,29 @@ static int check_country_code(char *str)
 }
 __setup("androidboot.country_code=", check_country_code);
 // ASUS_BSP --- Add for cap sensor check country code is US
-
-// ASUS_BSP +++ Add for cap id
-int g_ASUS_capID = 0;
-EXPORT_SYMBOL(g_ASUS_capID);
-static int set_cap_id(char *str)
-{
-    if ( strcmp("0", str) == 0 ){
-        g_ASUS_capID = 0;
-    }else if ( strcmp("1", str) == 0 ){
-        g_ASUS_capID = 1;
-    }
-
-    printk("g_ASUS_capID = %d\n", g_ASUS_capID);
-    return 0;
-}
-__setup("androidboot.id.cap=", set_cap_id);
-// ASUS_BSP --- Add for cap id
 #endif //ASUS_ZS661KS_PROJECT
 
+#ifdef ZS670KS
+// ASUS_BSP +++ 
+bool g_is_country_code_EU = false;
+bool g_is_country_code_RU = false;
+EXPORT_SYMBOL(g_is_country_code_EU);
+EXPORT_SYMBOL(g_is_country_code_RU);
+static int check_country_code(char *str)
+{
+
+    if ( strcmp("EU", str) == 0 ) {
+        g_is_country_code_EU = true;
+    } else if ( strcmp("RU", str) == 0 ) {
+        g_is_country_code_RU = true;
+    }
+
+    printk("country code= = %s\n", str);
+    return 0;
+}
+__setup("androidboot.country_code=", check_country_code);
+// ASUS_BSP ---
+#endif
 
 //ASUS_SZ_BSP 2019/11/19 Cassie :get value from cmdline+++
 #ifdef ZS670KS
@@ -519,6 +522,30 @@ static int set_hardware_id(char *str)
         return 0;
 }
 __setup("androidboot.id.stage=", set_hardware_id);
+
+int zs670ks_panel_id = 0;
+EXPORT_SYMBOL(zs670ks_panel_id);
+static int set_zs670ks_panel_id(char *str)
+{
+	if ( strcmp("1", str) == 0 )
+	{
+		zs670ks_panel_id = 1;
+	}else if( strcmp("2", str) == 0 )
+	{
+		zs670ks_panel_id = 2;
+	}else
+	{
+		printk("[Display]: No match panel id use 1 default\n");
+		zs670ks_panel_id = 1;
+	}
+
+	printk("Kernel Panel ID  is %d\n",zs670ks_panel_id);
+	
+	return 0;
+}
+__setup("androidboot.id.panel=", set_zs670ks_panel_id);
+
+
 
 enum DEVICE_PROJID g_ASUS_prjID = PROJECT_INVALID;
 EXPORT_SYMBOL(g_ASUS_prjID);
@@ -1022,6 +1049,29 @@ static inline void initcall_debug_enable(void)
 }
 #endif
 
+/* Report memory auto-initialization states for this boot. */
+static void __init report_meminit(void)
+{
+	const char *stack;
+
+	if (IS_ENABLED(CONFIG_INIT_STACK_ALL))
+		stack = "all";
+	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF_ALL))
+		stack = "byref_all";
+	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF))
+		stack = "byref";
+	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_USER))
+		stack = "__user";
+	else
+		stack = "off";
+
+	pr_info("mem auto-init: stack:%s, heap alloc:%s, heap free:%s\n",
+		stack, want_init_on_alloc(GFP_KERNEL) ? "on" : "off",
+		want_init_on_free() ? "on" : "off");
+	if (want_init_on_free())
+		pr_info("mem auto-init: clearing system memory may take some time...\n");
+}
+
 /*
  * Set up kernel memory allocators
  */
@@ -1032,6 +1082,7 @@ static void __init mm_init(void)
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
 	page_ext_init_flatmem();
+	report_meminit();
 	mem_init();
 	kmem_cache_init();
 	pgtable_init();
@@ -1065,13 +1116,6 @@ asmlinkage __visible void __init start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
-	/*
-	 * Set up the the initial canary and entropy after arch
-	 * and after adding latent and command line entropy.
-	 */
-	add_latent_entropy();
-	add_device_randomness(command_line, strlen(command_line));
-	boot_init_stack_canary();
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
@@ -1156,6 +1200,20 @@ asmlinkage __visible void __init start_kernel(void)
 	hrtimers_init();
 	softirq_init();
 	timekeeping_init();
+
+	/*
+	 * For best initial stack canary entropy, prepare it after:
+	 * - setup_arch() for any UEFI RNG entropy and boot cmdline access
+	 * - timekeeping_init() for ktime entropy used in rand_initialize()
+	 * - rand_initialize() to get any arch-specific entropy like RDRAND
+	 * - add_latent_entropy() to get any latent entropy
+	 * - adding command line entropy
+	 */
+	rand_initialize();
+	add_latent_entropy();
+	add_device_randomness(command_line, strlen(command_line));
+	boot_init_stack_canary();
+
 	time_init();
 	printk_safe_init();
 	perf_event_init();

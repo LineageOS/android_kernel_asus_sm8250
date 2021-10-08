@@ -30,7 +30,7 @@
 #define CAM_SOC_MAX_BASE            CAM_SOC_MAX_BLOCK
 
 /* maximum number of device regulator */
-#define CAM_SOC_MAX_REGULATOR       8 //ASUS_BSP jason_yeh add regualtor 8 for cam_v_custom2-supply
+#define CAM_SOC_MAX_REGULATOR       8
 
 /* maximum number of device clock */
 #define CAM_SOC_MAX_CLK             32
@@ -108,12 +108,16 @@ struct cam_soc_pinctrl_info {
  *                             gpios node in DTSI
  * @cam_gpio_req_tbl            It is list of al the requesetd gpios
  * @cam_gpio_req_tbl_size:      It is size of requested gpios
+ * @gpio_delay_tbl:            It is list of al requested gpios delay
+ * @gpio_delay_tbl_size:       It is size of requested gpios delay
  **/
 struct cam_soc_gpio_data {
 	struct gpio *cam_gpio_common_tbl;
 	uint8_t cam_gpio_common_tbl_size;
 	struct gpio *cam_gpio_req_tbl;
 	uint8_t cam_gpio_req_tbl_size;
+	uint32_t *gpio_delay_tbl;
+	uint8_t gpio_delay_tbl_size;
 };
 
 /**

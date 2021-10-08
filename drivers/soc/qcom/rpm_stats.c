@@ -371,7 +371,8 @@ static int rpm_stats_resume(struct device *dev)
 				offsetof(struct msm_rpm_stats_data, count));
 		memcpy(stat_type, &data.stat_type, sizeof(u32));
 		printk("[RPM] Resume: status: Mode: %s, Count: %d\n", stat_type, data.count);
-		if (i == 0) {
+		if( i==0 )
+		{
 			if(pre_aosd_count == data.count)
 			{
 				need_dump_rpmh_master_stat=true;

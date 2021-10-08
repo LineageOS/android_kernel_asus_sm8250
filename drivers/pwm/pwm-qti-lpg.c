@@ -129,8 +129,6 @@
 
 #define SDAM_LUT_COUNT_MAX			64
 
-static int flag = 0;
-
 enum lpg_src {
 	LUT_PATTERN = 0,
 	PWM_VALUE,
@@ -140,6 +138,10 @@ static const int pwm_size[NUM_PWM_SIZE] = {6, 9};
 static const int clk_freq_hz[NUM_PWM_CLK] = {1024, 32768, 19200000};
 static const int clk_prediv[NUM_CLK_PREDIV] = {1, 3, 5, 6};
 static const int pwm_exponent[NUM_PWM_EXP] = {0, 1, 2, 3, 4, 5, 6, 7};
+
+#ifdef ZS670KS
+extern bool led_sync;
+#endif
 
 struct lpg_ramp_config {
 	u16			step_ms;
@@ -247,6 +249,7 @@ static int qpnp_lpg_masked_write(struct qpnp_lpg_channel *lpg,
 	return rc;
 }
 
+#ifdef ZS670KS
 static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
 {
 	int rc;
@@ -259,10 +262,9 @@ static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
 	//We use blue led(0x04) breath node as flag, if set blue led breath node first
 	//then green and red led can breath synchronize by setting 0x03.
 
-	if (flag == 1) {
+	if (led_sync) {
 		if (addr == REG_LPG_LUT_RAMP_CONTROL && val == 0x01) {
 			val = 0x03;
-			flag = 0;
 		}
 		else if (addr == REG_LPG_LUT_RAMP_CONTROL && val == 0x02) {
 			rc = 0;
@@ -270,13 +272,7 @@ static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
 		}
 	}
 
-	if (addr == REG_LPG_LUT_RAMP_CONTROL && val == 0x04) {
-		flag = 1;
-		rc = 0;
-	}
-	else {
-		rc = regmap_write(lut->chip->regmap, lut->reg_base + addr, val);
-	}
+	rc = regmap_write(lut->chip->regmap, lut->reg_base + addr, val);
 
 	if (rc < 0)
 		dev_err(lut->chip->dev, "Write addr 0x%x with value %d failed, rc=%d\n",
@@ -286,6 +282,21 @@ exit:
 
 	return rc;
 }
+#else
+static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
+{
+	int rc;
+
+	mutex_lock(&lut->chip->bus_lock);
+	rc = regmap_write(lut->chip->regmap, lut->reg_base + addr, val);
+	if (rc < 0)
+		dev_err(lut->chip->dev, "Write addr 0x%x with value %d failed, rc=%d\n",
+				lut->reg_base + addr, val, rc);
+	mutex_unlock(&lut->chip->bus_lock);
+
+	return rc;
+}
+#endif
 
 static int qpnp_lut_masked_write(struct qpnp_lpg_lut *lut,
 				u16 addr, u8 mask, u8 val)

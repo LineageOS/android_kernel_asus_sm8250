@@ -41,6 +41,7 @@
 #include "lim_ser_des_utils.h"
 #include "lim_send_messages.h"
 #include "sch_api.h"
+#include "wlan_blm_api.h"
 
 /**
  * lim_process_disassoc_frame
@@ -146,7 +147,7 @@ lim_process_disassoc_frame(struct mac_context *mac, uint8_t *pRxPacketInfo,
 	/* Get reasonCode from Disassociation frame body */
 	reasonCode = sir_read_u16(pBody);
 
-	pe_err("[wlan]: Disassoc RX: vdev %d from %pM for %pM RSSI = %d reason %d mlm state = %d, sme state = %d systemrole = %d ",
+	pe_nofl_info("[wlan] Disassoc RX: vdev %d from %pM for %pM RSSI = %d reason %d mlm state = %d, sme state = %d systemrole = %d ",
 		     pe_session->vdev_id, pHdr->sa, pHdr->da, frame_rssi,
 		     reasonCode, pe_session->limMlmState,
 		     pe_session->limSmeState,
@@ -246,6 +247,7 @@ lim_process_disassoc_frame(struct mac_context *mac, uint8_t *pRxPacketInfo,
 		switch (reasonCode) {
 		case eSIR_MAC_DEAUTH_LEAVING_BSS_REASON:
 		case eSIR_MAC_DISASSOC_LEAVING_BSS_REASON:
+		case eSIR_MAC_POOR_RSSI_CONDITIONS:
 			/* Valid reasonCode in received Disassociation frame */
 			/* as long as we're not about to channel switch */
 			if (pe_session->gLimChannelSwitch.state !=
@@ -299,6 +301,15 @@ lim_process_disassoc_frame(struct mac_context *mac, uint8_t *pRxPacketInfo,
 
 	} /* if (sta->mlmStaContext.mlmState != eLIM_MLM_LINK_ESTABLISHED_STATE) */
 
+	if (reasonCode == eSIR_MAC_POOR_RSSI_CONDITIONS) {
+		struct sir_rssi_disallow_lst ap_info = {{0}};
+
+		ap_info.retry_delay = 0;
+		ap_info.expected_rssi = frame_rssi +
+			wlan_blm_get_rssi_blacklist_threshold(mac->pdev);
+		qdf_mem_copy(ap_info.bssid.bytes, pHdr->sa, QDF_MAC_ADDR_SIZE);
+		lim_add_bssid_to_reject_list(mac->pdev, &ap_info);
+	}
 	lim_extract_ies_from_deauth_disassoc(pe_session, (uint8_t *)pHdr,
 					WMA_GET_RX_MPDU_LEN(pRxPacketInfo));
 	lim_perform_disassoc(mac, frame_rssi, reasonCode,

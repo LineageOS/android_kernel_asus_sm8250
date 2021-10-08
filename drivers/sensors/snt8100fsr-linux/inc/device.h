@@ -192,6 +192,8 @@ struct snt8100fsr {
 	int stuck_retry_count;
 	bool stuck_flag;
 	int stuck_retry_limit;
+	bool fw_sec_source;
+	bool fw_info_check;
 };
 
 enum{

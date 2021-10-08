@@ -347,7 +347,6 @@ int sysfs_write_word_seq(char *filename, uint16_t *value, uint32_t size)
 	filp_close(fp, NULL);
 	return 0;
 }
-
 int sysfs_read_char_seq(char *filename, uint8_t *value, uint32_t size)
 {
 	int i = 0;
@@ -387,7 +386,6 @@ int sysfs_read_char_seq(char *filename, uint8_t *value, uint32_t size)
 
 	return 0;
 }
-
 int sysfs_write_word_seq_change_line(char *filename, uint16_t *value, uint32_t size,uint32_t number)
 {
 	struct file *fp = NULL;
@@ -495,3 +493,36 @@ bool i2c_setting_contain_address(struct cam_sensor_i2c_reg_setting * setting, ui
 	}
 	return false;
 }
+int sysfs_write_byte_from_dword_seq(char *filename, uint32_t *value, uint32_t size)
+{
+	struct file *fp = NULL;
+	int i = 0;
+	char buf[9];
+	ssize_t ret;
+
+	/* Open file */
+	fp = filp_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
+	if (IS_ERR_OR_NULL(fp)) {
+		pr_err("open (%s) failed!\n",filename);
+		return -1;
+	}
+
+	for(i = 0; i < size; i++){
+		sprintf(buf, "%02x", (value[i]));
+		buf[2] = '\n';
+
+		ret = __kernel_write(fp, buf, 3, &fp->f_pos);
+		if(ret < 3)
+		{
+			pr_err("write failed!\n");
+			/* Close file */
+			filp_close(fp, NULL);
+			return -2;
+		}
+	}
+
+	/* close file */
+	filp_close(fp, NULL);
+	return 0;
+}
+

@@ -1375,6 +1375,7 @@ static int dp_link_adjust_levels(struct dp_link *dp_link, u8 *link_status)
 		return -EINVAL;
 	}
 
+	pr_err("[drm-dp] dp_link_adjust_levels\n");
 	link = container_of(dp_link, struct dp_link_private, dp_link);
 
 	/* use the max level across lanes */
@@ -1386,10 +1387,12 @@ static int dp_link_adjust_levels(struct dp_link *dp_link, u8 *link_status)
 		if (offset < sizeof(buf))
 			buf[offset] = data;
 
+		pr_err("[drm-dp] v_level current %d\n", data);
 		if (max < data)
 			max = data;
 	}
 
+	pr_err("[drm-dp] v_level final %d\n", max);
 	dp_link->phy_params.v_level = max;
 
 	/* use the max level across lanes */
@@ -1429,7 +1432,7 @@ static int dp_link_adjust_levels(struct dp_link *dp_link, u8 *link_status)
 		&& (dp_link->phy_params.v_level == DP_LINK_VOLTAGE_LEVEL_1))
 		dp_link->phy_params.p_level = DP_LINK_PRE_EMPHASIS_LEVEL_2;
 
-	DP_DEBUG("Set (VxPx): %x%x\n",
+	pr_err("[drm-dp] Set (VxPx): %x%x\n",
 		dp_link->phy_params.v_level, dp_link->phy_params.p_level);
 
 	return 0;

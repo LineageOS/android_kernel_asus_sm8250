@@ -41,7 +41,7 @@
 #else
 	#define dbg(fmt, args...)
 #endif
-#define log(fmt, args...) printk(KERN_INFO "[%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,##args)
+#define log(fmt, args...) printk(KERN_INFO "[%s][%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,__func__,##args)
 #define err(fmt, args...) do{	\
 		printk(KERN_ERR "[%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,##args);	\
 		sprintf(g_error_mesg, "[%s][%s]"fmt,MODULE_NAME,SENSOR_TYPE_NAME,##args);	\
@@ -59,7 +59,7 @@ static struct workqueue_struct 		*ALSPS_workqueue;
 static struct workqueue_struct 		*ALSPS_delay_workqueue;
 static struct mutex 				g_alsps_lock;
 static struct mutex 				g_i2c_lock;
-static struct wake_lock 			g_alsps_wake_lock;
+static struct wakeup_source 			*g_alsps_wake_lock;
 static struct hrtimer 			g_alsps_timer;
 static struct i2c_client *g_i2c_client;
 static int g_als_last_lux = 0;
@@ -71,7 +71,7 @@ static int resume_flag = 0;
 static int g_alsps_power_status = ALSPS_RESUME;
 #define WAIT_I2C_DELAY 5
 static bool g_psensor_polling_cancel_flag = false;
-static int pocket_mode_threshold = 0;
+static int g_pocket_mode_threshold = 0;
 static int anti_oil_enable = 1;
 
 /**********************************/
@@ -99,8 +99,11 @@ static void light_polling_lux(struct work_struct *work);
 /*Interrupt Service Routine Part*/
 static void ALSPS_ist(struct work_struct *work);
 
+/* Check for power off */
+static int check_ALSP_onoff(void);
+
 /* Export Functions */
-static bool proximity_check_status(void);
+bool proximitySecStatus(void);
 
 /*Initialization Part*/
 static int init_data(void);
@@ -317,6 +320,22 @@ static int proximity_turn_onoff(bool bOn)
 	}
 	
 	if (bOn == 1)	{	/* power on */
+		/*set turn on register*/
+		if(g_ps_data->Device_switch_on == false){
+			/*Power ON*/
+			ret = ALSPS_hw_client->mpsensor_hw->proximity_hw_turn_onoff(true);	
+			if(ret < 0){
+				err("proximity_hw_turn_onoff(true) ERROR\n");
+				return ret;
+			}
+			/*Enable INT*/
+			ret = ALSPS_hw_client->mpsensor_hw->proximity_hw_interrupt_onoff(true);
+			if(ret < 0){
+				err("proximity_hw_interrupt_onoff(true) ERROR\n");
+				return ret;
+			}
+		}
+		
 		/*Set Proximity Threshold*/
 		ret = proximity_set_threshold();
 		if (ret < 0) {	
@@ -332,22 +351,6 @@ static int proximity_turn_onoff(bool bOn)
 			if (ret < 0) {	
 				log("proximity_check_minCT ERROR\n");	
 				g_ps_data->autok = false;
-			}
-		}
-		
-		/*set turn on register*/
-		if(g_ps_data->Device_switch_on == false){
-			/*Enable INT*/
-			ret = ALSPS_hw_client->mpsensor_hw->proximity_hw_interrupt_onoff(true);
-			if(ret < 0){
-				err("proximity_hw_interrupt_onoff(true) ERROR\n");
-				return ret;
-			}
-			/*Power ON*/
-			ret = ALSPS_hw_client->mpsensor_hw->proximity_hw_turn_onoff(true);	
-			if(ret < 0){
-				err("proximity_hw_turn_onoff(true) ERROR\n");
-				return ret;
 			}
 		}
 				
@@ -389,9 +392,23 @@ static int proximity_turn_onoff(bool bOn)
 			}
 
 			/*reset the threshold data*/
-			g_ps_data->g_ps_calvalue_hi = ALSPS_hw_client->mpsensor_hw->proximity_hi_threshold_default;
-			g_ps_data->g_ps_calvalue_lo = ALSPS_hw_client->mpsensor_hw->proximity_low_threshold_default;	
-			g_ps_data->g_ps_calvalue_inf = ALSPS_hw_client->mpsensor_hw->proximity_crosstalk_default;	
+			if(g_ASUS_hwID == HW_REV_ER2){
+				g_ps_data->g_ps_calvalue_hi = PROXIMITY_THDH_ER2_DEFAULT;
+				g_ps_data->g_ps_calvalue_lo = PROXIMITY_THDL_ER2_DEFAULT;	
+				g_ps_data->g_ps_calvalue_inf = PROXIMITY_INF_ER2_DEFAULT;
+				g_pocket_mode_threshold = PROXIMITY_POCKET_ER2_DEFAULT;
+			}else if(g_ASUS_hwID <= HW_REV_ER){
+				g_ps_data->g_ps_calvalue_hi = PROXIMITY_THDH_ER_DEFAULT;
+				g_ps_data->g_ps_calvalue_lo = PROXIMITY_THDL_ER_DEFAULT;	
+				g_ps_data->g_ps_calvalue_inf = PROXIMITY_INF_ER_DEFAULT;
+				g_pocket_mode_threshold = PROXIMITY_POCKET_ER_DEFAULT;		
+			}
+			else{
+				g_ps_data->g_ps_calvalue_hi = ALSPS_hw_client->mpsensor_hw->proximity_hi_threshold_default;
+				g_ps_data->g_ps_calvalue_lo = ALSPS_hw_client->mpsensor_hw->proximity_low_threshold_default;	
+				g_ps_data->g_ps_calvalue_inf = ALSPS_hw_client->mpsensor_hw->proximity_crosstalk_default;
+				g_pocket_mode_threshold = PROXIMITY_POCKET_DEFAULT;	
+			}
 	
 			/*change the Device Status*/
 			g_ps_data->Device_switch_on = false;			
@@ -409,6 +426,9 @@ static int proximity_turn_onoff(bool bOn)
 		}		
 	}	
 	
+	if(check_ALSP_onoff()){
+		ALSPS_hw_client->ALSPS_hw_close_power();
+	}
 	return ret;
 }
 
@@ -441,6 +461,7 @@ static int proximity_set_threshold(void)
 	
 	if(ret > 0) {
 	    	g_ps_data->g_ps_calvalue_hi = ret;
+		g_ps_data->g_ps_factory_cal_hi = ret;				
 		log("2nd Proximity read High Calibration : %d\n", g_ps_data->g_ps_calvalue_hi);
 	}else{
 		err("2nd Proximity read DEFAULT High Calibration : %d\n", g_ps_data->g_ps_calvalue_hi);
@@ -489,11 +510,11 @@ static int proximity_set_threshold(void)
 	
 	ret = psensor_factory_read_1cm(PSENSOR_1CM_CALIBRATION_FILE_2ND);
 	if(ret > 0){
-		pocket_mode_threshold = ret;
-		log("2nd Proximity read Pocket Mode Calibration : %d\n", pocket_mode_threshold);
+		g_pocket_mode_threshold = ret;
+		log("2nd Proximity read Pocket Mode Calibration : %d\n", g_pocket_mode_threshold);
 	}else{
-		pocket_mode_threshold = PROXIMITY_POCKET_DEFAULT;
-		err("2nd Proximity read DEFAULT Pocket Mode Calibration : %d\n", pocket_mode_threshold);
+		g_pocket_mode_threshold = PROXIMITY_POCKET_DEFAULT;
+		err("2nd Proximity read DEFAULT Pocket Mode Calibration : %d\n", g_pocket_mode_threshold);
 	}
 	
 	return 0;
@@ -522,7 +543,7 @@ static void proximity_polling_adc(struct work_struct *work)
 				} else {
 					if(g_ps_data->g_ps_int_status != ALSPS_INT_PS_CLOSE &&
 							(adc_value >= g_ps_data->g_ps_calvalue_hi &&
-							(pocket_mode_threshold <= 0 || adc_value < pocket_mode_threshold))) {
+							(g_pocket_mode_threshold <= 0 || adc_value < g_pocket_mode_threshold))) {
 						log("[Polling] 2nd Proximity Detect Object Close. (adc = %d)\n", adc_value);
 						psensor_report_abs(PSENSOR_2ND_REPORT_PS_CLOSE);
 						g_ps_data->g_ps_int_status = ALSPS_INT_PS_CLOSE;
@@ -532,7 +553,7 @@ static void proximity_polling_adc(struct work_struct *work)
 						psensor_report_abs(PSENSOR_2ND_REPORT_PS_AWAY);
 						g_ps_data->g_ps_int_status = ALSPS_INT_PS_AWAY;
 					}else if(g_ps_data->g_ps_int_status != ALSPS_INT_PS_POCKET &&
-							(pocket_mode_threshold > 0 && adc_value >= pocket_mode_threshold)){
+							(g_pocket_mode_threshold > 0 && adc_value >= g_pocket_mode_threshold)){
 						log("[Polling] 2nd Proximity Detect Object Close. (adc = %d, distance <= 1cm)\n", adc_value);	
 						psensor_report_abs(PSENSOR_2ND_REPORT_PS_POCKET);
 						g_ps_data->g_ps_int_status = ALSPS_INT_PS_POCKET;
@@ -640,6 +661,9 @@ static int light_turn_onoff(bool bOn)
 		}
 	}
 
+	if(check_ALSP_onoff()){
+		ALSPS_hw_client->ALSPS_hw_close_power();
+	}
 	return ret;
 }
 
@@ -740,7 +764,6 @@ static void light_polling_lux(struct work_struct *work)
 	if(ALSPS_hw_client->mlsensor_hw->light_hw_get_adc == NULL) {
 		err("2nd light_hw_get_adc NOT SUPPORT. \n");		
 	}
-
 mutex_lock(&g_alsps_lock);
 
 	if(g_als_data->HAL_switch_on == true) {
@@ -1227,6 +1250,8 @@ static int mproximity_store_switch_onoff(bool bOn)
 			/* Turn off Proxomity */
 			g_ps_data->HAL_switch_on = false;				
 			proximity_turn_onoff(false);
+			log("2nd Proximity Report final Away\n");
+			g_ps_data->g_ps_int_status = ALSPS_INT_PS_INIT;
 			psensor_report_abs(-1);
 			//ftxxxx_disable_touch(false);
 		}			
@@ -1302,7 +1327,7 @@ static int mlight_show_lux(void)
 static psensor_ATTR_HAL mpsensor_ATTR_HAL = {
 	.proximity_show_switch_onoff = mproximity_show_switch_onoff,
 	.proximity_store_switch_onoff = mproximity_store_switch_onoff,
-	.proximity_show_status = proximity_check_status,
+	.proximity_show_status = proximitySecStatus,
 };
 
 static lsensor_ATTR_HAL mlsensor_ATTR_HAL = {
@@ -1645,7 +1670,7 @@ static void proximity_work(int state)
 			//	ftxxxx_disable_touch(false);
 			//}
 		} else if (ALSPS_INT_PS_CLOSE == state) {
-			if(pocket_mode_threshold > 0 && adc >= pocket_mode_threshold){
+			if(g_pocket_mode_threshold > 0 && adc >= g_pocket_mode_threshold){
 				log("[ISR] 2nd Proximity Detect Object Close. (adc = %d, distance <= 1cm)\n", adc);		
 				psensor_report_abs(PSENSOR_2ND_REPORT_PS_POCKET);
 				g_ps_data->g_ps_int_status = ALSPS_INT_PS_POCKET;
@@ -1750,13 +1775,22 @@ static void light_work(void)
 	}
 }
 
+static int ALSPS_IST_LOG_COUNT=0;
+static int ALSPS_IST_LOG_LIMIT=1000;
 static void ALSPS_ist(struct work_struct *work)
 {
 	int alsps_int_ps, alsps_int_als;
 	
 mutex_lock(&g_alsps_lock);
 	if(g_als_data->Device_switch_on == false && g_ps_data->Device_switch_on == false) {
-		err("2nd ALSPS are disabled and ignore IST.\n");
+		if(ALSPS_IST_LOG_COUNT==0){
+			err("2nd ALSPS are disabled and ignore IST.\n");
+			ALSPS_IST_LOG_COUNT++;
+		}else{
+			ALSPS_IST_LOG_COUNT++;
+			if(ALSPS_IST_LOG_COUNT==ALSPS_IST_LOG_LIMIT)
+				ALSPS_IST_LOG_COUNT = 0;
+		}
 		goto ist_err;
 	}
 	dbg("2nd ALSPS ist +++ \n");
@@ -1805,7 +1839,7 @@ mutex_lock(&g_alsps_lock);
 	}
 	dbg("2nd ALSPS ist --- \n");
 ist_err:	
-	wake_unlock(&g_alsps_wake_lock);
+	__pm_relax(g_alsps_wake_lock);
 	dbg("[IRQ] 2nd Enable irq !! \n");
 	enable_irq(ALSPS_SENSOR_IRQ);	
 mutex_unlock(&g_alsps_lock);
@@ -1824,7 +1858,7 @@ static void ALSPS_irq_handler(void)
 
 	/*Queue work will enbale IRQ and unlock wake_lock*/
 	queue_work(ALSPS_workqueue, &ALSPS_ist_work);
-	wake_lock(&g_alsps_wake_lock);
+	__pm_stay_awake(g_alsps_wake_lock);
 	return;
 irq_err:
 	dbg("[IRQ] 2nd Enable irq !! \n");
@@ -1837,17 +1871,29 @@ static ALSPSsensor_GPIO mALSPSsensor_GPIO = {
 
 
 /*============================
+ *|| For ALSPS check onoff ||
+ *============================
+ */
+static int check_ALSP_onoff(void){
+	if(g_ps_data->Device_switch_on || g_ps_data->HAL_switch_on || 
+		g_als_data->Device_switch_on || g_als_data->HAL_switch_on){
+		return 0;
+	}else
+		return 1;
+}
+
+/*============================
  *|| For Proximity check status ||
  *============================
  */
-static bool proximity_check_status(void)
+bool proximitySecStatus(void)
 {	
 	int adc_value = 0;
 	bool status = false;
 	int ret=0;
 	int threshold_high = 0;
 
-wake_lock(&g_alsps_wake_lock);	
+	__pm_stay_awake(g_alsps_wake_lock);
 	/* check probe status */
 	if(ALSPS_hw_client == NULL)
 		goto ERROR_HANDLE;
@@ -1873,14 +1919,21 @@ wake_lock(&g_alsps_wake_lock);
 	msleep(PROXIMITY_TURNON_DELAY_TIME);
 
 	adc_value = ALSPS_hw_client->mpsensor_hw->proximity_hw_get_adc();
-	threshold_high = (g_ps_data->g_ps_calvalue_hi + g_ps_data->g_ps_autok_max);
-
+	
+	//ASUS BSP Clay +++: use previous autok crosstalk
+	if(g_ps_data->crosstalk_diff > g_ps_data->g_ps_autok_max){
+		threshold_high = g_ps_data->g_ps_factory_cal_hi + g_ps_data->g_ps_autok_max;
+	}else {
+		threshold_high = g_ps_data->g_ps_factory_cal_hi + g_ps_data->crosstalk_diff;
+	}
+	//ASUS BSP Clay ---
+	
 	if (adc_value >= threshold_high) {
 		status = true;
 	}else{ 
 		status = false;
 	}
-	log("2nd proximity_check_status : %s , (adc, hi_cal + AutoK)MAX)=(%d, %d)\n", 
+	log("2nd proximitySecStatus : %s , (adc, hi_cal+prev_autoK)=(%d, %d)\n", 
 		status?"Close":"Away", adc_value, threshold_high);
 	
 	if(g_ps_data->Device_switch_on == false){
@@ -1893,11 +1946,10 @@ wake_lock(&g_alsps_wake_lock);
 ERROR_HANDLE:
 	
 	mutex_unlock(&g_alsps_lock);
-wake_unlock(&g_alsps_wake_lock);
+	__pm_relax(g_alsps_wake_lock);
 	return status;
 }
-
-//EXPORT_SYMBOL(proximity_check_status);
+EXPORT_SYMBOL(proximitySecStatus);
 
 /*===========================
  *|| Proximity Auto Calibration Part ||
@@ -1908,6 +1960,7 @@ static int proximity_check_minCT(void)
 	int adc_value = 0;
 	int crosstalk_diff;
 	int crosstalk_min = 9999;
+	int crosstalk_limit = 0;
 	int ret;
 	int round;
 	
@@ -1920,11 +1973,6 @@ static int proximity_check_minCT(void)
 		err("2nd Proximity read DEFAULT INF Calibration : %d\n", g_ps_data->g_ps_calvalue_inf);
 	}
 
-	ret = ALSPS_hw_client->mpsensor_hw->proximity_hw_turn_onoff(true);	
-	if(ret < 0){
-		err("2nd proximity_hw_turn_onoff(true) ERROR\n");
-		return ret;
-	}
 	/*update the min crosstalk value*/
 	for(round=0; round<PROXIMITY_AUTOK_COUNT; round++){	
 		mdelay(PROXIMITY_AUTOK_DELAY);
@@ -1934,11 +1982,6 @@ static int proximity_check_minCT(void)
 			crosstalk_min = adc_value;
 			log("2nd Update the min for crosstalk : %d\n", crosstalk_min);
 		}
-	}
-	ret = ALSPS_hw_client->mpsensor_hw->proximity_hw_turn_onoff(false);	
-	if(ret < 0){
-		err("2nd proximity_hw_turn_onoff(true) ERROR\n");
-		return ret;
 	}
 
 	/*Set Proximity Threshold*/
@@ -1952,15 +1995,27 @@ static int proximity_check_minCT(void)
 	crosstalk_diff = crosstalk_min -g_ps_data->g_ps_calvalue_inf;
 	if(crosstalk_diff>g_ps_data->g_ps_autok_min && crosstalk_diff<g_ps_data->g_ps_autok_max){
 		log("2nd Update the diff for crosstalk : %d\n", crosstalk_diff);
+		
+		//ASUS BSP Clay +++: prevent near > (pocket-500) after autok
+		crosstalk_limit = g_pocket_mode_threshold - 500 - g_ps_data->g_ps_factory_cal_hi;
+		if(crosstalk_diff > crosstalk_limit){
+			log("crosstalk_diff(%d) > pocket-500-cal_hi(%d)", crosstalk_diff, crosstalk_limit);
+			crosstalk_diff = crosstalk_limit;
+		}
+		//ASUS BSP Clay ---
+		
 		g_ps_data->crosstalk_diff = crosstalk_diff;
 
 		if(ALSPS_hw_client->mpsensor_hw->proximity_hw_set_autoK == NULL) {
 			err("2nd proximity_hw_set_autoK NOT SUPPORT. \n");
 			return -1;
 		}
+		
 		ALSPS_hw_client->mpsensor_hw->proximity_hw_set_autoK(crosstalk_diff);
 		g_ps_data->g_ps_calvalue_hi += crosstalk_diff;
 		g_ps_data->g_ps_calvalue_lo += crosstalk_diff;
+		log("Update the diff for crosstalk : %d, hi: %d, low: %d, START\n", 
+			g_ps_data->crosstalk_diff, g_ps_data->g_ps_calvalue_hi, g_ps_data->g_ps_calvalue_lo);
 	}else if(crosstalk_diff>=g_ps_data->g_ps_autok_max){
 		log("2nd crosstalk diff(%d) >= proximity autok max(%d)\n", crosstalk_diff, g_ps_data->g_ps_autok_max);
 		g_ps_data->crosstalk_diff = crosstalk_diff;
@@ -1975,7 +2030,7 @@ static int proximity_check_minCT(void)
 static void proximity_autok(struct work_struct *work)
 {
 	int adc_value;
-	int crosstalk_diff;
+	int crosstalk_diff, crosstalk_limit;
 
 	/* proximity sensor go to suspend, cancel autok timer */
 	if(g_alsps_power_status == ALSPS_SUSPEND){
@@ -2006,12 +2061,27 @@ static void proximity_autok(struct work_struct *work)
 		
 		if(crosstalk_diff<=g_ps_data->g_ps_autok_min){			
 			ALSPS_hw_client->mpsensor_hw->proximity_hw_set_autoK(0-g_ps_data->crosstalk_diff);
+			g_ps_data->g_ps_calvalue_hi += (0-g_ps_data->crosstalk_diff);
+			g_ps_data->g_ps_calvalue_lo += (0-g_ps_data->crosstalk_diff);
 			g_ps_data->crosstalk_diff = 0;
-			log("2nd Update the diff for crosstalk : %d\n", g_ps_data->crosstalk_diff);
-		}else if((crosstalk_diff>g_ps_data->g_ps_autok_min) && (crosstalk_diff<g_ps_data->g_ps_autok_max)){			
+			log("Update the diff for crosstalk : %d, hi: %d, low: %d, END\n", 
+				g_ps_data->crosstalk_diff, g_ps_data->g_ps_calvalue_hi, g_ps_data->g_ps_calvalue_lo);
+		}else if((crosstalk_diff>g_ps_data->g_ps_autok_min) && (crosstalk_diff<g_ps_data->g_ps_autok_max)){
+		
+			//ASUS BSP Clay +++: prevent near > (pocket-500) after autok
+			crosstalk_limit = g_pocket_mode_threshold - 500 - g_ps_data->g_ps_factory_cal_hi;
+			if(crosstalk_diff > crosstalk_limit){
+				log("crosstalk_diff(%d) > pocket-500-cal_hi(%d)", crosstalk_diff, crosstalk_limit);
+				crosstalk_diff = crosstalk_limit;
+			}
+			//ASUS BSP Clay ---
+		
 			ALSPS_hw_client->mpsensor_hw->proximity_hw_set_autoK(crosstalk_diff-g_ps_data->crosstalk_diff);
+			g_ps_data->g_ps_calvalue_hi += (crosstalk_diff-g_ps_data->crosstalk_diff);
+			g_ps_data->g_ps_calvalue_lo += (crosstalk_diff-g_ps_data->crosstalk_diff);
 			g_ps_data->crosstalk_diff = crosstalk_diff;
-			log("2nd Update the diff for crosstalk : %d\n", crosstalk_diff);
+			log("Update the diff for crosstalk : %d, hi: %d, low: %d\n", 
+				g_ps_data->crosstalk_diff, g_ps_data->g_ps_calvalue_hi, g_ps_data->g_ps_calvalue_lo);
 		}else{
 			log("2nd over the autok_max : (adc, inf) = %d(%d, %d) > %d\n", 
 				crosstalk_diff, adc_value, g_ps_data->g_ps_calvalue_inf, g_ps_data->g_ps_autok_max);
@@ -2199,18 +2269,41 @@ static int init_data(void)
 	g_ps_data->polling_mode =     true;
 	g_ps_data->autok =            true;
 	
-	g_ps_data->g_ps_calvalue_hi = ALSPS_hw_client->mpsensor_hw->proximity_hi_threshold_default;
-	g_ps_data->g_ps_calvalue_lo = ALSPS_hw_client->mpsensor_hw->proximity_low_threshold_default;	
-	g_ps_data->g_ps_calvalue_inf = ALSPS_hw_client->mpsensor_hw->proximity_crosstalk_default;	
-	g_ps_data->g_ps_factory_cal_hi = ALSPS_hw_client->mpsensor_hw->proximity_hi_threshold_default;
-	g_ps_data->g_ps_factory_cal_lo = ALSPS_hw_client->mpsensor_hw->proximity_low_threshold_default;
+	
+	if(g_ASUS_hwID == HW_REV_ER2){
+		g_ps_data->g_ps_calvalue_hi = PROXIMITY_THDH_ER2_DEFAULT;
+		g_ps_data->g_ps_calvalue_lo = PROXIMITY_THDL_ER2_DEFAULT;	
+		g_ps_data->g_ps_calvalue_inf = PROXIMITY_INF_ER2_DEFAULT;	
+		g_ps_data->g_ps_factory_cal_hi = PROXIMITY_THDH_ER2_DEFAULT;
+		g_ps_data->g_ps_factory_cal_lo = PROXIMITY_THDL_ER2_DEFAULT;
+		g_pocket_mode_threshold = PROXIMITY_POCKET_ER2_DEFAULT;
+	}else if(g_ASUS_hwID <= HW_REV_ER){
+		g_ps_data->g_ps_calvalue_hi = PROXIMITY_THDH_ER_DEFAULT;
+		g_ps_data->g_ps_calvalue_lo = PROXIMITY_THDL_ER_DEFAULT;	
+		g_ps_data->g_ps_calvalue_inf = PROXIMITY_INF_ER_DEFAULT;	
+		g_ps_data->g_ps_factory_cal_hi = PROXIMITY_THDH_ER_DEFAULT;
+		g_ps_data->g_ps_factory_cal_lo = PROXIMITY_THDL_ER_DEFAULT;
+		g_pocket_mode_threshold = PROXIMITY_POCKET_ER_DEFAULT;
+	}
+	else{
+		g_ps_data->g_ps_calvalue_hi = ALSPS_hw_client->mpsensor_hw->proximity_hi_threshold_default;
+		g_ps_data->g_ps_calvalue_lo = ALSPS_hw_client->mpsensor_hw->proximity_low_threshold_default;	
+		g_ps_data->g_ps_calvalue_inf = ALSPS_hw_client->mpsensor_hw->proximity_crosstalk_default;	
+		g_ps_data->g_ps_factory_cal_hi = ALSPS_hw_client->mpsensor_hw->proximity_hi_threshold_default;
+		g_ps_data->g_ps_factory_cal_lo = ALSPS_hw_client->mpsensor_hw->proximity_low_threshold_default;
+		g_pocket_mode_threshold = PROXIMITY_POCKET_DEFAULT;
+	}
 	g_ps_data->g_ps_autok_min= ALSPS_hw_client->mpsensor_hw->proximity_autok_min;	
 	g_ps_data->g_ps_autok_max = ALSPS_hw_client->mpsensor_hw->proximity_autok_max;	
 
 	g_ps_data->int_counter = 0;
 	g_ps_data->event_counter = 0;
 	g_ps_data->crosstalk_diff = 0;
+#ifdef PSENSOR_CAL24
+	g_ps_data->selection = 0;
+#else
 	g_ps_data->selection = 1;
+#endif
 
 	/* Reset ASUS_light_sensor_data */
 	g_als_data = kmalloc(sizeof(struct lsensor_data), GFP_KERNEL);
@@ -2387,7 +2480,7 @@ static int __init ALSPS_init_2nd(void)
 	mutex_init(&g_i2c_lock);
 
 	/* Initialize the wake lock */
-	wake_lock_init(&g_alsps_wake_lock, WAKE_LOCK_SUSPEND, "ALSPS_wake_lock");
+	g_alsps_wake_lock = wakeup_source_register(NULL, "ALSPS_wake_lock");
 
 	/*Initialize high resolution timer*/
 	hrtimer_init(&g_alsps_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -2428,11 +2521,10 @@ static int __init ALSPS_init_2nd(void)
 	if (ret < 0)
 		goto init_err;
 #endif
-/*
 	ret = psensor_report_register();
 	if (ret < 0)
 		goto init_err;
-*/
+
 #if ENABLE_LIGHT_IOCTL_LIB
 	ret = lightSensor_miscRegister();
 	if (ret < 0)
@@ -2441,14 +2533,16 @@ static int __init ALSPS_init_2nd(void)
 /*
 	ret = lsensor_report_register();
 	if (ret < 0)
-		goto init_err;	
+		goto init_err;
 */
 	ALSPS_SENSOR_IRQ = ALSPSsensor_gpio_register_2nd(g_i2c_client, &mALSPSsensor_GPIO);
 	if (ALSPS_SENSOR_IRQ < 0)
 		goto init_err;	
 
 	/*To avoid LUX can NOT report when reboot in LUX=0*/
-	lsensor_report_lux(-1);
+	//lsensor_report_lux(-1);
+	log("[INIT] 2nd Proximity Report Away\n");
+	g_ps_data->g_ps_int_status = ALSPS_INT_PS_INIT;
 	psensor_report_abs(-1);
 	
 	log("2nd Driver INIT ---\n");
@@ -2474,7 +2568,7 @@ static void __exit ALSPS_exit_2nd(void)
 	psensor_ATTR_unregister_2nd();
 	lsensor_ATTR_unregister_2nd();
 	
-	wake_lock_destroy(&g_alsps_wake_lock);
+	wakeup_source_unregister(g_alsps_wake_lock);
 	mutex_destroy(&g_alsps_lock);
 	mutex_destroy(&g_i2c_lock);
 	kfree(g_ps_data);

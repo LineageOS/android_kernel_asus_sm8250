@@ -58,10 +58,11 @@
 
 #define IPA_SUSPEND_BUSY_TIMEOUT (msecs_to_jiffies(10))
 
-#define DEFAULT_MPM_RING_SIZE_UL 6
-#define DEFAULT_MPM_RING_SIZE_DL 16
+#define DEFAULT_MPM_RING_SIZE_UL 64
+#define DEFAULT_MPM_RING_SIZE_DL 64
 #define DEFAULT_MPM_TETH_AGGR_SIZE 24
 #define DEFAULT_MPM_UC_THRESH_SIZE 4
+
 /*
  * The following for adding code (ie. for EMULATION) not found on x86.
  */
@@ -5208,7 +5209,7 @@ void ipa3_inc_acquire_wakelock(void)
 	spin_lock_irqsave(&ipa3_ctx->wakelock_ref_cnt.spinlock, flags);
 	ipa3_ctx->wakelock_ref_cnt.cnt++;
 	if (ipa3_ctx->wakelock_ref_cnt.cnt == 1)
-		__pm_stay_awake(&ipa3_ctx->w_lock);
+		__pm_stay_awake(ipa3_ctx->w_lock);
 	IPADBG_LOW("active wakelock ref cnt = %d\n",
 		ipa3_ctx->wakelock_ref_cnt.cnt);
 	spin_unlock_irqrestore(&ipa3_ctx->wakelock_ref_cnt.spinlock, flags);
@@ -5231,7 +5232,7 @@ void ipa3_dec_release_wakelock(void)
 	IPADBG_LOW("active wakelock ref cnt = %d\n",
 		ipa3_ctx->wakelock_ref_cnt.cnt);
 	if (ipa3_ctx->wakelock_ref_cnt.cnt == 0)
-		__pm_relax(&ipa3_ctx->w_lock);
+		__pm_relax(ipa3_ctx->w_lock);
 	spin_unlock_irqrestore(&ipa3_ctx->wakelock_ref_cnt.spinlock, flags);
 }
 
@@ -6942,8 +6943,14 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_device_create;
 	}
 
-	/* Create a wakeup source. */
-	wakeup_source_init(&ipa3_ctx->w_lock, "IPA_WS");
+	/* Register a wakeup source. */
+	ipa3_ctx->w_lock =
+		wakeup_source_register(&ipa_pdev->dev, "IPA_WS");
+	if (!ipa3_ctx->w_lock) {
+		IPAERR("IPA wakeup source register failed\n");
+		result = -ENOMEM;
+		goto fail_w_source_register;
+	}
 	spin_lock_init(&ipa3_ctx->wakelock_ref_cnt.spinlock);
 
 	/* Initialize Power Management framework */
@@ -7036,6 +7043,9 @@ fail_gsi_pre_fw_load_init:
 fail_ipa_dma_setup:
 	ipa_pm_destroy();
 fail_ipa_pm_init:
+	wakeup_source_unregister(ipa3_ctx->w_lock);
+	ipa3_ctx->w_lock = NULL;
+fail_w_source_register:
 	device_destroy(ipa3_ctx->cdev.class, ipa3_ctx->cdev.dev_num);
 fail_device_create:
 	unregister_chrdev_region(ipa3_ctx->cdev.dev_num, 1);
@@ -8559,6 +8569,7 @@ void ipa_pc_qmp_enable(void)
  *            PCIe Version
  *************************************************************/
 
+#ifdef CONFIG_PCI
 int ipa3_pci_drv_probe(
 	struct pci_dev            *pci_dev,
 	struct ipa_api_controller *api_ctrl,
@@ -8718,6 +8729,7 @@ int ipa3_pci_drv_probe(
 
 	return result;
 }
+#endif
 
 /*
  * The following returns transport register memory location and

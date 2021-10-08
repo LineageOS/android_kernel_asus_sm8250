@@ -340,9 +340,12 @@ int cam_sync_merge(int32_t *sync_obj, uint32_t num_objs, int32_t *merged_obj)
 int cam_sync_get_obj_ref(int32_t sync_obj)
 {
 	struct sync_table_row *row = NULL;
-
-	if (sync_obj >= CAM_SYNC_MAX_OBJS || sync_obj <= 0)
+//ASUS_BSP Jason add isp sync log
+	if (sync_obj >= CAM_SYNC_MAX_OBJS || sync_obj <= 0){
+		CAM_ERR(CAM_SYNC,
+			"Error:  sync obj = %d",	sync_obj);
 		return -EINVAL;
+	}
 
 	row = sync_dev->sync_table + sync_obj;
 

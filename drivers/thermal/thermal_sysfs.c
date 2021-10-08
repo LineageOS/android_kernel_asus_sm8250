@@ -76,7 +76,8 @@ temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 		return ret;
 	
 #ifdef ASUS_ZS661KS_PROJECT
-	if(tz->id == 82){
+	//if(tz->id == 82){
+	if (!strcmp(tz->type, "virtual-therm")) {
 		G_virtual_therm_temp_prev = G_virtual_therm_temp;
 		temperature = get_virtual_temp();
 		G_virtual_therm_temp = smooth_virtual_therm_temp(temperature);

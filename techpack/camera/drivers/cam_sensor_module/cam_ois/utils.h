@@ -28,4 +28,5 @@ int sysfs_write_word_seq_change_line(char *filename, uint16_t *value, uint32_t s
 int sysfs_write_dword_seq_change_line(char *filename, uint32_t *value, uint32_t size,uint32_t number, bool shift);
 
 bool i2c_setting_contain_address(struct cam_sensor_i2c_reg_setting * setting, uint32_t addr, uint32_t* data, uint16_t* index);
+int sysfs_write_byte_from_dword_seq(char *filename, uint32_t *value, uint32_t size);
 #endif

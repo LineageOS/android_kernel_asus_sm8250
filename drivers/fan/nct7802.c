@@ -38,7 +38,7 @@
 #include <linux/of_gpio.h>
 
 #include <linux/usb.h>
-#include <linux/msm_drm_notify.h>
+// AR porting - #include <linux/msm_drm_notify.h>
 
 //#include "linux/asusdebug.h"
 

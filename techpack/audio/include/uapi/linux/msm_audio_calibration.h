@@ -44,22 +44,22 @@
 							217, void *)
 #define AUDIO_SET_RTAC_AFE_CAL		_IOWR(CAL_IOCTL_MAGIC, \
 							218, void *)
-/* ASUS_BSP +++ AudioWizard ringtone mode */
+							/* ASUS_BSP +++ AudioWizard ringtone mode */
 #define AUDIO_SET_AUDIOWIZARD_FORCE_PRESET	_IOWR(CAL_IOCTL_MAGIC, \
 							221, void *)
 #define SW_AUDIOWIZARD_RINGTONE		0x0b
 /* ASUS_BSP --- */
-//Jessy +++ send mic intent
+//ASUS_BSP +++
 #define AUDIO_SET_AUDIORECORD_MIC_USING	_IOWR(CAL_IOCTL_MAGIC, \
 							223, void *)
 
 #define SW_AUDIORECORD_START 0x0c
 #define SW_AUDIORECORD_STOP 0x0e
-//Jessy ---
 /* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 #define AUDIO_SET_ACTIVEINPUT_PID	_IOWR(CAL_IOCTL_MAGIC, \
 							232, void *)
 /* ASUS_BSP --- */
+//ASUS_BSP ---
 /* ASUS_BSP +++ EU/nonEU */
 #define AUDIO_SET_EU_NONEU		_IOWR(CAL_IOCTL_MAGIC, \
 							235, void *)
@@ -128,27 +128,29 @@ enum {
 	ADM_LSM_TOPOLOGY_CAL_TYPE,
 	ADM_LSM_AUDPROC_CAL_TYPE,
 	ADM_LSM_AUDPROC_PERSISTENT_CAL_TYPE,
-	/* ASUS_BSP +++ AudioWizard hifi & ringtone mode */
+	ADM_AUDPROC_PERSISTENT_CAL_TYPE,
+	AFE_FB_SPKR_PROT_V4_EX_VI_CAL_TYPE,
+/* ASUS_BSP +++ AudioWizard hifi & ringtone mode */
 	AUDIOWIZARD_FORCE_PRESET_TYPE,
 	/* ASUS_BSP --- */
-        //Jessy +++ send mic intent
-        AUDIORECORD_MIC_USING_TYPE,
-        //Jessy ---
-	/* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
+	//ASUS_BSP +++
+    AUDIORECORD_MIC_USING_TYPE,
+/* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 	AUDIO_SET_ACTIVEINPUT_PID_TYPE,
 	/* ASUS_BSP --- */
+    //ASUS_BSP ---
 	/* ASUS_BSP +++ EU/nonEU */
 	AUDIO_SET_EU_NONEU_TYPE,
 	/* ASUS_BSP --- EU/nonEU */
 	/* ASUS_BSP +++ Set PWM for recording */
 	AUDIO_SET_PWM_MODE_TYPE,
 	/* ASUS_BSP --- Set PWM for recording */
-	ADM_AUDPROC_PERSISTENT_CAL_TYPE,
 	MAX_CAL_TYPES,
 };
 
 #define AFE_FB_SPKR_PROT_TH_VI_CAL_TYPE AFE_FB_SPKR_PROT_TH_VI_CAL_TYPE
 #define AFE_FB_SPKR_PROT_EX_VI_CAL_TYPE AFE_FB_SPKR_PROT_EX_VI_CAL_TYPE
+#define AFE_FB_SPKR_PROT_V4_EX_VI_CAL_TYPE AFE_FB_SPKR_PROT_V4_EX_VI_CAL_TYPE
 
 #define AFE_SIDETONE_IIR_CAL_TYPE AFE_SIDETONE_IIR_CAL_TYPE
 
@@ -162,6 +164,7 @@ enum {
 
 #define TOPOLOGY_SPECIFIC_CHANNEL_INFO
 #define MSM_SPKR_PROT_SPV3
+#define MSM_SPKR_PROT_SPV4
 
 enum {
 	VERSION_0_0,
@@ -412,6 +415,16 @@ struct audio_cal_info_sp_ex_vi_param {
 	int32_t		resis_q24[SP_V2_NUM_MAX_SPKRS];
 	int32_t		qmct_q24[SP_V2_NUM_MAX_SPKRS];
 	int32_t		status[SP_V2_NUM_MAX_SPKRS];
+};
+
+struct audio_cal_info_sp_v4_ex_vi_param {
+	int32_t		ftm_re_q24[SP_V2_NUM_MAX_SPKRS];
+	int32_t		ftm_Bl_q24[SP_V2_NUM_MAX_SPKRS];
+	int32_t		ftm_Rms_q24[SP_V2_NUM_MAX_SPKRS];
+	int32_t		ftm_Kms_q24[SP_V2_NUM_MAX_SPKRS];
+	int32_t		ftm_freq_q20[SP_V2_NUM_MAX_SPKRS];
+	int32_t		ftm_Qms_q24[SP_V2_NUM_MAX_SPKRS];
+	uint32_t	status[SP_V2_NUM_MAX_SPKRS];
 };
 
 struct audio_cal_info_sp_th_vi_param {
@@ -836,6 +849,7 @@ struct audio_cal_sp_th_vi_v_vali_param {
 	struct audio_cal_header				hdr;
 	struct audio_cal_type_sp_th_vi_v_vali_param	cal_type;
 };
+
 struct audio_cal_type_sp_ex_vi_param {
 	struct audio_cal_type_header			cal_hdr;
 	struct audio_cal_data				cal_data;
@@ -846,4 +860,16 @@ struct audio_cal_sp_ex_vi_param {
 	struct audio_cal_header				hdr;
 	struct audio_cal_type_sp_ex_vi_param		cal_type;
 };
+
+struct audio_cal_type_sp_v4_ex_vi_param {
+	struct audio_cal_type_header			cal_hdr;
+	struct audio_cal_data				cal_data;
+	struct audio_cal_info_sp_v4_ex_vi_param		cal_info;
+};
+
+struct audio_cal_sp_v4_ex_vi_param {
+	struct audio_cal_header				hdr;
+	struct audio_cal_type_sp_v4_ex_vi_param		cal_type;
+};
+
 #endif /* _UAPI_MSM_AUDIO_CALIBRATION_H */

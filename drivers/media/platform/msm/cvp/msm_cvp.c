@@ -25,7 +25,7 @@ void print_internal_buffer(u32 tag, const char *str,
 		dprintk(tag,
 		"%s: %x : idx %2d fd %d off %d %s size %d flags %#x iova %#x",
 		str, hash32_ptr(inst->session), cbuf->buf.index, cbuf->buf.fd,
-		cbuf->buf.offset, cbuf->smem.dma_buf->name, cbuf->buf.size,
+		cbuf->buf.offset, cbuf->smem.dma_buf->buf_name, cbuf->buf.size,
 		cbuf->buf.flags, cbuf->smem.device_addr);
 	} else {
 		dprintk(tag,
@@ -438,7 +438,7 @@ static int msm_cvp_map_buf_user_persist(struct msm_cvp_inst *inst,
 
 	dprintk(CVP_DBG,
 	"%s: %x : fd %d %s size %d", "map persist", hash32_ptr(inst->session),
-	cbuf->smem.fd, cbuf->smem.dma_buf->name, cbuf->smem.size);
+	cbuf->smem.fd, cbuf->smem.dma_buf->buf_name, cbuf->smem.size);
 	return rc;
 
 exit:
@@ -1329,6 +1329,7 @@ static int msm_cvp_session_process_hfi_fence(
 	struct cvp_kmd_hfi_packet *in_pkt;
 	unsigned int signal, offset, buf_num, in_offset, in_buf_num;
 	struct msm_cvp_inst *s;
+	unsigned int max_buf_num;
 	struct msm_cvp_fence_thread_data *fence_thread_data;
 
 	dprintk(CVP_DBG, "%s: Enter inst = %#x", __func__, inst);
@@ -1373,6 +1374,16 @@ static int msm_cvp_session_process_hfi_fence(
 		offset = in_offset;
 		buf_num = in_buf_num;
 	}
+
+	max_buf_num = sizeof(struct cvp_kmd_hfi_packet)
+						/ sizeof(struct cvp_buf_type);
+
+	if (buf_num > max_buf_num)
+		return -EINVAL;
+
+	if ((offset + buf_num * sizeof(struct cvp_buf_type)) >
+					sizeof(struct cvp_kmd_hfi_packet))
+		return -EINVAL;
 
 	rc = msm_cvp_map_buf(inst, in_pkt, offset, buf_num);
 	if (rc)
@@ -2336,7 +2347,7 @@ int msm_cvp_session_deinit(struct msm_cvp_inst *inst)
 				"remove from frame list",
 				hash32_ptr(inst->session),
 				buf->fd, buf->offset, buf->size,
-				buf->dbuf->name);
+				buf->dbuf->buf_name);
 
 			list_del(&frame_buf->list);
 			kmem_cache_free(cvp_driver->frame_buf_cache,

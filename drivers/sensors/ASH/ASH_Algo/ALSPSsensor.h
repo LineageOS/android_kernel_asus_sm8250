@@ -46,29 +46,53 @@
  * driver will cat first correct adc/lux value.
  */
 #define LIGHT_TURNON_DELAY_TIME			(10)
-#define PROXIMITY_TURNON_DELAY_TIME	(50)
+#define PROXIMITY_TURNON_DELAY_TIME	(20)
 
 #define PROXIMITY_POLLING_TIME			(1000)
-#define LIGHT_POLLING_TIME			(400)
-#define LIGHT_RETRY_POLLING_TIME			(10)
+#define LIGHT_POLLING_TIME			(500)
 
 /**
  * LIGHT_LOG_THRESHOLD : We print light sensor log 
  * when the current lux value change over 100 lux from the last lux.
  */
 #define LIGHT_LOG_THRESHOLD					(100)
-#define LIGHT_LOG_LOW_LUX_THRESHOLD					(20)
 
 /**
  * @ALSPS_DEFAULT_VALUE : Define the default value for driver data.
  */
 #define ALSPS_DEFAULT_VALUE				(-1)
 
+
+#ifdef ASUS_ZS661KS_PROJECT
 #define PROXIMITY_INF_ER_DEFAULT     (85)
 #define PROXIMITY_THDL_ER_DEFAULT    (134)
 #define PROXIMITY_THDH_ER_DEFAULT    (249)
 #define PROXIMITY_POCKET_ER_DEFAULT       (4073)
 #define PROXIMITY_POCKET_DEFAULT       (3800)
 #define LIGHT_ER_CALIBRATION_DEFAULT (1526)
+#define LIGHT_LOW_LUX_AVG_COUNT     (0)
+#define LIGHT_LOW_LUX_NOISE_OFFSET     (0)
+#else
+#define PROXIMITY_INF_ER_DEFAULT     (513)
+#define PROXIMITY_THDL_ER_DEFAULT    (607)
+#define PROXIMITY_THDH_ER_DEFAULT    (879)
+#define PROXIMITY_POCKET_ER_DEFAULT       (4094)
+#define PROXIMITY_INF_ER2_DEFAULT     (466)
+#define PROXIMITY_THDL_ER2_DEFAULT    (547)
+#define PROXIMITY_THDH_ER2_DEFAULT    (788)
+#define PROXIMITY_POCKET_ER2_DEFAULT       (4093)
+#define PROXIMITY_POCKET_DEFAULT       (4091)
+#define LIGHT_ER_CALIBRATION_DEFAULT (4563)
+#define LIGHT_ER2_CALIBRATION_DEFAULT (3372)
+/* ASUS BSP Clay: shift lux to mitigate psensor noise when psensor on and lux < offset +++ */
+#define LIGHT_LOW_LUX_NOISE_OFFSET     (30)
+/* ASUS BSP Clay: shift lux to mitigate psensor noise when psensor on and lux < offset --- */
+/* ASUS BSP Clay: average 5 lux for offset behavior to mitigate the low lux gap +++ */
+#define LIGHT_LOW_LUX_AVG_COUNT     (5)
+/* ASUS BSP Clay: average 5 lux for offset behavior to mitigate the low lux gap --- */
+#endif
+#define CS_IT_400MS (3)
+#define CS_IT_100MS (1)
+#define CS_IT_50MS (0)
 #endif
 

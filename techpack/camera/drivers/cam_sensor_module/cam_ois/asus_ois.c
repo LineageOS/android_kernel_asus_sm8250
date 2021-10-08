@@ -1,10 +1,12 @@
 #include <linux/proc_fs.h>
+#include <linux/time.h>
 #include "asus_ois.h"
 #include "onsemi_interface.h"
 #include "onsemi_i2c.h"
 #include "utils.h"
 #include "cam_eeprom_dev.h"
 //#include "asus_cam_sensor.h"
+#include <linux/delay.h>
 #include "asus_actuator.h"
 #undef  pr_fmt
 #define pr_fmt(fmt) "OIS-ATD %s(): " fmt, __func__
@@ -14,10 +16,11 @@
 #define	PROC_POWER	"driver/ois_power"
 #define	PROC_I2C_RW	"driver/ois_i2c_rw"
 #define	PROC_MODE	"driver/ois_mode"
-#define	PROC_CALI	"driver/ois_cali" 
+#define	PROC_CALI	"driver/ois_cali"
 #define PROC_RDATA  "driver/ois_rdata"
 #define	PROC_ATD_STATUS	"driver/ois_atd_status"
 #define PROC_VCM_ENABLE "driver/ois_vcm_enable" //for debug
+#define	PROC_SMA_EEPROM_DUMP	"driver/ois_sma_eeprom_dump" 
 //ASUS_BSP ASUS Factory use ---
 
 #define PROC_ON     "driver/ois_on"
@@ -27,8 +30,10 @@
 #define PROC_FW_UPDATE "driver/ois_fw_update"
 #define	PROC_MODULE	"driver/ois_module" //ASUS_BSP Lucien +++: Add OIS SEMCO module
 #define PROC_AF_ATATE  "driver/ois_af_state" //notify AF state
+#define PROC_OIS_GET_LENS_INFO "driver/ois_i2c_rw_lens_info"
 //OIS PROC DRIVER NODE ---
 #define RDATA_OUTPUT_FILE "/sdcard/gyro.csv"
+#define SMA_OFFSET_DUMP "/sdcard/sma_eeprom_dump"
 
 #define FACTORYDIR "/vendor/factory/"
 
@@ -43,7 +48,7 @@
 #define BATTERY_CAPACITY "/sys/class/power_supply/bms/capacity"
 #define BATTERY_THRESHOLD 3
 
-#define UPDATE_FW_AT_PROBE 0
+#define UPDATE_FW_AT_PROBE 1
 
 typedef enum {
 	CHECK_BAD_IO = -1,
@@ -70,7 +75,9 @@ typedef enum{
 	BAD_IO,
 	BAD_FW,
 }fw_trigger_result_t;
-
+#ifdef ZS670KS
+extern uint8_t eeprom_camera_specs; //ASUS_BSP Byron take this tag for distinguish device level
+#endif
 static struct cam_ois_ctrl_t * ois_ctrl[OIS_CLIENT_MAX] = {0};
 
 uint8_t g_ois_status[OIS_CLIENT_MAX] = {0};
@@ -111,7 +118,8 @@ static uint32_t g_dac_infinity_base[OIS_CLIENT_MAX] = {0};
 //static uint32_t g_lens_shift_10cm_to_50cm = 0;
 //static uint32_t g_lens_shift_10cm = 0;
 static uint8_t  g_verbose_log = 0;
-
+static uint32_t g_lens_position_reg[2] = {0};
+static void dump_sma_eeprom(struct cam_ois_ctrl_t *oisCtrl,uint32_t addr,uint8_t length);
 static void set_ssc_gain_if_need(uint32_t ois_index,uint32_t val,int32_t distance_cm);
 #if 0
 static void onsemi_read_check(struct cam_ois_ctrl_t *o_ctrl)
@@ -210,21 +218,27 @@ int get_ois_power_state(uint32_t index) {
 	}
 }
 static int32_t get_ois_ctrl(struct cam_ois_ctrl_t **o_ctrl) {
-	if(ois_ctrl[OIS_CLIENT_IMX686]->ois_on == 1) {
-		if(g_verbose_log)
-			pr_info("Select cleint IMX686\n");
-		*o_ctrl = ois_ctrl[OIS_CLIENT_IMX686];
-		return OIS_CLIENT_IMX686;
-	}else if(ois_ctrl[OIS_CLIENT_OV08A10]->ois_on == 1) {
-		if(g_verbose_log)
-			pr_info("Select cleint OV08A10\n");
-		*o_ctrl = ois_ctrl[OIS_CLIENT_OV08A10];
-		return OIS_CLIENT_OV08A10;
-	}else {
-		pr_err("cannot find mapping client ois ctrl\n");
-		*o_ctrl = NULL;
-		return -1;
+	uint8_t count = 0;
+	while(*o_ctrl == NULL && count < 100) {
+		if(ois_ctrl[OIS_CLIENT_IMX686]->ois_on == 1) {
+			if(g_verbose_log)
+				pr_info("Select cleint IMX686\n");
+			*o_ctrl = ois_ctrl[OIS_CLIENT_IMX686];
+			return OIS_CLIENT_IMX686;
+		}else if(ois_ctrl[OIS_CLIENT_OV08A10]->ois_on == 1) {
+			if(g_verbose_log)
+				pr_info("Select cleint OV08A10\n");
+			*o_ctrl = ois_ctrl[OIS_CLIENT_OV08A10];
+			return OIS_CLIENT_OV08A10;
+		}
+		count++;
+		msleep(20);
+		pr_info("wait %u sec for ois ctrl ready \n",count*20);
 	}
+
+	pr_err("cannot find mapping client ois ctrl\n");
+	*o_ctrl = NULL;
+	return -1;
 }
 static fw_trigger_result_t trigger_fw_update(struct cam_ois_ctrl_t *ctrl, uint8_t update_mode, uint8_t force_update, uint32_t* updated_version)
 {
@@ -1349,8 +1363,8 @@ static int process_rdata(int count,int32_t ois_index)
 		reg_addr[4] = 0x06A0;
 		reg_addr[5] = 0x06A2;
 	}
+	onsemi_get_ois_state(ois_ctrl[ois_index],&old_state);
 	//onsemi_ois_go_on(ois_ctrl);//servo and ois must be on
-
 	do_gettimeofday(&t1);
 	for(i=0;i<count;i++)
 	{
@@ -1372,8 +1386,9 @@ static int process_rdata(int count,int32_t ois_index)
 			break;
 		}
 
-		if(count%16 == 0)
-			delay_ms(1);
+		if(i!=0 && i%8 == 0) {
+			usleep_range(50,55);
+		}
 	}
 	do_gettimeofday(&t2);
 	pr_info("read %d times x,y values, cost %lld ms, each cost %lld us\n",
@@ -1653,6 +1668,55 @@ static const struct file_operations ois_vcm_enable_proc_fops = {
 	.release	= single_release,
 	.write		= ois_vcm_enable_write,
 };
+static int ois_sma_eeprom_dump_read(struct seq_file *buf, void *v)
+{
+	return 0;
+}
+static int ois_sma_eeprom_dump_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ois_sma_eeprom_dump_read, NULL);
+}
+
+static ssize_t ois_sma_eeprom_dump_write(struct file *dev, const char *buf, size_t len, loff_t *ppos)
+{
+#if 1
+	ssize_t ret_len;
+	char messages[8]="";
+
+	uint32_t addr;
+	uint8_t length;
+	struct cam_ois_ctrl_t *oisCtrl = NULL; get_ois_ctrl(&oisCtrl);
+	if(oisCtrl == NULL) {
+		pr_err("no ois ctrl to use\n");
+		return -1;
+	}
+	
+	ret_len = len;
+	if (len > 8) {
+		len = 8;
+	}
+	if (copy_from_user(messages, buf, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	sscanf(messages, "%x %u", &addr,&length);
+
+	pr_info("check addr(0x%x),length(%u)\n",addr,length);
+	dump_sma_eeprom(oisCtrl,addr,length);
+
+	return ret_len;
+	#endif
+}
+
+static const struct file_operations ois_sma_eerpom_dump_proc_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ois_sma_eeprom_dump_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+	.write		= ois_sma_eeprom_dump_write,
+};
 
 static int ois_af_state_read(struct seq_file *buf, void *v)
 {
@@ -1748,6 +1812,84 @@ void track_mode_change_from_i2c_write(struct cam_sensor_i2c_reg_setting * settin
 		}
 	}
 }
+static int ois_get_lens_info_read(struct seq_file *buf, void *v)
+{
+	uint32_t lens_position_val[2] = {0};
+	int rc;
+	struct timespec64 timeStamp;
+	uint64_t recordTimeStamp = 0;
+	//const uint64_t NanoSecondsPerSecond = 1000000000ULL;
+	struct cam_ois_ctrl_t *oisCtrl = NULL;
+	int32_t ois_index = get_ois_ctrl(&oisCtrl);
+	if(oisCtrl == NULL) return -1;
+	
+	mutex_lock(&oisCtrl->ois_mutex);
+
+	if(g_ois_power_state[ois_index])
+	{
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		oisCtrl->io_master_info.cci_client->sid = g_slave_id;
+
+		rc = onsemi_read_dword(oisCtrl,g_lens_position_reg[0],&lens_position_val[0]);
+		rc = onsemi_read_dword(oisCtrl,g_lens_position_reg[1],&lens_position_val[1]);
+			
+
+		get_monotonic_boottime64(&timeStamp); //ASUS_BSP Byron recod boot time since 1970
+		recordTimeStamp = (timeStamp.tv_sec * 1000000000) + (timeStamp.tv_nsec);
+		//pr_err("Byron check LensPostion value (0x%08x 0x%08x) (%llu)\n",lens_position_val[0],lens_position_val[1],recordTimeStamp);
+
+		seq_printf(buf,"%x %x %llu\n",lens_position_val[0],lens_position_val[1],recordTimeStamp);
+	}
+	else
+	{
+		seq_printf(buf,"POWER DOWN\n");
+	}
+
+	mutex_unlock(&oisCtrl->ois_mutex);
+
+	return 0;
+}
+
+static int ois_get_lens_info_open(struct inode *inode, struct  file *file)
+{
+	return single_open(file, ois_get_lens_info_read, NULL);
+}
+static ssize_t ois_get_lens_info_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
+{
+	ssize_t ret_len;
+	int n;
+	char messages[32]="";
+	uint32_t val[2];
+	struct cam_ois_ctrl_t *oisCtrl = NULL; get_ois_ctrl(&oisCtrl);
+	if(oisCtrl == NULL) return -1;
+	
+	ret_len = len;
+	if (len > 32) {
+		len = 32;
+	}
+	if (copy_from_user(messages, buff, len)) {
+		pr_err("%s command fail !!\n", __func__);
+		return -EFAULT;
+	}
+
+	n = sscanf(messages,"%x %x",&val[0],&val[1]);
+
+	mutex_lock(&oisCtrl->ois_mutex);
+	g_lens_position_reg[0] = val[0];
+	g_lens_position_reg[1] = val[1];
+	//pr_err("Byron check LensPostion (0x%04x,0x%04x)\n",g_lens_position_reg[0],g_lens_position_reg[1]);
+	mutex_unlock(&oisCtrl->ois_mutex);
+
+	return ret_len;
+}
+static const struct file_operations ois_get_lens_info_fops = {
+	.owner = THIS_MODULE,
+	.open = ois_get_lens_info_open,
+	.read = seq_read,
+	.write = ois_get_lens_info_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
 
 static void create_proc_file(const char *PATH,const struct file_operations* f_ops)
 {
@@ -1797,7 +1939,8 @@ static void create_ois_proc_files_factory(void)
 		create_proc_file(PROC_FW_UPDATE, &ois_update_fw_proc_fops);
 		create_proc_file(PROC_MODULE, &ois_module_proc_fops);//ATD ASUS_BSP Lucien +++: Add OIS SEMCO module
 		create_proc_file(PROC_VCM_ENABLE, &ois_vcm_enable_proc_fops);
-
+		create_proc_file(PROC_SMA_EEPROM_DUMP, &ois_sma_eerpom_dump_proc_fops);
+		create_proc_file(PROC_OIS_GET_LENS_INFO,&ois_get_lens_info_fops);
 		has_created = 1;
 	}
 	else
@@ -1843,8 +1986,12 @@ void ois_probe_check(uint16_t sensor_id)
 #if UPDATE_FW_AT_PROBE
 	fw_trigger_result_t trigger_result;
 #endif
+#ifdef ZS670KS
+	const uint8_t device_high_level_check = 0x6b;
+#endif
 	struct cam_ois_ctrl_t *oisCtrl;
 	int32_t ois_index;
+	
 	if(sensor_id == 0x0686){
 		oisCtrl = ois_ctrl[OIS_CLIENT_IMX686];
 		ois_index = OIS_CLIENT_IMX686;
@@ -1855,7 +2002,13 @@ void ois_probe_check(uint16_t sensor_id)
 		pr_info("no ois with sensor id(0x%x)\n",sensor_id);
 		return;
 	}
-	
+	#ifdef ZS670KS
+	pr_info("eeprom_camera_specs = 0x%x\n",eeprom_camera_specs);
+	if(eeprom_camera_specs != device_high_level_check) {
+		pr_info("with low level device, no ois to probe\n");
+		return;
+	}
+	#endif
 	if(oisCtrl == NULL)
 	{
 		#if defined(ASUS_DXO) ||defined(ZS670KS)
@@ -2220,3 +2373,44 @@ void asus_ois_init(struct cam_ois_ctrl_t * ctrl)
 	//onsemi_get_50cm_to_10cm_lens_shift(&g_lens_shift_10cm_to_50cm);//TODO
 	//onsemi_get_10cm_lens_shift(&g_lens_shift_10cm);//TODO
 }
+//ASUS_BSP Byron add for sma eeprom dump +++
+static void dump_sma_eeprom(struct cam_ois_ctrl_t *oisCtrl,uint32_t addr,uint8_t length) {
+	const uint32_t addr_offset = 0x01320300;
+	uint32_t check_value;
+	uint8_t i=0;
+	uint32_t *data;
+	data	= (uint32_t *)kzalloc(sizeof(uint32_t)*length,GFP_KERNEL);
+	if(data == NULL) {
+		pr_err("no memory to alloc\n");
+	}
+
+	for(i=0;i<length;i++) {
+		addr += i;
+		onsemi_write_dword(oisCtrl,0xF01E, 0x01320200);
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		onsemi_write_dword(oisCtrl,0xF01E, (addr_offset+addr));
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		onsemi_write_dword(oisCtrl,0xF01E, 0x01320401);
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		onsemi_write_dword(oisCtrl,0xF01D, 0x01320600);
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		onsemi_read_dword(oisCtrl,0xF01D, &check_value);
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		if(check_value != 0x40) {
+			pr_err("get addr(0x%02x) failed, check value is = 0x%x\n",addr,check_value);
+			break;
+		}
+		onsemi_write_dword(oisCtrl,0xF01D, 0x01320000);
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		onsemi_read_dword(oisCtrl,0xF01D, (data+i));
+		ZF7_WaitProcess(oisCtrl,0,__func__);
+		pr_info("get data from addr(0x%02x)= 0x%02x\n",addr,*(data+i));
+	}
+	if(sysfs_write_byte_from_dword_seq(SMA_OFFSET_DUMP,data,length)) {
+		pr_err("write file failed\n");
+	}
+	kfree(data);
+	return;
+
+}
+//ASUS_BSP Byron add for sma eeprom dump ---

@@ -24,6 +24,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/timer.h>
 #include <linux/err.h>
+#include <drm/drm_panel.h>
+#include <linux/of.h>
 
 #include "gf_spi.h"
 
@@ -33,6 +35,45 @@
 #elif defined(USE_PLATFORM_BUS)
 #include <linux/platform_device.h>
 #endif
+
+int parse_dt_panel(struct gf_dev *gf_dev)
+{
+	int i;
+	int count;
+    struct device_node *panel_node = NULL;
+	struct drm_panel *panel;
+
+    struct device *dev = &gf_dev->spi->dev;
+	struct device_node *node = dev->of_node;
+	pr_err("gf:parse_dt_panel start\n");
+	count = of_count_phandle_with_args(node, "panel", NULL);
+	pr_err("gf:parse_dt_panel , count = %d \n" , count);
+	if (count <= 0)
+		return -1;
+
+	for (i = 0; i < count; i++) {
+		panel_node = of_parse_phandle(node, "panel", i);
+		if( panel_node == NULL ){
+			pr_err("gf:parse_dt_panel ,panel_node == NULL\n");
+		}
+		panel = of_drm_find_panel(panel_node);
+		if( panel == NULL ){
+			pr_err("gf:parse_dt_panel ,panel == NULL\n");
+		}
+		of_node_put(panel_node);
+		pr_err("gf:parse_dt_panel ---64---\n");
+		if (!IS_ERR(panel)) {
+			gf_dev->active_panel_asus = panel;
+			pr_err("gf:parse_dt_panel , return 0\n");
+			return 0;
+		}else{
+			pr_err("gf:parse_dt_panel , %d\n",PTR_ERR(panel));
+		}
+	}
+    pr_err("gf:parse_dt_panel end\n");
+	return 0;
+}
+
 
 int gf_parse_dts(struct gf_dev *gf_dev)
 {
@@ -92,7 +133,8 @@ int gf_parse_dts(struct gf_dev *gf_dev)
 	if (rc) {
 		pr_err("failed to request power gpio, rc = %d\n", rc);
 	}
-	pr_err("gf_parse_dts end!\n");
+
+	pr_err("gf_parse_dts end! , rc = %d\n" ,rc);
 	return rc;
 err_irq:
 	devm_gpio_free(dev, gf_dev->irq_gpio);

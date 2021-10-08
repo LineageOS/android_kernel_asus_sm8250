@@ -44,7 +44,6 @@
 atomic_t aod_processing;
 bool allow_report_zenmotion = true;
 bool call_state = false;
-bool KEY_L_event = false;
 int data_x = 0, data_y = 0, data_w = 200;
 
 extern bool asus_var_regulator_always_on;
@@ -76,7 +75,6 @@ struct gesture_module {
 	atomic_t aod_enable;
 	atomic_t music_control;
 	atomic_t fp_wakeup;
-	atomic_t key_L_count;
 // ASUS_BSP --- Touch
 };
 
@@ -89,7 +87,6 @@ static void zenmotion_setting(const char *buf, size_t count);
 void enable_aod_processing(bool en);
 bool get_aod_processing(void);
 static void input_switch_key(struct input_dev *dev, unsigned int code);
-static void gsx_dclick_delaywork(struct work_struct *work);
 // ASUS_BSP --- Touch
 /**
  * gsx_gesture_type_show - show valid gesture type
@@ -626,15 +623,12 @@ static int gsx_gesture_init(struct goodix_ts_core *core_data,
 	atomic_set(&gsx_gesture->aod_enable, 0);
 	atomic_set(&gsx_gesture->zen_motion, 0);
 	atomic_set(&gsx_gesture->fp_wakeup, 0);
-	atomic_set(&gsx_gesture->key_L_count, 0);
 	atomic_set(&gsx_gesture->music_control, 0);
 	check_power();
 	
 	proc_create(GESTURE_TYPE, 0666, NULL, &asus_gesture_proc_type_ops);
 	proc_create(DCLICK, 0666, NULL, &asus_gesture_proc_dclick_ops);
 	proc_create(SWIPEUP, 0666, NULL, &asus_gesture_proc_swipeup_ops);
-	
-	INIT_DELAYED_WORK(&core_data->dclick_work, gsx_dclick_delaywork);
 // ASUS_BSP --- Touch
 
 exit_gesture_init:
@@ -651,7 +645,6 @@ static int gsx_gesture_exit(struct goodix_ts_core *core_data,
 	atomic_set(&gsx_gesture->aod_enable, 0);
 	atomic_set(&gsx_gesture->zen_motion, 0);
 	atomic_set(&gsx_gesture->fp_wakeup, 0);
-	atomic_set(&gsx_gesture->key_L_count, 0);
 	atomic_set(&gsx_gesture->music_control, 0);
 	check_power();
 // ASUS_BSP --- Touch
@@ -912,30 +905,6 @@ bool get_aod_processing(void)
 		return false;
 }
 EXPORT_SYMBOL_GPL(get_aod_processing);
-
-bool wait_dclick(void) 
-{
-	if((atomic_read(&gsx_gesture->dclick)==1) && 
-		(atomic_read(&gsx_gesture->aod_enable)==1) &&
-		(KEY_L_event == true))
-		return true;
-	else
-		return false;
-}
-EXPORT_SYMBOL_GPL(wait_dclick);
-
-static void gsx_dclick_delaywork(struct work_struct *work)
-{
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct goodix_ts_core *core_data = container_of(dwork,
-			struct goodix_ts_core, dclick_work);
-
-	if(atomic_read(&gsx_gesture->key_L_count) > 1) {
-		report_gesture_key(core_data->input_dev, 0xcc);
-		ts_info("KEY_L count = %d", atomic_read(&gsx_gesture->key_L_count));
-	}
-	atomic_set(&gsx_gesture->key_L_count, 0);
-}
 // ASUS_BSP --- Touch
 
 /**
@@ -973,7 +942,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *core_data,
 					 temp_data, key_data_len);
 	if (ret < 0 || ((temp_data[0] & GOODIX_GESTURE_EVENT)  == 0)) {
 		ts_debug("invalid gesture event, ret=%d, temp_data[0]=0x%x",
-					ret, temp_data[0]);
+			 ret, temp_data[0]);
 		goto re_send_ges_cmd;
 	}
 	if (ts_dev->ic_type == IC_TYPE_YELLOWSTONE) // 9896
@@ -1019,23 +988,6 @@ static int gsx_gesture_ist(struct goodix_ts_core *core_data,
 
 	if (QUERYBIT(gsx_gesture->gesture_type, gsx_type)) {
 		/* do resume routine */
-
-#if 0 // Disable Dclick = KEY_Lx2  FW(19)/CFG(21) 
-		if(atomic_read(&gsx_gesture->dclick)==1) {
-			if (temp_data[4] == 0x4C){
-				if(atomic_read(&gsx_gesture->key_L_count) == 0) {
-					if(atomic_read(&gsx_gesture->aod_enable)==1)
-						report_gesture_key(core_data->input_dev, 'L');
-					schedule_delayed_work(&core_data->dclick_work, 0.3 * HZ);
-				}
-				atomic_inc(&gsx_gesture->key_L_count);
-				enable_irq_wake(core_data->irq);
-				ts_dev->hw_ops->write_trans(ts_dev, ts_dev->reg.gesture,
-				    &clear_reg, 1);
-				return EVT_CANCEL_RESUME;
-			}
-		}
-#endif
 		if(atomic_read(&gsx_gesture->aod_enable)==1) {
 			if (temp_data[4] == 0x46){
 				//ts_info("Get KEY_F X and Y");
@@ -1061,18 +1013,7 @@ static int gsx_gesture_ist(struct goodix_ts_core *core_data,
 			}
 		}
 // ASUS_BSP +++ Touch
-#if 0
-		ts_info("Gesture match success, resume IC");
-		input_report_key(core_data->input_dev, KEY_POWER, 1);
-		input_sync(core_data->input_dev);
-		input_report_key(core_data->input_dev, KEY_POWER, 0);
-		input_sync(core_data->input_dev);
-#else
 		ts_info("key event : %x", gsx_type);
-		if(gsx_type == 0x4c)
-			KEY_L_event = true;
-		else
-			KEY_L_event = false;
 		r = report_gesture_key(core_data->input_dev,gsx_type);
 		if (r == 1) { 
 			goto gesture_ist_exit; // irq handled
@@ -1081,8 +1022,8 @@ static int gsx_gesture_ist(struct goodix_ts_core *core_data,
 		} else if (r == 3) {
 			goto FOD_exit;
 		}
-#endif
 // ASUS_BSP --- Touch
+
 		goto gesture_ist_exit;
 	} else {
 		ts_info("Unsupported gesture:%x", gsx_type);
@@ -1092,7 +1033,6 @@ re_send_ges_cmd:
 	if (gsx_enter_gesture_mode(core_data->ts_dev))
 		ts_info("warning: failed re_send gesture cmd\n");
 gesture_ist_exit:
-	ts_info("gesture go -- (%d)", __LINE__);
 	ts_dev->hw_ops->write_trans(ts_dev, ts_dev->reg.gesture,
 				    &clear_reg, 1);
 	return EVT_CANCEL_IRQEVT;
@@ -1110,8 +1050,6 @@ FOD_exit:
 	ts_dev->hw_ops->write_trans(ts_dev, ts_dev->reg.gesture,
 				    &clear_reg, 1);
 	enable_irq_wake(core_data->irq);
-	ts_info("gesture go -- (%d)", __LINE__);
-
 	return EVT_CANCEL_RESUME;
 }
 

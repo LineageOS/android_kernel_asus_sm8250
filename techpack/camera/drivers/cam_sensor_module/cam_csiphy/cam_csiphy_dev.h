@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _CAM_CSIPHY_DEV_H_
@@ -53,6 +53,7 @@
 #define CSIPHY_DNP_PARAMS                4
 #define CSIPHY_2PH_REGS                  5
 #define CSIPHY_3PH_REGS                  6
+#define CSIPHY_SKEW_CAL                  7
 
 #define CSIPHY_MAX_INSTANCES     2
 
@@ -86,6 +87,7 @@ enum cam_csiphy_state {
  * @mipi_csiphy_interrupt_clear0_addr:
  *     CSIPhy interrupt clear addr
  * @csiphy_version: CSIPhy Version
+ * @csiphy_interrupt_status_size: CSIPhy status register size
  * @csiphy_common_array_size: CSIPhy common array size
  * @csiphy_reset_array_size: CSIPhy reset array size
  * @csiphy_2ph_config_array_size: 2ph settings size
@@ -107,6 +109,7 @@ struct csiphy_reg_parms_t {
 	uint32_t mipi_csiphy_interrupt_mask_addr;
 	uint32_t mipi_csiphy_interrupt_clear0_addr;
 	uint32_t csiphy_version;
+	uint32_t csiphy_interrupt_status_size;
 	uint32_t csiphy_common_array_size;
 	uint32_t csiphy_reset_array_size;
 	uint32_t csiphy_2ph_config_array_size;
@@ -219,7 +222,7 @@ struct csiphy_ctrl_t {
  * @data_rate     :  Data rate in mbps
  * @data_rate_combo_sensor: data rate of combo sensor
  *                          in the the same phy
- *
+ * @mipi_flags    :  Mipi flags
  */
 struct cam_csiphy_param {
 	uint16_t    lane_mask;
@@ -232,6 +235,7 @@ struct cam_csiphy_param {
 	uint64_t    settle_time_combo_sensor;
 	uint64_t    data_rate;
 	uint64_t    data_rate_combo_sensor;
+	uint32_t    mipi_flags;
 };
 
 /**
@@ -289,6 +293,7 @@ struct csiphy_device {
 	struct cam_hw_soc_info   soc_info;
 	uint32_t cpas_handle;
 	uint32_t config_count;
+	uint32_t open_cnt;
 	uint64_t csiphy_cpas_cp_reg_mask[CSIPHY_MAX_INSTANCES];
 };
 

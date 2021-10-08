@@ -27,6 +27,8 @@
 #include "ipa_qmi_service.h"
 #include <linux/rmnet_ipa_fd_ioctl.h>
 #include <linux/ipa.h>
+#include <linux/ip.h> /*AS-K Log Wake Up IP Address Info+*/
+#include <linux/ipv6.h> /*AS-K Log Wake Up IP Address Info+*/
 #include <uapi/linux/msm_rmnet.h>
 #include <net/rmnet_config.h>
 #include "ipa_mhi_proxy.h"
@@ -66,6 +68,7 @@
 
 static void rmnet_ipa_free_msg(void *buff, u32 len, u32 type);
 static void rmnet_ipa_get_stats_and_update(void);
+extern int ipa_resume_irq_flag_function(void);/*AS-K Log Wake Up IP Address Info+*/
 
 static int ipa3_wwan_add_ul_flt_rule_to_ipa(void);
 static int ipa3_wwan_del_ul_flt_rule_to_ipa(void);
@@ -1424,6 +1427,27 @@ static void apps_ipa_packet_receive_notify(void *priv,
 		struct sk_buff *skb = (struct sk_buff *)data;
 		int result;
 		unsigned int packet_len = skb->len;
+
+		/*AS-K Log Wake Up IP Address Info+*/
+		if (ipa_resume_irq_flag_function() == 1 ) {
+			struct iphdr *ip4h;
+			struct ipv6hdr *ip6h;
+			unsigned char *map_payload;
+			unsigned char ip_version;
+			map_payload = (unsigned char *)(skb->data + sizeof(struct rmnet_map_header_s));
+			ip_version = (*map_payload & 0xF0) >> 4;
+
+			if (ip_version == 0x04) {
+				ip4h = (struct iphdr *) map_payload;
+				pr_err_ratelimited("[WakeUpInfo-IPA] IP4 src: %pI4", &ip4h->saddr);
+				ASUSEvtlog("[WakeUpInfo-IPA] IP4 src: %pI4", &ip4h->saddr);
+			} else if (ip_version == 0x06) {
+				ip6h = (struct ipv6hdr *) map_payload;
+				pr_err_ratelimited("[WakeUpInfo-IPA] IP6 src: %pI6", &ip6h->saddr);
+				ASUSEvtlog("[WakeUpInfo-IPA] IP6 src: %pI6", &ip6h->saddr);
+			}
+		}
+		/*AS-K Log Wake Up IP Address Info-*/
 
 		IPAWANDBG_LOW("Rx packet was received");
 		skb->dev = IPA_NETDEV();

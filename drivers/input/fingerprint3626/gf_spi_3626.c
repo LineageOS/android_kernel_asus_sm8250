@@ -42,10 +42,10 @@
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
 #include <linux/timer.h>
-#include <linux/notifier.h>
-#include <linux/fb.h>
+#include <drm/drm_panel.h>
 #include <linux/pm_qos.h>
 #include <linux/cpufreq.h>
+#include <linux/pm_wakeup.h>
 #include "gf_spi.h"
 
 #if defined(USE_SPI_BUS)
@@ -76,7 +76,6 @@ static int SPIDEV_MAJOR;
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 static LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
-static struct wakeup_source fp_wakelock;
 static struct gf_dev gf;
 
 static struct gf_key_map maps[] = {
@@ -96,7 +95,7 @@ static struct gf_key_map maps[] = {
 	{ EV_KEY, GF_NAV_INPUT_LONG_PRESS },
 //	{ EV_KEY, GF_NAV_INPUT_HEAVY }, //remove unused key;asus_bsp++;
 #endif
-};
+}; 
 
 static void gf_enable_irq(struct gf_dev *gf_dev)
 {
@@ -509,9 +508,9 @@ static irqreturn_t gf_irq(int irq, void *handle)
 {
 #if defined(GF_NETLINK_ENABLE)
 	char msg = GF_NET_EVENT_IRQ;
-
+    struct gf_dev *gf_dev = &gf;
 	//wake_lock_timeout(&fp_wakelock, msecs_to_jiffies(WAKELOCK_HOLD_TIME));
-	__pm_wakeup_event(&fp_wakelock, WAKELOCK_HOLD_TIME);
+	__pm_wakeup_event(gf_dev->ws, WAKELOCK_HOLD_TIME);
 	sendnlmsg(&msg);
 #elif defined(GF_FASYNC)
 	struct gf_dev *gf_dev = &gf;
@@ -551,6 +550,17 @@ static int gf_open(struct inode *inode, struct file *filp)
         pr_info("No device for minor %d\n", iminor(inode));
     }
 	mutex_unlock(&device_list_lock);
+
+	status = parse_dt_panel(gf_dev);
+	if (status < 0)
+		pr_err("gf_open:parse_dt_panel fail\n");
+	if (gf_dev->active_panel_asus  !=  NULL) {
+        if (drm_panel_notifier_register(gf_dev->active_panel_asus, &gf_dev->notifier) < 0)
+		     pr_err("gf_open:Failed to drm_panel_notifier_register");
+	}else{
+		pr_err("gf_open:Failed to drm_panel_notifier_register, gf_dev->active_panel_asus is null");
+	}
+
 	return status;
 }
 
@@ -574,6 +584,11 @@ static int gf_release(struct inode *inode, struct file *filp)
 	mutex_lock(&device_list_lock);
 	gf_dev = filp->private_data;
 	filp->private_data = NULL;
+    pr_err("gf_release , drm_panel_notifier_unregister");
+    if (gf_dev->active_panel_asus  !=  NULL) {
+        if (drm_panel_notifier_unregister(gf_dev->active_panel_asus, &gf_dev->notifier) < 0)
+		     pr_err("Failed to drm_panel_notifier_unregister");
+	}
 
 	/*last close?? */
 	gf_dev->users--;
@@ -609,19 +624,21 @@ static int goodix_fb_state_chg_callback(struct notifier_block *nb,
 		unsigned long val, void *data)
 {
 	struct gf_dev *gf_dev;
-	struct fb_event *evdata = data;
+	struct drm_panel_notifier *evdata = data;
 	int blank;
 	char msg = 0;
 
-	if (val != FB_EARLY_EVENT_BLANK)
+	if (val != DRM_PANEL_EARLY_EVENT_BLANK)
 		return 0;
-	pr_info("[info] %s go to the goodix_fb_state_chg_callback value = %d\n",
+	pr_err("[info] %s go to the goodix_fb_state_chg_callback value = %d\n",
 			__func__, (int)val);
 	gf_dev = container_of(nb, struct gf_dev, notifier);
-	if (evdata && evdata->data && val == FB_EARLY_EVENT_BLANK && gf_dev) {
+	if (evdata && evdata->data && val == DRM_PANEL_EARLY_EVENT_BLANK && gf_dev) {
 		blank = *(int *)(evdata->data);
+		pr_err("[info] %s go to the goodix_fb_state_chg_callback blank = %d\n",
+			__func__, blank);
 		switch (blank) {
-		case FB_BLANK_POWERDOWN:
+		case DRM_PANEL_BLANK_POWERDOWN:
 			gf_dev->fb_black = 1;
 #if defined(GF_NETLINK_ENABLE)
 			msg = GF_NET_EVENT_FB_BLACK;
@@ -632,7 +649,7 @@ static int goodix_fb_state_chg_callback(struct notifier_block *nb,
 #endif
 			break;
 
-		case FB_BLANK_UNBLANK:
+		case DRM_PANEL_BLANK_UNBLANK:
 			gf_dev->fb_black = 0;
 #if defined(GF_NETLINK_ENABLE)
 			msg = GF_NET_EVENT_FB_UNBLACK;
@@ -666,7 +683,7 @@ static int gf_probe(struct platform_device *pdev)
 	int status = -EINVAL;
 	unsigned long minor;
 	int i;
-
+    struct device *dev;
 	/* Initialize the driver data */
 	INIT_LIST_HEAD(&gf_dev->device_entry);
 #if defined(USE_SPI_BUS)
@@ -689,8 +706,6 @@ static int gf_probe(struct platform_device *pdev)
 	mutex_lock(&device_list_lock);
 	minor = find_first_zero_bit(minors, N_SPI_MINORS);
 	if (minor < N_SPI_MINORS) {
-		struct device *dev;
-
 		gf_dev->devt = MKDEV(SPIDEV_MAJOR, minor);
 		dev = device_create(gf_class, &gf_dev->spi->dev, gf_dev->devt,
 				gf_dev, GF_DEV_NAME);
@@ -742,11 +757,10 @@ static int gf_probe(struct platform_device *pdev)
 #endif
 
 	gf_dev->notifier = goodix_noti_block;
-	fb_register_client(&gf_dev->notifier);
 
 	gf_dev->irq = gf_irq_num(gf_dev);
 
-	wakeup_source_init(&fp_wakelock, "fp_wakelock");
+	gf_dev->ws = wakeup_source_register(dev, "fp_wakelock");
 	status = request_threaded_irq(gf_dev->irq, NULL, gf_irq,
 			IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 			"gf", gf_dev);
@@ -798,7 +812,7 @@ static int gf_remove(struct platform_device *pdev)
 {
 	struct gf_dev *gf_dev = &gf;
 
-	wakeup_source_trash(&fp_wakelock);
+	wakeup_source_unregister(gf_dev->ws);
 	/* make sure ops on existing fds can abort cleanly */
 	if (gf_dev->irq)
 		free_irq(gf_dev->irq, gf_dev);
@@ -815,8 +829,6 @@ static int gf_remove(struct platform_device *pdev)
 	if (gf_dev->users == 0)
 		gf_cleanup(gf_dev);
 
-
-	fb_unregister_client(&gf_dev->notifier);
 	mutex_unlock(&device_list_lock);
 
 	return 0;

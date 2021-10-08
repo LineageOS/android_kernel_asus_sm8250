@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.*/
 
 #ifndef __MSM_PCIE_H
 #define __MSM_PCIE_H
@@ -21,6 +21,7 @@ enum msm_pcie_pm_opt {
 	MSM_PCIE_RESUME,
 	MSM_PCIE_DISABLE_PC,
 	MSM_PCIE_ENABLE_PC,
+	MSM_PCIE_HANDLE_LINKDOWN,
 };
 
 enum msm_pcie_event {
@@ -31,6 +32,7 @@ enum msm_pcie_event {
 	MSM_PCIE_EVENT_L1SS_TIMEOUT = BIT(3),
 	MSM_PCIE_EVENT_DRV_CONNECT = BIT(4),
 	MSM_PCIE_EVENT_DRV_DISCONNECT = BIT(5),
+	MSM_PCIE_EVENT_LINK_RECOVER = BIT(6),
 };
 
 enum msm_pcie_trigger {

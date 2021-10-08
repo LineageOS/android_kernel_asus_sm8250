@@ -46,9 +46,9 @@ int asus_current_fps = 144;
 bool asus_fps_overriding = false;
 
 extern bool asus_display_in_aod(void);
+extern bool asus_display_in_normal_on(void);
 /* ASUS BSP Display --- */
 
-/* ASUS BSP DP +++ */
 extern bool g_station_pm_suspend;
 EXPORT_SYMBOL(asus_current_fps);
 #endif
@@ -645,8 +645,8 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 			memcpy(&old_crtc_state->mode, asus_drm_display_mode, sizeof(struct drm_display_mode));
 		}
 
-		if (!strcmp(crtc->name, "crtc-0") && need_change_fps && asus_display_in_aod()) {
-			printk("[Display] skip dfps in AOD doze mode\n");
+		if (!strcmp(crtc->name, "crtc-0") && need_change_fps && (asus_display_in_aod() || !asus_display_in_normal_on())) {
+			printk("[Display] skip dfps in AOD doze or OFF mode\n");
 			memcpy(&new_crtc_state->mode, asus_drm_display_mode, sizeof(struct drm_display_mode));
 			asus_current_fps = new_crtc_state->mode.vrefresh;
 			need_change_fps = false;

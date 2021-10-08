@@ -1,14 +1,13 @@
 /dts-v1/;
 /plugin/;
 
-#include "zs670ks-er-asus-overlay.dts"
+#include "zs670ks-er2-asus-overlay.dts"
 
 / {
 	model = "Qualcomm Technologies, Inc. kona ZF7 PR";
 	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
 	qcom,board-id = <80 0>;
 };
-
 
 
 /*    ====================================

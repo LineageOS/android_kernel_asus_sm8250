@@ -1512,7 +1512,6 @@ static int __cam_isp_ctx_epoch_in_applied(struct cam_isp_context *ctx_isp,
 		request_id = req->request_id;
 		ctx_isp->reported_req_id = request_id;
 	}
-
 	__cam_isp_ctx_send_sof_timestamp(ctx_isp, request_id,
 		CAM_REQ_MGR_SOF_EVENT_ERROR);
 	__cam_isp_ctx_update_event_record(ctx_isp,
@@ -1951,8 +1950,14 @@ end:
 		if (notify.error == CRM_KMD_ERR_FATAL) {
 			req_msg.session_hdl = ctx_isp->base->session_hdl;
 			req_msg.u.err_msg.device_hdl = ctx_isp->base->dev_hdl;
-			req_msg.u.err_msg.error_type =
-				CAM_REQ_MGR_ERROR_TYPE_RECOVERY;
+
+			if (error_type == CAM_ISP_HW_ERROR_CSID_FATAL)
+				req_msg.u.err_msg.error_type =
+					CAM_REQ_MGR_ERROR_TYPE_FULL_RECOVERY;
+			else
+				req_msg.u.err_msg.error_type =
+					CAM_REQ_MGR_ERROR_TYPE_RECOVERY;
+
 			req_msg.u.err_msg.link_hdl = ctx_isp->base->link_hdl;
 			req_msg.u.err_msg.request_id = error_request_id;
 			req_msg.u.err_msg.resource_size = 0x0;
@@ -2746,9 +2751,8 @@ hw_dump:
 	ctx_isp = (struct cam_isp_context *) ctx->ctx_priv;
 	req_isp = (struct cam_isp_ctx_req *) req->req_priv;
 	cur_time = ktime_get();
-	diff = ktime_us_delta(
-		req_isp->event_timestamp[CAM_ISP_CTX_EVENT_APPLY],
-		cur_time);
+	diff = ktime_us_delta(cur_time,
+		req_isp->event_timestamp[CAM_ISP_CTX_EVENT_APPLY]);
 	if (diff < CAM_ISP_CTX_RESPONSE_TIME_THRESHOLD) {
 		CAM_INFO(CAM_ISP, "req %lld found no error",
 			req->request_id);
@@ -3373,7 +3377,7 @@ static int __cam_isp_ctx_rdi_only_sof_in_bubble_state(
 static int __cam_isp_ctx_rdi_only_reg_upd_in_bubble_applied_state(
 	struct cam_isp_context *ctx_isp, void *evt_data)
 {
-	struct cam_ctx_request  *req;
+	struct cam_ctx_request  *req = NULL;
 	struct cam_context      *ctx = ctx_isp->base;
 	struct cam_isp_ctx_req  *req_isp;
 	struct cam_req_mgr_trigger_notify  notify;
@@ -4221,6 +4225,11 @@ end:
 	return rc;
 }
 
+static void cam_req_mgr_process_workq_offline_ife_worker(struct work_struct *w)
+{
+	cam_req_mgr_process_workq(w);
+}
+
 static int __cam_isp_ctx_acquire_hw_v2(struct cam_context *ctx,
 	void *args)
 {
@@ -4345,7 +4354,8 @@ static int __cam_isp_ctx_acquire_hw_v2(struct cam_context *ctx,
 		ctx_isp->offline_context = true;
 
 		rc = cam_req_mgr_workq_create("offline_ife", 20,
-			&ctx_isp->workq, CRM_WORKQ_USAGE_IRQ, 0);
+			&ctx_isp->workq, CRM_WORKQ_USAGE_IRQ, 0,
+			cam_req_mgr_process_workq_offline_ife_worker);
 		if (rc)
 			CAM_ERR(CAM_ISP,
 				"Failed to create workq for offline IFE rc:%d",
@@ -4639,7 +4649,7 @@ static int __cam_isp_ctx_start_dev_in_ready(struct cam_context *ctx,
 		ctx->state = CAM_CTX_READY;
 		trace_cam_context_state("ISP", ctx);
 		if (rc == -ETIMEDOUT)
-			rc = cam_isp_ctx_dump_req(req_isp, 0, 0, NULL, false);
+			cam_isp_ctx_dump_req(req_isp, 0, 0, NULL, false);
 		list_del_init(&req->list);
 		list_add(&req->list, &ctx->pending_req_list);
 		goto end;

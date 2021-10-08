@@ -38,6 +38,7 @@ enum MHI_CB {
 	MHI_CB_EE_MISSION_MODE,
 	MHI_CB_SYS_ERROR,
 	MHI_CB_FATAL_ERROR,
+	MHI_CB_FW_FALLBACK_IMG,
 };
 
 /**
@@ -260,6 +261,7 @@ struct mhi_controller {
 
 	/* mmio base */
 	phys_addr_t base_addr;
+	unsigned int len;
 	void __iomem *regs;
 	void __iomem *bhi;
 	void __iomem *bhie;
@@ -283,10 +285,12 @@ struct mhi_controller {
 
 	/* fw images */
 	const char *fw_image;
+	const char *fw_image_fallback;
 	const char *edl_image;
 
 	/* mhi host manages downloading entire fbc images */
 	bool fbc_download;
+	bool rddm_supported;
 	size_t rddm_size;
 	size_t sbl_size;
 	size_t seg_len;
@@ -351,7 +355,7 @@ struct mhi_controller {
 	/* worker for different state transitions */
 	struct work_struct st_worker;
 	struct work_struct special_work;
-	struct workqueue_struct *special_wq;
+	struct workqueue_struct *wq;
 
 	wait_queue_head_t state_event;
 
@@ -607,6 +611,30 @@ void mhi_device_get(struct mhi_device *mhi_dev, int vote);
 int mhi_device_get_sync(struct mhi_device *mhi_dev, int vote);
 
 /**
+ * mhi_device_get_sync_atomic - Asserts device_wait and moves device to M0
+ * @mhi_dev: Device associated with the channels
+ * @timeout_us: timeout, in micro-seconds
+ *
+ * The device_wake is asserted to keep device in M0 or bring it to M0.
+ * If device is not in M0 state, then this function will wait for device to
+ * move to M0, until @timeout_us elapses.
+ * However, if device's M1 state-change event races with this function
+ * then there is a possiblity of device moving from M0 to M2 and back
+ * to M0. That can't be avoided as host must transition device from M1 to M2
+ * as per the spec.
+ * Clients can ignore that transition after this function returns as the device
+ * is expected to immediately  move from M2 to M0 as wake is asserted and
+ * wouldn't enter low power state.
+ *
+ * Returns:
+ * 0 if operation was successful (however, M0 -> M2 -> M0 is possible later) as
+ * mentioned above.
+ * -ETIMEDOUT is device faled to move to M0 before @timeout_us elapsed
+ * -EIO if the MHI state is one of the ERROR states.
+ */
+int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev, int timeout_us);
+
+/**
  * mhi_device_put - re-enable low power modes
  * @mhi_dev: Device associated with the channels
  * @vote: vote to remove
@@ -812,6 +840,12 @@ int mhi_get_remote_time_sync(struct mhi_device *mhi_dev,
  * @mhi_cntrl: MHI controller
  */
 enum mhi_dev_state mhi_get_mhi_state(struct mhi_controller *mhi_cntrl);
+
+/**
+ * mhi_get_exec_env - Return execution environment of the device
+ * @mhi_cntrl: MHI controller
+ */
+enum mhi_ee mhi_get_exec_env(struct mhi_controller *mhi_cntrl);
 
 /**
  * mhi_set_mhi_state - Set device state

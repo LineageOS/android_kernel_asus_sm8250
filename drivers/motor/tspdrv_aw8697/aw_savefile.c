@@ -24,7 +24,8 @@ static int aw8697_write_cali_to_file(unsigned int cali_re, int channel, int type
 	//if (channel == AW882XX_CHANNLE_RIGHT)
 	//	pos = AW_INT_DEC_DIGIT;
 
-	snprintf(buf, PAGE_SIZE, "%d", cali_re);
+	//snprintf(buf, PAGE_SIZE, "%d", cali_re);
+	snprintf(buf, 50, "%d", cali_re);
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);

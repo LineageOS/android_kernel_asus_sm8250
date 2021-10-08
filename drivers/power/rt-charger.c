@@ -26,7 +26,7 @@
 #include <linux/usb/pd_policy_engine.h>
 #include <linux/usb.h>
 #include "supply/qcom/smb5-lib.h"
-#include <linux/wakelock.h>
+#include <linux/pm_wakeup.h>
 
 extern struct smb_charger *smbchg_dev;
 
@@ -48,8 +48,13 @@ extern int get_DT_state(void);
 extern void asus_request_SIDE_otg_en(int enable);
 extern void DT_active_mode(bool active);
 extern void BTM_host_notify(int enable);
-extern bool g_hpd;
+static bool g_hpd = 1;
+//extern bool g_hpd;
+#ifdef CONFIG_USB_EC_DRIVER
 extern uint8_t gDongleType;
+#else
+static uint8_t gDongleType;
+#endif
 extern uint16_t vid_ext;
 extern int aura_screen_on;
 static int tcpc_sink_voltage;
@@ -75,7 +80,8 @@ static void close5v_by_suspend(struct work_struct *work);
 struct delayed_work open5vwork;
 struct workqueue_struct *open5v_wq;
 static void open5v_by_suspend(struct work_struct *work);
-struct wake_lock rt_wake_lock;
+struct wakeup_source *rt_wake_lock;
+extern void aoc_screen_connect(void);
 
 struct rt_charger_info {
 	struct device *dev;
@@ -755,6 +761,9 @@ static void checkOTGdevice(int vid, int pid, char* ipro, int from, int event){
 		else if (event == USB_DEVICE_REMOVE)
 			gamevice_active = 0;
 		pr_info("rt_host_notifier, gamevice_active = %d\n", gamevice_active);
+	} else if (vid == 0x0bda && pid == 0x5411 && (from == 1)) {
+		if (event == USB_DEVICE_ADD)
+			aoc_screen_connect();
 	}
 }
 
@@ -942,8 +951,9 @@ static int rt_charger_probe(struct platform_device *pdev)
 	open5v_wq = create_singlethread_workqueue("open5v_by_suspend");
 	INIT_DELAYED_WORK(&open5vwork, open5v_by_suspend);
 
-	wake_lock_init(&rt_wake_lock, WAKE_LOCK_SUSPEND, "RT_wake_lock");
-	wake_lock_timeout(&rt_wake_lock, msecs_to_jiffies(15000));
+	rt_wake_lock =
+		wakeup_source_register(NULL, "RT_wake_lock");
+	__pm_wakeup_event(rt_wake_lock, 15000);
 
 	pr_info("%s: OK!\n", __func__);
 	return 0;
@@ -951,7 +961,7 @@ static int rt_charger_probe(struct platform_device *pdev)
 
 static int rt_charger_remove(struct platform_device *pdev)
 {
-	wake_lock_destroy(&rt_wake_lock);
+	wakeup_source_unregister(rt_wake_lock);
 
 	//struct rt_charger_info *info = platform_get_drvdata(pdev);
 

@@ -62,11 +62,15 @@
 #define IPA_UC_FINISH_MAX 6
 #define IPA_UC_WAIT_MIN_SLEEP 1000
 #define IPA_UC_WAII_MAX_SLEEP 1200
-#define IPA_HOLB_TMR_DIS 0x0
-#define IPA_HOLB_TMR_EN 0x1
+
 #define IPA_MPM_MAX_RING_LEN 64
 #define IPA_MAX_TETH_AGGR_BYTE_LIMIT 24
 #define IPA_MPM_MAX_UC_THRESH 4
+
+#define IPA_HOLB_TMR_DIS 0x0
+#define IPA_HOLB_TMR_EN 0x1
+#define IPA_HOLB_TMR_VAL 65535
+#define IPA_HOLB_TMR_VAL_4_5 31
 /*
  * The transport descriptor size was changed to GSI_CHAN_RE_SIZE_16B, but
  * IPA users still use sps_iovec size as FIFO element size.
@@ -79,7 +83,7 @@
 
 #define IPA_MAX_NUM_REQ_CACHE 10
 
-#define NAPI_WEIGHT 60
+#define NAPI_WEIGHT 64
 
 #define IPADBG(fmt, args...) \
 	do { \
@@ -215,6 +219,7 @@
 #define IPA3_ACTIVE_CLIENTS_LOG_HASHTABLE_SIZE 50
 #define IPA3_ACTIVE_CLIENTS_LOG_NAME_LEN 40
 #define SMEM_IPA_FILTER_TABLE 497
+
 
 enum {
 	SMEM_APPS,
@@ -930,7 +935,7 @@ struct ipa3_ep_context {
 	struct ipa3_wlan_stats wstats;
 	u32 uc_offload_state;
 	u32 gsi_offload_state;
-	bool disconnect_in_progress;
+	atomic_t disconnect_in_progress;
 	u32 qmi_request_sent;
 	u32 eot_in_poll_err;
 	bool ep_delay_set;
@@ -1026,6 +1031,7 @@ struct ipa3_sys_context {
 	struct list_head pending_pkts[GSI_VEID_MAX];
 	atomic_t xmit_eot_cnt;
 	struct tasklet_struct tasklet;
+	struct work_struct tasklet_work;
 
 	/* ordering is important - mutable fields go above */
 	struct ipa3_ep_context *ep;
@@ -1039,6 +1045,7 @@ struct ipa3_sys_context {
 	u32 pm_hdl;
 	unsigned int napi_sch_cnt;
 	unsigned int napi_comp_cnt;
+	struct workqueue_struct *tasklet_wq;
 	/* ordering is important - other immutable fields go below */
 };
 
@@ -1979,7 +1986,7 @@ struct ipa3_context {
 	bool gsi_ch20_wa;
 	bool s1_bypass_arr[IPA_SMMU_CB_MAX];
 	u32 wdi_map_cnt;
-	struct wakeup_source w_lock;
+	struct wakeup_source *w_lock;
 	struct ipa3_wakelock_ref_cnt wakelock_ref_cnt;
 	/* RMNET_IOCTL_INGRESS_FORMAT_AGG_DATA */
 	bool ipa_client_apps_wan_cons_agg_gro;
@@ -3223,5 +3230,5 @@ int ipa3_uc_send_enable_flow_control(uint16_t gsi_chid,
 int ipa3_uc_send_disable_flow_control(void);
 int ipa3_uc_send_update_flow_control(uint32_t bitmask,
 	uint8_t  add_delete);
-int ipa3_qmi_reg_dereg_for_bw(bool bw_reg);
+int ipa3_qmi_reg_dereg_for_bw(bool bw_reg, int bw_reg_dereg_type);
 #endif /* _IPA3_I_H_ */

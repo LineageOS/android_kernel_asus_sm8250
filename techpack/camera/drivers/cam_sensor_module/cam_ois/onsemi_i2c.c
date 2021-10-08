@@ -3,7 +3,7 @@
 
 #undef  pr_fmt
 #define pr_fmt(fmt) "OIS-I2C %s(): " fmt, __func__
-
+extern struct mutex g_dualoisMutex;
 int onsemi_read_byte(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* reg_data)
 {
 	int rc = 0;
@@ -11,11 +11,13 @@ int onsemi_read_byte(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* r
 
 	for(i=0;i<3;i++)
 	{
+		mutex_lock(&g_dualoisMutex);
 		rc = camera_io_dev_read(&(ctrl->io_master_info),
 									reg_addr,
 									reg_data,
 									CAMERA_SENSOR_I2C_TYPE_WORD,//addr_type
 									CAMERA_SENSOR_I2C_TYPE_BYTE);//data_type
+		mutex_unlock(&g_dualoisMutex);
 		if(rc == 0 || rc == -110)
 		{
 			break;
@@ -42,6 +44,7 @@ int onsemi_read_byte(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* r
 	{
 		pr_info("read reg 0x%04x FAILED due to cci timeout!\n",reg_addr);
 	}
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 
@@ -52,11 +55,13 @@ int onsemi_read_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* r
 
 	for(i=0;i<3;i++)
 	{
+		mutex_lock(&g_dualoisMutex);
 		rc = camera_io_dev_read(&(ctrl->io_master_info),
 									reg_addr,
 									reg_data,
 									CAMERA_SENSOR_I2C_TYPE_WORD,//addr_type
 									CAMERA_SENSOR_I2C_TYPE_WORD);//data_type
+		mutex_unlock(&g_dualoisMutex);
 		if(rc == 0 || rc == -110)
 		{
 			break;
@@ -83,7 +88,7 @@ int onsemi_read_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* r
 	{
 		pr_info("read reg 0x%04x FAILED due to cci timeout!\n",reg_addr);
 	}
-
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 int onsemi_read_dword(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* reg_data)
@@ -93,11 +98,13 @@ int onsemi_read_dword(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* 
 
 	for(i=0;i<3;i++)
 	{
+		mutex_lock(&g_dualoisMutex);
 		rc = camera_io_dev_read(&(ctrl->io_master_info),
 									reg_addr,
 									reg_data,
 									CAMERA_SENSOR_I2C_TYPE_WORD,//addr_type
 									CAMERA_SENSOR_I2C_TYPE_DWORD);//data_type
+		mutex_unlock(&g_dualoisMutex);
 		if(rc == 0 || rc == -110)
 		{
 			break;
@@ -124,7 +131,7 @@ int onsemi_read_dword(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t* 
 	{
 		pr_info("read reg 0x%04x FAILED due to cci timeout!\n",reg_addr);
 	}
-
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 
@@ -137,17 +144,19 @@ int onsemi_read_seq_bytes(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint8_
 		pr_err("read size %d too large, max seq size is %d\n",size,I2C_REG_DATA_MAX);
 		return -1;
 	}
-
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_read_seq(&(ctrl->io_master_info),
 									reg_addr,
 									reg_data,
 									CAMERA_SENSOR_I2C_TYPE_WORD,
 									CAMERA_SENSOR_I2C_TYPE_BYTE,
 									size);
+	mutex_unlock(&g_dualoisMutex);
 	if(rc < 0)
 	{
 		pr_err("seq read %d bytes from reg 0x%04x failed, rc = %d\n",size,reg_addr,rc);
 	}
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 
@@ -155,6 +164,7 @@ int onsemi_poll_byte(struct cam_ois_ctrl_t * ctrl, uint32_t reg_addr, uint16_t r
 {
 	int rc = 0;
 	uint32_t varify_val;
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_poll(&(ctrl->io_master_info),
 							reg_addr,
 							reg_data,
@@ -162,6 +172,7 @@ int onsemi_poll_byte(struct cam_ois_ctrl_t * ctrl, uint32_t reg_addr, uint16_t r
 							CAMERA_SENSOR_I2C_TYPE_BYTE,//data type
 							CAMERA_SENSOR_I2C_TYPE_WORD,//addr type
 							delay_ms);
+	mutex_unlock(&g_dualoisMutex);
 	if(rc != 0)
 	{
 		pr_err("poll 0x%x from reg 0x%04x delay %d ms failed, rc = %d\n",reg_data,reg_addr,delay_ms,rc);
@@ -175,7 +186,7 @@ int onsemi_poll_byte(struct cam_ois_ctrl_t * ctrl, uint32_t reg_addr, uint16_t r
 			pr_info("reg 0x%04x value now is 0x%x actually\n",reg_addr,varify_val);
 		}
 	}
-
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 
@@ -183,6 +194,7 @@ int onsemi_poll_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint16_t re
 {
 	int rc = 0;
 	uint32_t varify_val;
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_poll(&(ctrl->io_master_info),
 							reg_addr,
 							reg_data,
@@ -190,6 +202,7 @@ int onsemi_poll_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint16_t re
 							CAMERA_SENSOR_I2C_TYPE_WORD,//data type
 							CAMERA_SENSOR_I2C_TYPE_WORD,//addr type
 							delay_ms);
+	mutex_unlock(&g_dualoisMutex);
 	if(rc != 0)
 	{
 		pr_err("poll 0x%x from reg 0x%04x delay %d ms failed, rc = %d\n",reg_data,reg_addr,delay_ms,rc);
@@ -203,7 +216,7 @@ int onsemi_poll_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint16_t re
 			pr_info("reg 0x%04x value now is 0x%x actually\n",reg_addr,varify_val);
 		}
 	}
-
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 
@@ -224,13 +237,15 @@ int onsemi_write_byte(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t r
 	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
 	write_setting.delay = 0;
-
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_write(&(ctrl->io_master_info),&write_setting);
+	mutex_unlock(&g_dualoisMutex);
 	if(rc < 0)
 	{
 		pr_err("write 0x%x to reg 0x%x failed! rc = %d",
 						data.reg_data,data.reg_addr,rc);
 	}
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 int onsemi_write_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t reg_data)
@@ -250,13 +265,15 @@ int onsemi_write_word(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t r
 	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 	write_setting.delay = 0;
-
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_write(&(ctrl->io_master_info),&write_setting);
+	mutex_unlock(&g_dualoisMutex);
 	if(rc < 0)
 	{
 		pr_err("write 0x%x to reg 0x%x failed! rc = %d",
 						data.reg_data,data.reg_addr,rc);
 	}
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 
@@ -278,7 +295,9 @@ int onsemi_write_dword(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t 
 	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_DWORD;
 	write_setting.delay = 0;
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_write(&(ctrl->io_master_info),&write_setting);
+	mutex_unlock(&g_dualoisMutex);
 	if(rc < 0)
 	{
 		pr_err("write 0x%x to reg 0x%x failed! rc = %d",
@@ -316,7 +335,7 @@ int onsemi_write_dword(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint32_t 
 						data[0].reg_data,data[1].reg_data,data[2].reg_data,data[3].reg_data,data[0].reg_addr,rc);
 	}
 #endif
-
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	return rc;
 }
 int onsemi_write_seq_bytes(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint8_t* reg_data,uint32_t size)
@@ -344,15 +363,16 @@ int onsemi_write_seq_bytes(struct cam_ois_ctrl_t * ctrl,uint32_t reg_addr, uint8
 	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
 	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
 	write_setting.delay = 0;
-
+	mutex_lock(&g_dualoisMutex);
 	rc = camera_io_dev_write_continuous(&(ctrl->io_master_info),
 										&write_setting,
 										1);//burst
+	mutex_unlock(&g_dualoisMutex);
 	if(rc < 0)
 	{
 		pr_err("seq write %d seq bytes to reg 0x%04x failed, rc = %d\n",size,reg_addr,rc);
 	}
-
+	ctrl->cci_status = rc; //ASUS_BSP Byron for record cci_status
 	kfree(data);
 
 	return rc;

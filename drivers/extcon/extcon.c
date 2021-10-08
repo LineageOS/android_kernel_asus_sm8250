@@ -701,7 +701,7 @@ int asus_extcon_sync(struct extcon_dev *edev)
 }
 EXPORT_SYMBOL_GPL(asus_extcon_sync);
 
-extern bool boot_completed_flag;
+//extern bool boot_completed_flag; //Todo
 int asus_extcon_set_state(struct extcon_dev *edev, int cable_state)
 {
 	unsigned long flags;
@@ -712,7 +712,8 @@ int asus_extcon_set_state(struct extcon_dev *edev, int cable_state)
 	spin_lock_irqsave(&edev->lock, flags);
 
 	/* Check whether the external connector's state is changed. */
-	if (!asus_is_extcon_changed(edev, cable_state) || !boot_completed_flag)
+	//if (!asus_is_extcon_changed(edev, cable_state) || !boot_completed_flag) //Todo
+	if (!asus_is_extcon_changed(edev, cable_state))
 		goto out;
 
 	/* Don't check mutual exclusiveness & property since the state no longer represents multi-cable. */
@@ -1014,6 +1015,17 @@ int extcon_set_property_capability(struct extcon_dev *edev, unsigned int id,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(extcon_set_property_capability);
+
+int extcon_set_mutually_exclusive(struct extcon_dev *edev,
+				const u32 *exclusive)
+{
+	if (!edev)
+		return -EINVAL;
+
+	edev->mutually_exclusive = exclusive;
+	return 0;
+}
+EXPORT_SYMBOL(extcon_set_mutually_exclusive);
 
 /**
  * extcon_get_extcon_dev() - Get the extcon device instance from the name.

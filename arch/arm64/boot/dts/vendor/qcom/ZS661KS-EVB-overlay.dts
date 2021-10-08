@@ -18,253 +18,6 @@
 	qcom,board-id = <10 0>;
 };
 
-// ASUS_BSP Deeo : Inbox AURA ML51 +++
-&qupv3_se1_i2c {
-       status = "ok";
-       qcom,clk-freq-out = <400000>;
-       ml51fb9ae@15 {
-               compatible = "ml51_inbox";
-               reg = <0x15>;
-
-               nuvoton,aura_3p3_en = <&tlmm 61 0x0>;
-               nuvoton,fan_pwr_on = <&tlmm 117 0x0>;
-       };
-
-       ms51@16 {
-               compatible = "ms51_inbox";
-               reg = <0x16>;
-
-               panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
-               nuvoton,aura_3p3_en = <&tlmm 61 0x0>;
-               nuvoton,ms51_on = <&tlmm 117 0x0>;
-       };
-
-};
-// ASUS_BSP Deeo : Inbox AURA ML51 ---
-
-// ASUS_BSP Deeo : DT ACCY driver +++
-&qupv3_se1_i2c {
-    status = "ok";
-    ene8k41_dock@40 {
-        compatible = "ene8k41_dock";
-        reg = <0x40>;
-        ene8k41,check-3v-gpio =<&tlmm 61 0>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&check_3v_default>;
-    };
-
-    nct7802@2e {
-       reg = <0x2e>;
-        compatible = "nct7802";
-    };
-};
-
-&qupv3_se3_i2c {
-    ene8k41_power@41 {
-		compatible = "ene8k41_power";
-		reg = <0x41>;
-		ene8k41,switch-mode-gpio = <&tlmm 117 0x0>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&switch_mode_default>;
-	};
-};
-
-&tlmm{
-	check-3v {
-		check_3v_default: check_3v_default{
-			mux {
-				pins = "gpio61";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio61";
-				drive-strength = <8>;   /* 8 mA */
-				bias-disable = <0>;   /* no pull */
-				input-enable;
-			};
-		};
-	};
-
-	switch-mode-gpio {
-		switch_mode_default: switch_mode_default{
-			mux {
-				pins = "gpio117";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio117";
-				drive-strength = <8>;   /* 8 mA */
-				bias-disable = <0>;   /* no pull */
-				input-enable;
-			};
-		};
-	};
-};
-// ASUS_BSP Deeo : DT ACCY driver ---
-
-// ASUS BSP Deeo : Station ACCY driver +++
-&qupv3_se3_i2c {
-    status = "ok";
-    ene6k582_station@4e {
-        compatible = "ene6k582_station";	// For Station AuraLight
-        reg = <0x4e>;
-        };
-};
-
-&qupv3_se3_i2c {
-    status = "ok";
-    ec_i2c@60 {
-        compatible = "ec_i2c";		// For Station EC control
-        reg = <0x60>;
-        };
-};
-
-&qupv3_se1_i2c {
-	status = "ok";
-	ec_i2c_ap@60{
-		compatible = "ec_i2c_ap";	// For Station FW update via I2C
-		reg = <0x60>;  
-	};
-};
-// ASUS BSP Deeo : Station ACCY driver ---
-
-// ASUS_BSP Deeo : EC_Driver +++
-&soc {
-	asus:ec_hid {
-		status = "ok";
-		compatible = "asus:ec_hid";
-
-		dongle,pogo-sleep = <&tlmm 82 0x0>;
-		dongle,pogo-det = <&tlmm 145 0x0>;
-		//dongle,pogo-fan-on = <&tlmm 117 0x0>;
-		//dongle,pogo-aura-en = <&tlmm 61 0x0>;
-		//dongle,pogo-temp-intr = <&tlmm 84 0x0>;
-
-		io-channels = <&pm8150l_vadc ADC_GPIO2>;
-		io-channel-names ="asus_pogo_vadc";
-		qcom,pogo-id-adc_tm = <&pm8150l_adc_tm ADC_GPIO2>;
-		qcom.pogo-id-gpio = <&pm8150l_gpios 6 0x0>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&pogo_id_default &pogo_sleep_default &pogo_det_default>;
-
-		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
-	};
-};
-
-&tlmm{
-	pogo-det {
-		pogo_det_default: pogo_det_default {
-			mux {
-				pins = "gpio145";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio145";
-				drive-strength = <8>;   /* 8 mA */
-				output-low;
-				bias-disable;   /* no pull */
-			};
-		};
-	};
-	pogo-sleep {
-		pogo_sleep_default: pogo_sleep_default{
-			mux {
-				pins = "gpio82";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio82";
-				drive-strength = <8>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-
-	pogo-fan-on {
-		pogo_fan_on_default: pogo_fan_on_default{
-			mux {
-				pins = "gpio117";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio117";
-				drive-strength = <8>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-
-	pogo-aura-en {
-		pogo_aura_en_default: pogo_aura_en_default{
-			mux {
-				pins = "gpio61";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio61";
-				drive-strength = <8>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-
-	pogo-temp-intr {
-		pogo_temp_intr_default: pogo_temp_intr_default{
-			mux {
-				pins = "gpio84";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio84";
-				drive-strength = <8>;
-				output-low;
-				bias-disable;
-			};
-		};
-	};
-};
-
-&pm8150l_gpios {
-	gpio6_pogo_id {
-		pogo_id_default: pogo_id_default {
-			pins = "gpio6";
-			function = "normal";
-			bias-disable;
-			power-source = <0>;
-		};
-	};
-};
-
-&pm8150l_vadc {
-	asus_pogo_vadc {
-		reg = <ADC_GPIO2>;
-		label = "asus_pogo_vadc";
-		qcom,hw-settle-time = <200>;
-		qcom,pre-scaling = <1 1>;
-	};
-};
-
-&pm8150l_adc_tm {
-	io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM2_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM3_PU2>,
-					<&pm8150l_vadc ADC_GPIO2>;
-	asus_pogo_vadc {
-		reg = <ADC_GPIO2>;
-		qcom,hw-settle-time = <200>;
-		qcom,scale-type = <0>;
-		qcom,kernel-client;
-	};
-};
-// ASUS_BSP Deeo : EC_Driver ---
-
 //
 // ASUS_BSP Display dtsi overlay +++
 // Do not add codes that are not related to display below this
@@ -709,13 +462,13 @@
 
 &tlmm {
 		storage_cd: storage_cd {
-			status = "disable";
+			status = "disabled";
 		};
 		cam_sensor_active_6: cam_sensor_active_6 {
-			status = "disable";
+			status = "disabled";
 		};
 		cam_sensor_suspend_6: cam_sensor_suspend_6 {
-			status = "disable";
+			status = "disabled";
 		};
 
 		vib_irq_default: vib_irq_default{
@@ -751,6 +504,7 @@
 //ASUS_BSP: aw haptic +++
 &qupv3_se4_i2c {
 	status = "ok";
+	qcom,clk-freq-out = <1000000>;
 	#address-cells = <1>;
 	#size-cells = <0>;
 
@@ -781,41 +535,7 @@
 		status = "okay";
 	};
 };
-
 //ASUS_BSP: aw haptic ---
-
-//ASUS_BSP: dw haptic +++
-&qupv3_se4_i2c {
-	status = "ok";
-	//+++for 1MHz i2c clock
-	qcom,clk-freq-out = <1000000>;
-	//---
-
-	//dw7914 +++
-    dw791x@59 {
-		compatible = "dwanatech,dw791x";
-		reg = <0x59>;
-		//use_en_pin = <0>; // 1 = use en pin, 0 = do not use en pin
-
-		//interrupt
-		///*
-		interrupt-parent = <&tlmm>;
-		interrupts = <77 8>; //gpio 96, active low level-sensitive: gpio 119, active low level-sensitive
-		dw791x,irq-gpio = <&tlmm 77 8>; //gpio96, active low level-sensitive
-		pinctrl-names = "default";
-		pinctrl-states = "default";
-		pinctrl-0 = <&vib_irq_default &vib_trigger_default>;
-		//dw791x_en_gpio = <&pm8150b_gpios 1 0x0>;
-		//dw791x,en-gpio = <&pm8150b_gpios 1 GPIO_ACTIVE_HIGH>;
-
-		//trigger pin
-		//dw791x_trigger_gpio = <&pm8150_gpios 7 GPIO_ACTIVE_LOW>;
-		dw791x_trigger_gpio = <&tlmm 114 0>;
-	};
-};
-
-//ASUS_BSP: dw haptic ---
-
 // ASUS_BSP Grip +++
 &qupv3_se2_i2c {
 	status = "ok";
@@ -994,23 +714,503 @@
 };
 //ASUS_BSP Wifi---
 
-//ASUS_BSP RIL+++
-&soc {
-	qcom,ipa_fws {
-		compatible = "qcom,pil-tz-generic";
-		vdd-3.0-antenna-supply = <&pm8150_l16>;
-	};
+
+//ASUS_BSP: no use SDC2 SD card slot 
+&sdhc_2 {
+	status = "disabled";
 };
 
-&apps_rsc {
-	rpmh-regulator-ldoa16 {
-		L16A: pm8150_l16: regulator-pm8150-l16 {
-			regulator-min-microvolt = <3000000>;
-			regulator-max-microvolt = <3000000>;
+// ASUS_BSP Charger dtsi overlay +++
+&usb1 {
+	dpdm-supply = <&usb2_phy1>;
+	extcon = <&pm8150b_charger>;
+};
+
+&extcon_usb1 {
+	status = "disabled";
+};
+
+&pcie1_wake_default {
+	status = "disabled";
+};
+
+&tlmm {
+	chg_gpio_pin {
+		chg_input_no_default: chg_input_no_default {
+			mux {
+				pins = "gpio13", "gpio60";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio13", "gpio60";
+				drive-strength = <2>;
+				bias-disable;
+				input-enable;
+			};
+		};
+
+		chg_output_lo_default: chg_output_lo_default {
+			mux {
+				pins = "gpio11", "gpio71";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11", "gpio71";
+				drive-strength = <2>;
+				bias-disable;
+				output-low;
+			};
+		};
+			
+		chg_input_high_default: chg_input_high_default {
+			mux {
+				pins = "gpio84";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio84";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
+	};
+
+// NXP_PCA9468 +++
+		pca_gpio_pin {
+			pca_input_hi_default: pca_input_hi_default {
+				mux {
+					pins = "gpio83";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio83";
+					drive-strength = <2>;
+					bias-pull-up;
+					input-enable;
+				};
+			};
+		};
+// NXP_PCA9468 ---
+};
+
+&pm8150b_charger {
+	dpdm2-supply = <&usb2_phy1>;//Add for supporting bottom SDP port
+	pm8150l_bob-supply = <&pm8150l_bob>;
+	
+	qcom,fcc-max-ua = <2750000>;
+	qcom,chg-term-current-ma = <(-200)>;
+	qcom,lpd-disable = <1>;
+
+	BTM_OVP_ACOK = <&tlmm 13 0x0>;
+	POGO_OVP_ACOK = <&tlmm 60 0x0>;
+	POGO_OTG_EN = <&tlmm 11 0x0>;
+	BTM_OTG_EN = <&tlmm 71 0x0>;
+	PMI_MUX_EN = <&pm8150b_gpios 10 0x0>;
+	USB2_MUX1_EN = <&pm8150_gpios 9 0x0>;
+	PCA9468_EN = <&pm8150b_gpios 5 0x0>;
+	POGO_TEMP_INT = <&tlmm 84 0x0>;
+
+	/delete-property/qcom,step-charging-enable;
+	/delete-property/qcom,sw-jeita-enable;
+
+	pinctrl-names = "chg_gpio_default";
+	pinctrl-0 = <&chg_input_no_default &chg_output_lo_default &chg_input_high_default &usb2_mux1_en_default &pca9468_en_default &pmi_mux_en_default>;
+	
+	panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
+	qcom,battery-data = <&asus_batterydata>;
+};
+
+&pm8150_gpios {
+	gpio9_usb2_mux1_en {
+		usb2_mux1_en_default: usb2_mux1_en_default {
+			pins = "gpio9";
+			function = "normal";
+			bias-disable;
+			output-low;
+			power-source = <0>;
 		};
 	};
 };
-//ASUS_BSP RIL---
+
+&pm8150b_gpios {
+	gpio5_pca9468_en {
+		pca9468_en_default: pca9468_en_default {
+			pins = "gpio5";
+			function = "normal";
+			bias-disable;
+			output-low;
+			power-source = <0>;
+		};
+	};
+	
+	gpio10_pmi_mux_en {
+		pmi_mux_en_default: pmi_mux_en_default {
+			pins = "gpio10";
+			function = "normal";
+			bias-disable;
+			output-low;
+			power-source = <0>;
+		};
+	};
+};
+// ASUS_BSP Charger dtsi overlay ---
+
+/* ASUS BSP DisplayPort, add for DisplayPort +++ */
+&sde_dp {
+	/delete-property/ qcom,dp-aux-switch;
+	qcom,dp-gpio-aux-switch;
+
+	qcom,aux-en-gpio = <&tlmm 162 0>;
+	qcom,aux-sel-gpio = <&pm8150l_gpios 1 0x0>;
+
+	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
+	pinctrl-0 = <&sde_dp_aux_active &sde_dp_usbplug_cc_active &aux_sel_default>;
+	pinctrl-1 = <&sde_dp_aux_suspend &sde_dp_usbplug_cc_suspend &aux_sel_default>;
+};
+
+&pm8150l_gpios {
+	gpio1_aux_sel {
+		aux_sel_default: aux_sel_default {
+			pins = "gpio1";
+			function = "normal";
+			bias-disable;
+			output-low;
+			power-source = <0>;
+		};
+	};
+};
+
+&tlmm {
+	sde_dp_aux_active: sde_dp_aux_active {
+		mux {
+			pins = "gpio27";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio27";
+			bias-disable = <0>; /* no pull */
+			drive-strength = <8>;
+		};
+	};
+
+	sde_dp_aux_suspend: sde_dp_aux_suspend {
+		mux {
+			pins = "gpio162";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio162";
+			bias-pull-down;
+			drive-strength = <2>;
+		};
+	};
+};
+
+&qupv3_se15_i2c {
+	fsa4480: fsa4480@43 {
+		status = "disable";
+	};
+};
+/* ASUS BSP DisplayPort, add for DisplayPort --- */
+
+/*    ====================================
+ *    overlay for kona-audio-overlay.dtsi - start
+ *    ====================================
+ */
+&kona_snd {
+	qcom,model = "kona-mtp-snd-card";
+	qcom,msm-mi2s-master = <1>, <1>, <1>, <1>, <1>, <1>;
+	qcom,wcn-bt = <1>;
+	qcom,ext-disp-audio-rx = <1>;
+	qcom,mi2s-audio-intf = <1>;
+	qcom,pri-mi2s-gpios = <&pri_mi2s_gpios>;
+	qcom,quat-mi2s-gpios = <&quat_mi2s_gpios>;
+	qcom,audio-routing =
+		"TX DMIC0", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic0",
+		"TX DMIC1", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic1",
+		"TX DMIC2", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic2",
+		"TX DMIC3", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic3",
+		"TX DMIC4", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic4",
+		"TX DMIC5", "TX MIC BIAS1",
+		"MIC BIAS4", "Digital Mic5",
+		"RX_TX DEC0_INP", "TX DEC0 MUX",
+		"RX_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC2_INP", "TX DEC2 MUX",
+		"RX_TX DEC3_INP", "TX DEC3 MUX",
+		"VA_AIF1 CAP", "VA_SWR_CLK",
+		"VA_AIF2 CAP", "VA_SWR_CLK",
+		"VA_AIF3 CAP", "VA_SWR_CLK",
+		"VA MIC BIAS", "Digital Mic0",
+		"VA MIC BIAS", "Digital Mic1",
+		"VA MIC BIAS", "Digital Mic2",
+		"VA MIC BIAS", "Digital Mic3",
+		"VA MIC BIAS", "Digital Mic4",
+		"VA MIC BIAS", "Digital Mic5",
+		"VA DMIC0", "VA MIC BIAS",
+		"VA DMIC1", "VA MIC BIAS",
+		"VA DMIC2", "VA MIC BIAS",
+		"VA DMIC3", "VA MIC BIAS",
+		"VA DMIC4", "VA MIC BIAS",
+		"VA DMIC5", "VA MIC BIAS";
+	qcom,cdc-dmic01-gpios = <&cdc_dmic01_gpios>;
+	qcom,cdc-dmic23-gpios = <&cdc_dmic23_gpios>;
+	qcom,cdc-dmic45-gpios = <&cdc_dmic45_gpios>;
+	asoc-codec  = <&stub_codec>, <&bolero>, <&ext_disp_audio_codec>;
+	asoc-codec-names = "msm-stub-codec.1", "bolero_codec",
+				"msm-ext-disp-audio-codec-rx";
+	qcom,wsa-max-devs = <0>;
+	qcom,wsa-devs = <0>;
+	qcom,codec-max-aux-devs = <0>;
+	qcom,codec-aux-devs = <0>;
+	qcom,msm_audio_ssr_devs = <&audio_apr>, <&q6core>, <&lpi_tlmm>,
+				  <&bolero>;
+};
+
+&q6core {
+	pri_mi2s_gpios: pri_mi2s_pinctrl {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&pri_aux_pcm_clk_active &pri_aux_pcm_din_active &pri_aux_pcm_dout_active &pri_aux_pcm_sync_active>;
+		pinctrl-1 = <&pri_aux_pcm_clk_sleep &pri_aux_pcm_din_sleep &pri_aux_pcm_dout_sleep &pri_aux_pcm_sync_sleep>;
+	};
+};
+
+&qupv3_se16_i2c {        /* i2c for Amp */
+	status = "ok";
+	tfa98xx@34 {
+		compatible = "nxp,tfa98xx";
+		reg = <0x34>;
+		reset-gpio = <&tlmm 72 0>;
+		irq-gpio = <&tlmm 64 0>;
+	};
+	tfa98xx@35 {
+		compatible = "nxp,tfa98xx";
+		reg = <0x35>;
+		reset-gpio = <&tlmm 73 0>;
+		irq-gpio = <&tlmm 63 0>;
+	};
+};
+
+&dai_mi2s0 {
+	qcom,msm-mi2s-rx-lines = <2>;
+	qcom,msm-mi2s-tx-lines = <1>;
+};
+
+&qupv3_se3_i2c {        /* i2c for Inbox codec RT5683 */
+	status = "ok";
+        rt5683@1a {
+                compatible = "realtek,rt5683";
+                reg = <0x1a>;
+                pinctrl-names = "asustek_rt5683_usb_gpio_active", "asustek_rt5683_usb_gpio_suspend";
+		pinctrl-0 = <&asustek_rt5683_usb_gpio_active>;
+		pinctrl-1 = <&asustek_rt5683_usb_gpio_suspend>;
+        };
+};
+
+&tlmm {
+	asustek_rt5683_usb_gpio {
+		asustek_rt5683_usb_gpio_active: asustek_rt5683_usb_gpio_active {
+		        mux {
+			pins = "gpio82";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio82";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		asustek_rt5683_usb_gpio_suspend: asustek_rt5683_usb_gpio_suspend {
+			mux {
+				pins = "gpio82";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio82";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+	asustek_rt5683_irq_gpio {
+		asustek_rt5683_irq_gpio_active: asustek_rt5683_irq_gpio_active {
+		        mux {
+			        pins = "gpio61";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio61";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		asustek_rt5683_irq_gpio_suspend: asustek_rt5683_irq_gpio_suspend {
+			mux {
+				pins = "gpio61";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio61";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
+
+&dai_mi2s3 {
+	qcom,msm-mi2s-rx-lines = <1>;
+	qcom,msm-mi2s-tx-lines = <2>;
+};
+
+&q6core {
+	quat_mi2s_gpios: msm_cdc_pinctrl_quat {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&quat_mi2s_sck_active &quat_mi2s_ws_active
+			&quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
+		pinctrl-1 = <&quat_mi2s_sck_sleep &quat_mi2s_ws_sleep
+			&quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
+		qcom,lpi-gpios;
+	};
+};
+
+&va_macro {
+	va-vdd-micb-supply = <&L4C>;
+};
+
+&tx_macro {
+	tx-vdd-micb-supply = <&L4C>;
+	qcom,tx-vdd-micb-voltage = <1800000 1800000>;
+	qcom,tx-vdd-micb-current = <11200>;
+	qcom,tx-dmic-sample-rate = <2400000>;
+	qcom,tx-swr-gpios;
+};
+
+&rx_macro {
+	qcom,rx-swr-gpios;
+};
+
+&wcd938x_codec {
+	status = "disabled";
+};
+
+&wcd938x_rx_slave {
+	status = "disabled";
+};
+
+&wcd938x_tx_slave {
+	status = "disabled";
+};
+
+&wcd938x_rst_gpio {
+	status = "disabled";
+};
+
+&wsa_macro {
+	status = "disabled";
+};
+
+&wsa_swr_gpios {
+	status = "disabled";
+};
+
+&swr1 {
+	status = "disabled";
+};
+
+&swr2 {
+	status = "disabled";
+};
+
+&bolero {
+	qcom,num-macros = <3>;
+	bolero-clk-rsc-mngr {
+		clock-names = "tx_core_clk", "tx_npl_clk", "rx_core_clk", "rx_npl_clk",
+			"va_core_clk", "va_npl_clk";
+		clocks = <&clock_audio_tx_1 0>, <&clock_audio_tx_2 0>,
+			<&clock_audio_rx_1 0>, <&clock_audio_rx_2 0>,
+			<&clock_audio_va_1 0>, <&clock_audio_va_2 0>;
+	};
+};
+
+&clock_audio_wsa_1 {
+	status = "disabled";
+};
+
+&clock_audio_wsa_2 {
+	status = "disabled";
+};
+
+/*    ====================================
+ *    overlay for kona-audio-overlay.dtsi - end
+ *    ====================================
+ */
+
+&soc {
+	//ASUS_BSP Peter_Yeh fingerprint sensor +++
+	goodix_fp {
+		compatible = "goodix,fingerprint";
+		fp-gpio-irq = <&tlmm 23 0x00>;
+		fp-gpio-reset = <&pm8150b_gpios 1 0x0>;
+		vcc-supply = <&pm8150a_l11>;
+		asus-fp,vcc-voltage=<3150000 3300000>;
+		status = "okay";
+	};
+	//ASUS_BSP Peter_Yeh fingerprint sensor ---
+	
+	//Disable qcom default FP setting
+	qcom,qbt_handler {
+		status = "disable";
+	};
+};
+
+// ASUS_BSP Austin_T : NXP Charger +++
+&pcie1_clkreq_default {	//disable qcom soc gpio83 for PCA9468_INT
+	status = "disabled";
+};
+
+&vreg_hap_boost {	//disable qcom soc gpio83 for PCA9468_INT
+	status = "disabled";
+};
+
+&qupv3_se15_i2c {
+    	status = "ok";
+    	pca9468@5e {
+        	compatible = "nxp,pca9468";
+        	reg = <0x5e>;
+					usbpd-phy = <&pm8150b_pdphy>;
+			
+        	pca9468,irq-gpio = <&tlmm 83 0x0>;
+        	pca9468,input-current-limit = <1900000>; /* 1.9A */
+        	pca9468,charging-current = <6000000>; /* 6A */
+        	pca9468,float-voltage = <4380000>; /* 4.38V */
+        	pca9468,input-itopoff = <700000>; /* 700mA */
+        	pca9468,charging-itopoff = <1000000>; /* 500mA */
+        	pca9468,sense-resistance = <1>; /* 10mOhm */
+        	pca9468,switching-frequency = <7>; /* 1160KHz */
+
+        	pinctrl-names = "pca_gpio_default";
+        	pinctrl-0 = <&pca_input_hi_default>;
+        	
+        	panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
+    	};
+};
+// ASUS_BSP Austin_T : NXP Charger ---
 
 &pm8150b_vadc {
 	bat_therm@4d {
@@ -1199,6 +1399,13 @@
 };
 //ASUS BSP Richtek TypeC PD ---
 
+// ASUS_BSP NFC +++
+&qupv3_se1_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+};
+// ASUS_BSP NFC ---
+
 &tlmm {
 	//ASUS BSP Richtek TypeC PD +++
 	rt1715_int_active {
@@ -1218,497 +1425,253 @@
 	//ASUS BSP Richtek TypeC PD ---
 };
 
-// ASUS_BSP Charger dtsi overlay +++
-&usb1 {
-	dpdm-supply = <&usb2_phy1>;
-	extcon = <&pm8150b_charger>;
-};
-
-&extcon_usb1 {
-	status = "disabled";
-};
-
-&tlmm {
-	chg_gpio_pin {
-		chg_input_no_default: chg_input_no_default {
-			mux {
-				pins = "gpio13", "gpio60";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio13", "gpio60";
-				drive-strength = <2>;
-				bias-disable;
-				input-enable;
-			};
-		};
-
-		chg_output_lo_default: chg_output_lo_default {
-			mux {
-				pins = "gpio11", "gpio71";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio11", "gpio71";
-				drive-strength = <2>;
-				bias-disable;
-				output-low;
-			};
-		};
-			
-		chg_input_high_default: chg_input_high_default {
-			mux {
-				pins = "gpio84";
-				function = "gpio";
-			};
-
-			config {
-				pins = "gpio84";
-				drive-strength = <2>;
-				bias-pull-up;
-				input-enable;
-			};
-		};
-	};
-
-// NXP_PCA9468 +++
-		pca_gpio_pin {
-			pca_input_hi_default: pca_input_hi_default {
-				mux {
-					pins = "gpio83";
-					function = "gpio";
-				};
-
-				config {
-					pins = "gpio83";
-					drive-strength = <2>;
-					bias-pull-up;
-					input-enable;
-				};
-			};
-		};
-// NXP_PCA9468 ---
-};
-
-&pm8150b_charger {
-	dpdm2-supply = <&usb2_phy1>;//Add for supporting bottom SDP port
-	pm8150l_bob-supply = <&pm8150l_bob>;
-	
-	qcom,fcc-max-ua = <2750000>;
-	qcom,chg-term-current-ma = <(-200)>;
-	qcom,lpd-disable = <1>;
-
-	BTM_OVP_ACOK = <&tlmm 13 0x0>;
-	POGO_OVP_ACOK = <&tlmm 60 0x0>;
-	POGO_OTG_EN = <&tlmm 11 0x0>;
-	BTM_OTG_EN = <&tlmm 71 0x0>;
-	PMI_MUX_EN = <&pm8150b_gpios 10 0x0>;
-	USB2_MUX1_EN = <&pm8150_gpios 9 0x0>;
-	PCA9468_EN = <&pm8150b_gpios 5 0x0>;
-	POGO_TEMP_INT = <&tlmm 84 0x0>;
-
-	/delete-property/qcom,step-charging-enable;
-	/delete-property/qcom,sw-jeita-enable;
-
-	pinctrl-names = "chg_gpio_default";
-	pinctrl-0 = <&chg_input_no_default &chg_output_lo_default &chg_input_high_default &usb2_mux1_en_default &pca9468_en_default &pmi_mux_en_default>;
-	
-	panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
-	qcom,battery-data = <&asus_batterydata>;
-};
-
-&pm8150_gpios {
-	gpio9_usb2_mux1_en {
-		usb2_mux1_en_default: usb2_mux1_en_default {
-			pins = "gpio9";
-			function = "normal";
-			bias-disable;
-			output-low;
-			power-source = <0>;
-		};
-	};
-};
-
-&pm8150b_gpios {
-	gpio5_pca9468_en {
-		pca9468_en_default: pca9468_en_default {
-			pins = "gpio5";
-			function = "normal";
-			bias-disable;
-			output-low;
-			power-source = <0>;
-		};
-	};
-	
-	gpio10_pmi_mux_en {
-		pmi_mux_en_default: pmi_mux_en_default {
-			pins = "gpio10";
-			function = "normal";
-			bias-disable;
-			output-low;
-			power-source = <0>;
-		};
-	};
-};
-// ASUS_BSP Charger dtsi overlay ---
-
-/*    ====================================
- *    overlay for kona-audio-overlay.dtsi - start
- *    ====================================
- */
-&kona_snd {
-        qcom,model = "kona-mtp-snd-card";
-        qcom,msm-mi2s-master = <1>, <1>, <1>, <1>, <1>, <1>;
-        qcom,wcn-bt = <1>;
-        qcom,ext-disp-audio-rx = <1>;
-        qcom,mi2s-audio-intf = <1>;
-        qcom,pri-mi2s-gpios = <&pri_mi2s_gpios>;
-        qcom,quat-mi2s-gpios = <&quat_mi2s_gpios>;
-        qcom,audio-routing =
-		"TX DMIC0", "TX MIC BIAS1",
-		"TX MIC BIAS1", "Digital Mic0",
-		"TX DMIC1", "TX MIC BIAS1",
-		"TX MIC BIAS1", "Digital Mic1",
-		"TX DMIC2", "TX MIC BIAS1",
-		"TX MIC BIAS1", "Digital Mic2",
-		"TX DMIC3", "TX MIC BIAS1",
-		"TX MIC BIAS1", "Digital Mic3",
-		"TX DMIC4", "TX MIC BIAS1",
-		"TX MIC BIAS1", "Digital Mic4",
-		"TX DMIC5", "TX MIC BIAS1",
-		"MIC BIAS4", "Digital Mic5",
-		"RX_TX DEC0_INP", "TX DEC0 MUX",
-		"RX_TX DEC1_INP", "TX DEC1 MUX",
-		"RX_TX DEC2_INP", "TX DEC2 MUX",
-		"RX_TX DEC3_INP", "TX DEC3 MUX",
-		"VA_AIF1 CAP", "VA_SWR_CLK",
-		"VA_AIF2 CAP", "VA_SWR_CLK",
-		"VA_AIF3 CAP", "VA_SWR_CLK",
-		"VA MIC BIAS", "Digital Mic0",
-		"VA MIC BIAS", "Digital Mic1",
-		"VA MIC BIAS", "Digital Mic2",
-		"VA MIC BIAS", "Digital Mic3",
-		"VA MIC BIAS", "Digital Mic4",
-		"VA MIC BIAS", "Digital Mic5",
-		"VA DMIC0", "VA MIC BIAS",
-		"VA DMIC1", "VA MIC BIAS",
-		"VA DMIC2", "VA MIC BIAS",
-		"VA DMIC3", "VA MIC BIAS",
-		"VA DMIC4", "VA MIC BIAS",
-		"VA DMIC5", "VA MIC BIAS";
-        qcom,cdc-dmic01-gpios = <&cdc_dmic01_gpios>;
-        qcom,cdc-dmic23-gpios = <&cdc_dmic23_gpios>;
-        qcom,cdc-dmic45-gpios = <&cdc_dmic45_gpios>;
-        asoc-codec  = <&stub_codec>, <&bolero>, <&ext_disp_audio_codec>;
-        asoc-codec-names = "msm-stub-codec.1", "bolero_codec",
-                           "msm-ext-disp-audio-codec-rx";
-	qcom,wsa-max-devs = <0>;
-	qcom,wsa-devs = <0>;
-	qcom,codec-max-aux-devs = <0>;
-	qcom,codec-aux-devs = <0>;
-        qcom,msm_audio_ssr_devs = <&audio_apr>, <&q6core>, <&lpi_tlmm>,
-                                  <&bolero>;
-};
-
-&q6core {
-    pri_mi2s_gpios: pri_mi2s_pinctrl {
-        compatible = "qcom,msm-cdc-pinctrl";
-                pinctrl-names = "aud_active", "aud_sleep";
-                pinctrl-0 = <&pri_aux_pcm_clk_active &pri_aux_pcm_din_active &pri_aux_pcm_dout_active &pri_aux_pcm_sync_active>;
-                pinctrl-1 = <&pri_aux_pcm_clk_sleep &pri_aux_pcm_din_sleep &pri_aux_pcm_dout_sleep &pri_aux_pcm_sync_sleep>;
-    };
-};
-
-&qupv3_se16_i2c {        /* i2c for Amp */
+// ASUS_BSP Deeo : Inbox AURA ML51 +++
+&qupv3_se1_i2c {
        status = "ok";
-        tfa98xx@34 {
-                compatible = "nxp,tfa98xx";
-                reg = <0x34>;
-                reset-gpio = <&tlmm 72 0>;
-                irq-gpio = <&tlmm 64 0>;
-        };
-        tfa98xx@35 {
-                compatible = "nxp,tfa98xx";
-                reg = <0x35>;
-                reset-gpio = <&tlmm 73 0>;
-                irq-gpio = <&tlmm 63 0>;
-        };
+       qcom,clk-freq-out = <400000>;
+       ml51fb9ae@15 {
+               compatible = "ml51_inbox";
+               reg = <0x15>;
+
+               nuvoton,aura_3p3_en = <&tlmm 61 0x0>;
+               nuvoton,fan_pwr_on = <&tlmm 117 0x0>;
+       };
+
+       ms51@16 {
+               compatible = "ms51_inbox";
+               reg = <0x16>;
+
+               panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
+               nuvoton,aura_3p3_en = <&tlmm 61 0x0>;
+               nuvoton,ms51_on = <&tlmm 117 0x0>;
+       };
+
 };
+// ASUS_BSP Deeo : Inbox AURA ML51 ---
 
-&dai_mi2s0 {
-    qcom,msm-mi2s-rx-lines = <2>;
-    qcom,msm-mi2s-tx-lines = <1>;
-};
+// ASUS_BSP Deeo : DT ACCY driver +++
+&qupv3_se1_i2c {
+    status = "ok";
+    ene8k41_dock@40 {
+        compatible = "ene8k41_dock";
+        reg = <0x40>;
+        ene8k41,check-3v-gpio =<&tlmm 61 0>;
 
-&qupv3_se3_i2c {        /* i2c for Inbox codec RT5683 */
-	status = "ok";
-        rt5683@1a {
-                compatible = "realtek,rt5683";
-                reg = <0x1a>;
-                pinctrl-names = "asustek_rt5683_usb_gpio_active", "asustek_rt5683_usb_gpio_suspend";
-		pinctrl-0 = <&asustek_rt5683_usb_gpio_active>;
-		pinctrl-1 = <&asustek_rt5683_usb_gpio_suspend>;
-        };
-};
+		pinctrl-names = "default";
+		pinctrl-0 = <&check_3v_default>;
+    };
 
-&tlmm {
-	asustek_rt5683_usb_gpio {
-		asustek_rt5683_usb_gpio_active: asustek_rt5683_usb_gpio_active {
-		        mux {
-			pins = "gpio82";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio82";
-				drive-strength = <2>;
-				bias-pull-up;
-			};
-		};
-
-		asustek_rt5683_usb_gpio_suspend: asustek_rt5683_usb_gpio_suspend {
-			mux {
-				pins = "gpio82";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio82";
-				drive-strength = <2>;
-				bias-pull-down;
-			};
-		};
-	};
-	asustek_rt5683_irq_gpio {
-		asustek_rt5683_irq_gpio_active: asustek_rt5683_irq_gpio_active {
-		        mux {
-			        pins = "gpio61";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio61";
-				drive-strength = <2>;
-				bias-pull-up;
-			};
-		};
-
-		asustek_rt5683_irq_gpio_suspend: asustek_rt5683_irq_gpio_suspend {
-			mux {
-				pins = "gpio61";
-				function = "gpio";
-			};
-			config {
-				pins = "gpio61";
-				drive-strength = <2>;
-				bias-pull-down;
-			};
-		};
-	};
-};
-
-&dai_mi2s3 {
-    qcom,msm-mi2s-rx-lines = <1>;
-    qcom,msm-mi2s-tx-lines = <2>;
-};
-
-&q6core {
-    quat_mi2s_gpios: msm_cdc_pinctrl_quat {
-        compatible = "qcom,msm-cdc-pinctrl";
-        pinctrl-names = "aud_active", "aud_sleep";
-        pinctrl-0 = <&quat_mi2s_sck_active &quat_mi2s_ws_active
-                     &quat_mi2s_sd0_active &quat_mi2s_sd1_active>;
-        pinctrl-1 = <&quat_mi2s_sck_sleep &quat_mi2s_ws_sleep
-                     &quat_mi2s_sd0_sleep &quat_mi2s_sd1_sleep>;
-        qcom,lpi-gpios;
+    nct7802@2e {
+       reg = <0x2e>;
+        compatible = "nct7802";
     };
 };
 
-&va_macro {
-        va-vdd-micb-supply = <&L4C>;
-};
+&qupv3_se3_i2c {
+    ene8k41_power@41 {
+		compatible = "ene8k41_power";
+		reg = <0x41>;
+		ene8k41,switch-mode-gpio = <&tlmm 117 0x0>;
 
-&tx_macro {
-	tx-vdd-micb-supply = <&L4C>;
-	qcom,tx-vdd-micb-voltage = <1800000 1800000>;
-	qcom,tx-vdd-micb-current = <11200>;
-	qcom,tx-dmic-sample-rate = <2400000>;
-	qcom,tx-swr-gpios;
-};
-
-&rx_macro {
-    qcom,rx-swr-gpios;
-};
-
-&wcd938x_codec {
-	status = "disabled";
-};
-
-&wcd938x_rx_slave {
-	status = "disabled";
-};
-
-&wcd938x_tx_slave {
-	status = "disabled";
-};
-
-&wcd938x_rst_gpio {
-	status = "disabled";
-};
-
-&wsa_macro {
-	status = "disabled";
-};
-
-&wsa_swr_gpios {
-	status = "disabled";
-};
-
-&swr1 {
-    status = "disabled";
-};
-
-&swr2 {
-    status = "disabled";
-};
-
-&bolero {
-	qcom,num-macros = <3>;
-	bolero-clk-rsc-mngr {
-		clock-names = "tx_core_clk", "tx_npl_clk", "rx_core_clk", "rx_npl_clk",
-			 "va_core_clk", "va_npl_clk";
-		clocks = <&clock_audio_tx_1 0>, <&clock_audio_tx_2 0>,
-			<&clock_audio_rx_1 0>, <&clock_audio_rx_2 0>,
-			<&clock_audio_va_1 0>, <&clock_audio_va_2 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&switch_mode_default>;
 	};
 };
 
-&clock_audio_wsa_1 {
-	status = "disabled";
+&tlmm{
+	check-3v {
+		check_3v_default: check_3v_default{
+			mux {
+				pins = "gpio61";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio61";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable = <0>;   /* no pull */
+				input-enable;
+			};
+		};
+	};
+
+	switch-mode-gpio {
+		switch_mode_default: switch_mode_default{
+			mux {
+				pins = "gpio117";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio117";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable = <0>;   /* no pull */
+				input-enable;
+			};
+		};
+	};
+};
+// ASUS_BSP Deeo : DT ACCY driver ---
+
+// ASUS BSP Deeo : Station ACCY driver +++
+&qupv3_se3_i2c {
+    status = "ok";
+    ene6k582_station@4e {
+        compatible = "ene6k582_station";	// For Station AuraLight
+        reg = <0x4e>;
+        };
 };
 
-&clock_audio_wsa_2 {
-	status = "disabled";
+&qupv3_se3_i2c {
+    status = "ok";
+    ec_i2c@60 {
+        compatible = "ec_i2c";		// For Station EC control
+        reg = <0x60>;
+        };
 };
 
-/* ASUS BSP DisplayPort, add for DisplayPort --- */
+&qupv3_se1_i2c {
+	status = "ok";
+	ec_i2c_ap@60{
+		compatible = "ec_i2c_ap";	// For Station FW update via I2C
+		reg = <0x60>;  
+	};
+};
+// ASUS BSP Deeo : Station ACCY driver ---
 
-/*    ====================================
- *    overlay for kona-audio-overlay.dtsi - end
- *    ====================================
- */
+// ASUS_BSP Deeo : EC_Driver +++
+&soc {
+	asus:ec_hid {
+		status = "ok";
+		compatible = "asus:ec_hid";
 
-/* ASUS BSP DisplayPort, add for DisplayPort +++ */
-&sde_dp {
-	/delete-property/ qcom,dp-aux-switch;
-	qcom,dp-gpio-aux-switch;
+		dongle,pogo-sleep = <&tlmm 82 0x0>;
+		dongle,pogo-det = <&tlmm 145 0x0>;
+		//dongle,pogo-fan-on = <&tlmm 117 0x0>;
+		//dongle,pogo-aura-en = <&tlmm 61 0x0>;
+		//dongle,pogo-temp-intr = <&tlmm 84 0x0>;
 
-	qcom,aux-en-gpio = <&tlmm 162 0>;
-	qcom,aux-sel-gpio = <&pm8150l_gpios 1 0x0>;
+		io-channels = <&pm8150l_vadc ADC_GPIO2>;
+		io-channel-names ="asus_pogo_vadc";
+		qcom,pogo-id-adc_tm = <&pm8150l_adc_tm ADC_GPIO2>;
+		qcom.pogo-id-gpio = <&pm8150l_gpios 6 0x0>;
 
-	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
-	pinctrl-0 = <&sde_dp_aux_active &sde_dp_usbplug_cc_active &aux_sel_default>;
-	pinctrl-1 = <&sde_dp_aux_suspend &sde_dp_usbplug_cc_suspend &aux_sel_default>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pogo_id_default &pogo_sleep_default &pogo_det_default>;
+
+		panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
+	};
+};
+
+&tlmm{
+	pogo-det {
+		pogo_det_default: pogo_det_default {
+			mux {
+				pins = "gpio145";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio145";
+				drive-strength = <8>;   /* 8 mA */
+				output-low;
+				bias-disable;   /* no pull */
+			};
+		};
+	};
+	pogo-sleep {
+		pogo_sleep_default: pogo_sleep_default{
+			mux {
+				pins = "gpio82";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio82";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+
+	pogo-fan-on {
+		pogo_fan_on_default: pogo_fan_on_default{
+			mux {
+				pins = "gpio117";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio117";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+
+	pogo-aura-en {
+		pogo_aura_en_default: pogo_aura_en_default{
+			mux {
+				pins = "gpio61";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio61";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+
+	pogo-temp-intr {
+		pogo_temp_intr_default: pogo_temp_intr_default{
+			mux {
+				pins = "gpio84";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio84";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
 };
 
 &pm8150l_gpios {
-	gpio1_aux_sel {
-		aux_sel_default: aux_sel_default {
-			pins = "gpio1";
+	gpio6_pogo_id {
+		pogo_id_default: pogo_id_default {
+			pins = "gpio6";
 			function = "normal";
 			bias-disable;
-			output-low;
 			power-source = <0>;
 		};
 	};
 };
 
-&tlmm {
-	sde_dp_aux_active: sde_dp_aux_active {
-		mux {
-			pins = "gpio27";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio27";
-			bias-disable = <0>; /* no pull */
-			drive-strength = <8>;
-		};
-	};
-
-	sde_dp_aux_suspend: sde_dp_aux_suspend {
-		mux {
-			pins = "gpio162";
-			function = "gpio";
-		};
-
-		config {
-			pins = "gpio162";
-			bias-pull-down;
-			drive-strength = <2>;
-		};
+&pm8150l_vadc {
+	asus_pogo_vadc {
+		reg = <ADC_GPIO2>;
+		label = "asus_pogo_vadc";
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
 	};
 };
 
-&qupv3_se15_i2c {
-	fsa4480: fsa4480@43 {
-		status = "disable";
+&pm8150l_adc_tm {
+	io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
+					<&pm8150l_vadc ADC_AMUX_THM2_PU2>,
+					<&pm8150l_vadc ADC_AMUX_THM3_PU2>,
+					<&pm8150l_vadc ADC_GPIO2>;
+	asus_pogo_vadc {
+		reg = <ADC_GPIO2>;
+		qcom,hw-settle-time = <200>;
+		qcom,scale-type = <0>;
+		qcom,kernel-client;
 	};
 };
-/* ASUS BSP DisplayPort, add for DisplayPort --- */
+// ASUS_BSP Deeo : EC_Driver ---
 
-&soc {
-	//ASUS_BSP Peter_Yeh fingerprint sensor +++
-	goodix_fp {
-		compatible = "goodix,fingerprint";
-		fp-gpio-irq = <&tlmm 23 0x00>;
-		fp-gpio-reset = <&pm8150b_gpios 1 0x0>;
-		vcc-supply = <&pm8150a_l11>;
-		asus-fp,vcc-voltage=<3150000 3300000>;
-		status = "okay";
-	};
-	//ASUS_BSP Peter_Yeh fingerprint sensor ---
-	
-	//Disable qcom default FP setting
-	qcom,qbt_handler {
-		status = "disable";
-	};
-};
 
-// ASUS_BSP Austin_T : NXP Charger +++
-&pcie1_clkreq_default {	//disable qcom soc gpio83 for PCA9468_INT
-	status = "disabled";
-};
 
-&vreg_hap_boost {	//disable qcom soc gpio83 for PCA9468_INT
-	status = "disabled";
-};
 
-&qupv3_se15_i2c {
-    	status = "ok";
-    	pca9468@5e {
-        	compatible = "nxp,pca9468";
-        	reg = <0x5e>;
-					usbpd-phy = <&pm8150b_pdphy>;
-			
-        	pca9468,irq-gpio = <&tlmm 83 0x0>;
-        	pca9468,input-current-limit = <1900000>; /* 1.9A */
-        	pca9468,charging-current = <6000000>; /* 6A */
-        	pca9468,float-voltage = <4380000>; /* 4.38V */
-        	pca9468,input-itopoff = <700000>; /* 700mA */
-        	pca9468,charging-itopoff = <1000000>; /* 500mA */
-        	pca9468,sense-resistance = <1>; /* 10mOhm */
-        	pca9468,switching-frequency = <7>; /* 1160KHz */
-
-        	pinctrl-names = "pca_gpio_default";
-        	pinctrl-0 = <&pca_input_hi_default>;
-        	
-        	panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim>;
-    	};
-};
-// ASUS_BSP Austin_T : NXP Charger ---
-
-//ASUS_BSP: no use SDC2 SD card slot 
-&sdhc_2 {
-	status = "disabled";
-};

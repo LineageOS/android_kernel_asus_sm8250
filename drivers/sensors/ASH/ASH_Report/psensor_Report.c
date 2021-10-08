@@ -41,10 +41,15 @@
 /*Global Variables*/
 /*****************/
 static struct input_dev *input_dev_ps = NULL;
-
+static bool g_input_dev_reg_status = false;
 int psensor_report_register(void)
 {
 	int ret = 0;
+	
+	if(true == g_input_dev_reg_status){
+		err("%s: psensor input_register_device has been registered(%d). \n", __FUNCTION__);
+		return 0;
+	}
 	
 	/* Proximity Input event allocate */
 	input_dev_ps = input_allocate_device();
@@ -69,6 +74,7 @@ int psensor_report_register(void)
 		return -1;
 	}
 
+	g_input_dev_reg_status = true;
 	dbg("Input Event Success Registration\n");
 	return 0;
 }
@@ -76,14 +82,19 @@ EXPORT_SYMBOL(psensor_report_register);
 
 void psensor_report_unregister(void)
 {	
-	input_unregister_device(input_dev_ps);
-	input_free_device(input_dev_ps);	
+	if(true == g_input_dev_reg_status){
+		input_unregister_device(input_dev_ps);
+		input_free_device(input_dev_ps);	
+	}
 }
 EXPORT_SYMBOL(psensor_report_unregister);
 
 void psensor_report_abs(int abs)
 {
-#ifndef ZS661KS_PL
+	if(false == g_input_dev_reg_status){
+		return;
+	}
+#ifndef ONE_PL_CHIP
 	if(abs != PSENSOR_REPORT_PS_AWAY &&
 		abs != PSENSOR_REPORT_PS_CLOSE &&
 		abs != PSENSOR_REPORT_PS_POCKET &&

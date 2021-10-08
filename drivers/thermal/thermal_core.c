@@ -454,10 +454,12 @@ static void store_temperature(struct thermal_zone_device *tz, int temp)
 
 
 #ifdef ASUS_ZS661KS_PROJECT
-	if (tz->id==77) /* skin-therm */
+	//if (tz->id==77) /* skin-therm */
+	if (!strcmp(tz->type, "skin-therm-usr"))
 		G_skin_therm_temp = temp;
 	
-	if (tz->id==80) /* skin-msm-therm */
+	//if (tz->id==80) /* skin-msm-therm */
+	if (!strcmp(tz->type, "skin-msm-therm-usr"))
 		G_skin_msm_therm_temp = temp;
 #endif
 	

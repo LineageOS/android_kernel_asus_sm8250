@@ -18,13 +18,21 @@
 #ifndef __LINUX_ALSPS_VCNL36866_H
 #define __LINUX_ALSPS_VCNL36866_H
 
+#ifdef ASUS_ZS661KS_PROJECT
 #define VCNL36866_PROXIMITY_INF_DEFAULT     (103)
 #define VCNL36866_PROXIMITY_THDL_DEFAULT    (162)
 #define VCNL36866_PROXIMITY_THDH_DEFAULT    (270)
 #define VCNL36866_PROXIMITY_AUTOK_MIN       (3)
 #define VCNL36866_PROXIMITY_AUTOK_MAX       (600)
 #define VCNL36866_LIGHT_CALIBRATION_DEFAULT (846)
-
+#else
+#define VCNL36866_PROXIMITY_INF_DEFAULT     (416)
+#define VCNL36866_PROXIMITY_THDL_DEFAULT    (520)
+#define VCNL36866_PROXIMITY_THDH_DEFAULT    (832)
+#define VCNL36866_PROXIMITY_AUTOK_MIN       (3)
+#define VCNL36866_PROXIMITY_AUTOK_MAX       (2500)
+#define VCNL36866_LIGHT_CALIBRATION_DEFAULT (1658)
+#endif
 #define VCNL36866_LIGHT_MAX_THRESHOLD       (65534)
 #define VCNL36866_NUM_REGS                  (15)
 
@@ -121,6 +129,10 @@ static struct vcnl36866_reg vcnl36866_regs[] = {
 #define VCNL36866_CS_START2_MASK  0xFD
 #define VCNL36866_CS_START2_SHIFT (1)
 #define VCNL36866_CS_START2       (1)
+
+#define VCNL36866_CS_RSV_MASK  0xDF
+#define VCNL36866_CS_RSV_SHIFT       (5)
+#define VCNL36866_CS_RSV       (1)
 
 #define VCNL36866_CS_INT_EN   (1 << 0) /*enable/disable Interrupt*/
 #define VCNL36866_CS_INT_MASK 0xFE
@@ -226,5 +238,30 @@ static struct vcnl36866_reg vcnl36866_regs[] = {
 #define INT_FLAG_CS_IF_H     (1 << 2)
 #define INT_FLAG_PS_IF_CLOSE (1 << 1)  //PS rises above PS_THDH INT trigger event
 #define INT_FLAG_PS_IF_AWAY  (1 << 0)  //PS drops below PS_THDL INT trigger event
+
+/**
+ * for ALS Dynamic control array
+ **/
+
+struct vcnl36866_dynamic {
+	uint8_t IT_TIME;
+	int sensitivity;
+	u64 evt_skip_time_ns;
+};
+static int ALS_dynamic_status = 0;
+
+#ifdef ZS670KS_PROJECT
+static struct vcnl36866_dynamic vcnl36866_dynamic_array[] = {
+	{.IT_TIME = VCNL36866_CS_IT_100MS, .sensitivity = 4, .evt_skip_time_ns = 0},
+	{.IT_TIME = VCNL36866_CS_IT_400MS, .sensitivity = 1, .evt_skip_time_ns = 500000000},
+	{.IT_TIME = VCNL36866_CS_IT_50MS, .sensitivity = 8, .evt_skip_time_ns = 100000000},
+};
+#else
+static struct vcnl36866_dynamic vcnl36866_dynamic_array[] = {
+	{.IT_TIME = VCNL36866_CS_IT_50MS, .sensitivity=1, .evt_skip_time_ns = 0},
+	{.IT_TIME = VCNL36866_CS_IT_50MS, .sensitivity=1, .evt_skip_time_ns = 0},
+	{.IT_TIME = VCNL36866_CS_IT_50MS, .sensitivity=1, .evt_skip_time_ns = 0},
+};
+#endif
 
 #endif

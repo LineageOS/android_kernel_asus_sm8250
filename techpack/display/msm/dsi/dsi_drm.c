@@ -11,7 +11,6 @@
 #include "sde_connector.h"
 #include "dsi_drm.h"
 #include "sde_trace.h"
-#include "sde_encoder.h"
 
 #define to_dsi_bridge(x)     container_of((x), struct dsi_bridge, base)
 #define to_dsi_state(x)      container_of((x), struct dsi_connector_state, base)
@@ -27,6 +26,31 @@ static struct dsi_display_mode_priv_info default_priv_info = {
 	.panel_prefill_lines = DEFAULT_PANEL_PREFILL_LINES,
 	.dsc_enabled = false,
 };
+
+extern bool asus_display_in_normal_off(void);
+
+static void dsi_bridge_asus_dfps(struct drm_bridge *bridge)
+{
+	int rc = 0;
+	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+
+	if (!bridge) {
+		pr_err("Invalid params\n");
+		return;
+	}
+
+	if (asus_display_in_normal_off()) {
+		pr_err("[Display] skip dfps in display off.\n");
+		return;
+	}
+
+	rc = dsi_display_asus_dfps(c_bridge->display);
+	if (rc) {
+		pr_err("[%d] failed to perform a fps set, rc=%d\n",
+			c_bridge->id, rc);
+		return;
+	}
+}
 
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
@@ -341,8 +365,6 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	struct dsi_display *display;
 	struct dsi_display_mode dsi_mode, cur_dsi_mode, *panel_dsi_mode;
 	struct drm_crtc_state *crtc_state;
-	bool clone_mode = false;
-	struct drm_encoder *encoder;
 
 	crtc_state = container_of(mode, struct drm_crtc_state, mode);
 
@@ -407,14 +429,6 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 			return false;
 		}
 
-		drm_for_each_encoder(encoder, crtc_state->crtc->dev) {
-			if (encoder->crtc != crtc_state->crtc)
-				continue;
-
-			if (sde_encoder_in_clone_mode(encoder))
-				clone_mode = true;
-		}
-
 		/* No panel mode switch when drm pipeline is changing */
 		if ((dsi_mode.panel_mode != cur_dsi_mode.panel_mode) &&
 			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR)) &&
@@ -431,16 +445,13 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 			dsi_mode.dsi_mode_flags |= DSI_MODE_FLAG_DMS;
 	}
 
-	/* Reject seamless transition when active/connectors changed */
-	if ((crtc_state->active_changed ||
-		(crtc_state->connectors_changed && clone_mode)) &&
+	/* Reject seamless transition when active changed */
+	if (crtc_state->active_changed &&
 		((dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR) ||
 		(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_POMS) ||
 		(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK))) {
-		DSI_ERR("seamless on active/conn(%d/%d) changed 0x%x\n",
-			crtc_state->active_changed,
-			crtc_state->connectors_changed,
-			dsi_mode.dsi_mode_flags);
+		DSI_ERR("seamless upon active changed 0x%x %d\n",
+			dsi_mode.dsi_mode_flags, crtc_state->active_changed);
 		return false;
 	}
 
@@ -533,6 +544,7 @@ static const struct drm_bridge_funcs dsi_bridge_ops = {
 	.disable      = dsi_bridge_disable,
 	.post_disable = dsi_bridge_post_disable,
 	.mode_set     = dsi_bridge_mode_set,
+	.asus_dfps    = dsi_bridge_asus_dfps,  /* ASUS BSP Display +++ */
 };
 
 int dsi_conn_set_info_blob(struct drm_connector *connector,
@@ -820,8 +832,8 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 	struct drm_display_mode drm_mode;
 	struct dsi_display *display = data;
 	struct edid edid;
-	u8 width_mm = connector->display_info.width_mm;
-	u8 height_mm = connector->display_info.height_mm;
+	unsigned int width_mm = connector->display_info.width_mm;
+	unsigned int height_mm = connector->display_info.height_mm;
 	const u8 edid_buf[EDID_LENGTH] = {
 		0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x44, 0x6D,
 		0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x1B, 0x10, 0x01, 0x03,
@@ -863,9 +875,15 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 		}
 		m->width_mm = connector->display_info.width_mm;
 		m->height_mm = connector->display_info.height_mm;
-		/* set the first mode in list as preferred */
-		if (i == 0)
+
+		if (display->cmdline_timing != NO_OVERRIDE) {
+			/* get the preferred mode from dsi display mode */
+			if (modes[i].is_preferred)
+				m->type |= DRM_MODE_TYPE_PREFERRED;
+		} else if (i == 0) {
+			/* set the first mode in list as preferred */
 			m->type |= DRM_MODE_TYPE_PREFERRED;
+		}
 		drm_mode_probed_add(connector, m);
 	}
 

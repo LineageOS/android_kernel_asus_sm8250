@@ -13,16 +13,13 @@
 #include <dsp/audio_calibration.h>
 #include <dsp/audio_cal_utils.h>
 
+
 /* ASUS_BSP +++ AudioWizard ringtone mode */
 #include <linux/input.h>
 
 int g_audiowizard_force_preset_state = 0;
 struct input_dev *audiowizard;
 /* ASUS_BSP --- */
-
-//Jessy +++ send mic intent
-struct input_dev *audiorecord_mic_using_dev;
-//Jessy ---
 
 /* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 static struct kset *activeinputpid_uevent_kset;
@@ -61,23 +58,11 @@ static void send_audiowizard_state(struct input_dev *dev ,int audiowizard_state)
 	}
 }
 /* ASUS_BSP --- */
-
-//Jessy +++ send mic intent
-static void send_audiorecord_mic_using(struct input_dev *dev, int state){
-    if(state == 1){
-        input_report_switch(dev, SW_AUDIORECORD_START, 1);
-    } else{
-        input_report_switch(dev, SW_AUDIORECORD_STOP, 1);
-    }
-    input_sync(dev);
-
-    //clear start/stop switch for next event
-    input_report_switch(dev, SW_AUDIORECORD_START, 0);
-    input_report_switch(dev, SW_AUDIORECORD_STOP, 0);
-    input_sync(dev);
-}
-//Jessy ---
-
+//ASUS_BSP +++
+//#ifdef ZS661KS
+struct input_dev *audiorecord_mic_using_dev;
+//#endif
+//ASUS_BSP ---
 
 static bool callbacks_are_equal(struct audio_cal_callbacks *callback1,
 				struct audio_cal_callbacks *callback2)
@@ -437,6 +422,25 @@ static int audio_cal_release(struct inode *inode, struct file *f)
 	return ret;
 }
 
+//ASUS_BSP +++
+//#ifdef ZS661KS
+
+static void send_audiorecord_mic_using(struct input_dev *dev, int state){
+    if(state == 1){
+        input_report_switch(dev, SW_AUDIORECORD_START, 1);
+    } else{
+        input_report_switch(dev, SW_AUDIORECORD_STOP, 1);
+    }
+    input_sync(dev);
+
+    //clear start/stop switch for next event
+    input_report_switch(dev, SW_AUDIORECORD_START, 0);
+    input_report_switch(dev, SW_AUDIORECORD_STOP, 0);
+    input_sync(dev);
+}
+//#endif
+//ASUS_BSP ---
+
 static long audio_cal_shared_ioctl(struct file *file, unsigned int cmd,
 							void __user *arg)
 {
@@ -447,16 +451,15 @@ static long audio_cal_shared_ioctl(struct file *file, unsigned int cmd,
 	int failedinputpid = 0;
 	/* ASUS_BSP --- */
 	struct audio_cal_basic *data = NULL;
+//#ifdef ZS661KS
+    int audiorecord_mic_using = 0;
+//#endif
 	/* ASUS_BSP +++ EU/nonEU */
 	int is_non_eu = 0;
 	/* ASUS_BSP --- EU/nonEU */
 	/* ASUS_BSP +++ Set PWM for recording */
 	int pwm_mode = 0;
 	/* ASUS_BSP --- Set PWM for recording */
-
-//Jessy +++ send mic intent
-        int audiorecord_mic_using = 0;
-//Jessy ---
 
 	pr_debug("%s\n", __func__);
 
@@ -468,10 +471,9 @@ static long audio_cal_shared_ioctl(struct file *file, unsigned int cmd,
 	case AUDIO_GET_CALIBRATION:
 	case AUDIO_POST_CALIBRATION:
 		break;
-
-//Jessy +++ send mic intent
+    //ASUS_BSP +++
     case AUDIO_SET_AUDIORECORD_MIC_USING:
-
+//#ifdef ZS661KS
         mutex_lock(&audio_cal.cal_mutex[AUDIORECORD_MIC_USING_TYPE]);
         if(copy_from_user(&audiorecord_mic_using, (void *)arg, sizeof(audiorecord_mic_using))){
             pr_err("%s: Could not copy audiorecord_mic_using from user\n", __func__);
@@ -480,10 +482,8 @@ static long audio_cal_shared_ioctl(struct file *file, unsigned int cmd,
         pr_err("%s: AUDIO_SET_AUDIORECORD_MIC_USING audiorecord_mic_using %d\n", __func__, audiorecord_mic_using);
         send_audiorecord_mic_using(audiorecord_mic_using_dev,audiorecord_mic_using);
         mutex_unlock(&audio_cal.cal_mutex[AUDIORECORD_MIC_USING_TYPE]);
-
+//#endif
         goto done;
-//Jessy ---
-
 	/* ASUS_BSP +++ AudioWizard ringtone mode */
 	case AUDIO_SET_AUDIOWIZARD_FORCE_PRESET:
 		mutex_lock(&audio_cal.cal_mutex[AUDIOWIZARD_FORCE_PRESET_TYPE]);
@@ -677,12 +677,8 @@ static long audio_cal_ioctl(struct file *f,
 #define AUDIO_SET_AUDIOWIZARD_FORCE_PRESET32    _IOWR(CAL_IOCTL_MAGIC, \
 							221, compat_uptr_t)
 /* ASUS_BSP --- */
-
-//Jessy +++ send mic intent
 #define AUDIO_SET_AUDIORECORD_MIC_USING32	_IOWR(CAL_IOCTL_MAGIC, \
 							223, compat_uptr_t)
-
-//Jessy ---
 
 /* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 #define AUDIO_SET_ACTIVEINPUT_PID32	_IOWR(CAL_IOCTL_MAGIC, \
@@ -727,18 +723,16 @@ static long audio_cal_compat_ioctl(struct file *f,
 		cmd64 = AUDIO_SET_AUDIOWIZARD_FORCE_PRESET;
 		break;
 /* ASUS_BSP --- */
-
-//Jessy +++ send mic intent
-        case AUDIO_SET_AUDIORECORD_MIC_USING32:
-                cmd64 = AUDIO_SET_AUDIORECORD_MIC_USING;
-                break;
-//Jessy ---
-
+    //ASUS_BSP +++
+    case AUDIO_SET_AUDIORECORD_MIC_USING32:
+        cmd64 = AUDIO_SET_AUDIORECORD_MIC_USING;
+        break;
 /* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
 	case AUDIO_SET_ACTIVEINPUT_PID32:
 		cmd64 = AUDIO_SET_ACTIVEINPUT_PID;
 		break;
 /* ASUS_BSP --- */
+    //ASUS_BSP +++
 /* ASUS_BSP +++ EU/nonEU */
 	case AUDIO_SET_EU_NONEU32:
 		cmd64 = AUDIO_SET_EU_NONEU;
@@ -832,9 +826,9 @@ static int activeinputpid_uevent_init(void)
 int __init audio_cal_init(void)
 {
 	int i = 0;
-/* ASUS_BSP +++ AudioWizard ringtone mode */
-	int ret = 0;
-/* ASUS_BSP --- */
+
+    int ret = 0;
+
 
 	pr_debug("%s\n", __func__);
 
@@ -848,8 +842,8 @@ int __init audio_cal_init(void)
 	if (ret < 0)
 		pr_err("%s: failed to register inputevent audiowizard\n", __func__);
 /* ASUS_BSP --- */
-
-//Jessy +++ send mic intent
+//ASUS_BSP +++
+//#ifdef ZS661KS
     audiorecord_mic_using_dev = input_allocate_device();
     if(!audiorecord_mic_using_dev)
         pr_err("%s: [Inputevent]failed to allocate inputevent audiorecord_mic_using_dev\n", __func__);
@@ -859,12 +853,11 @@ int __init audio_cal_init(void)
     ret = input_register_device(audiorecord_mic_using_dev);
     if(ret < 0)
         pr_err("%s: [Inputevent]failed to register inputevent audiorecord_mic_using_dev\n", __func__);
-//Jessy ---
-
+//#endif
 /* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
         activeinputpid_uevent_init();
 /* ASUS_BSP --- */
-
+//ASUS_BSP ---
 	memset(&audio_cal, 0, sizeof(audio_cal));
 	mutex_init(&audio_cal.common_lock);
 	for (; i < MAX_CAL_TYPES; i++) {
@@ -884,10 +877,11 @@ void audio_cal_exit(void)
 /* ASUS_BSP +++ AudioWizard ringtone mode */
 	input_free_device(audiowizard);
 /* ASUS_BSP --- */
-
-//Jessy +++ send mic intent
+    //ASUS_BSP +++
+//#ifdef ZS661KS
     input_free_device(audiorecord_mic_using_dev);
-//Jessy ---
+//#endif
+    //ASUS_BSP ---
 
 	for (; i < MAX_CAL_TYPES; i++) {
 		list_for_each_safe(ptr, next,

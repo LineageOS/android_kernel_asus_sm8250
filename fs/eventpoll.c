@@ -1383,13 +1383,13 @@ static int ep_create_wakeup_source(struct epitem *epi)
 	struct wakeup_source *ws;
 
 	if (!epi->ep->ws) {
-		epi->ep->ws = wakeup_source_register("eventpoll");
+		epi->ep->ws = wakeup_source_register(NULL, "eventpoll");
 		if (!epi->ep->ws)
 			return -ENOMEM;
 	}
 
 	name = epi->ffd.file->f_path.dentry->d_name.name;
-	ws = wakeup_source_register(name);
+	ws = wakeup_source_register(NULL, name);
 
 	if (!ws)
 		return -ENOMEM;
@@ -2145,7 +2145,7 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 error_tgt_fput:
 	if (full_check) {
 		clear_tfile_check_list();
- 		mutex_unlock(&epmutex);
+		mutex_unlock(&epmutex);
 	}
 
 	fdput(tf);

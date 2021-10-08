@@ -216,6 +216,8 @@ void asus_init_probe(void){
 	
 	/* fw status default value */
 	snt8100fsr_g->grip_fw_loading_status = false;
+	snt8100fsr_g->fw_sec_source = false;
+	snt8100fsr_g->fw_info_check = false;
 	
     Grip_DPC_status_g = Grip_DPC_status_t;
     memset(grip_state_t, -1, sizeof(*grip_state_t));

@@ -8,13 +8,14 @@
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 
 #include "kona-mtp.dtsi"
- #include "camera/zs670ks-evb-camera-sensor-mtp.dtsi"
+// #include "camera/zs670ks-evb-camera-sensor-mtp.dtsi"
 // ZS670KS_Display_Lotta_Lu +++++++++ 
 #include "dsi-panel-boe-2k-video.dtsi"
 //ZS670KS_Display_Lotta_Lu --------
 
+
 // ZS670KS_fingerprint;asus_bsp++
-#include "zs670ks-goodix-fp.dtsi"
+//#include "zs670ks-goodix-fp.dtsi"
 //ZS670KS_fingerprint;asus_bsp--
 
 / {
@@ -51,7 +52,7 @@
 		status = "disable";
 	};
 
-	focaltech@38 {
+	focaltech@38{
 		compatible = "focaltech,fts";
 		reg = <0x38>;
 		interrupt-parent = <&tlmm>;
@@ -59,13 +60,12 @@
 		focaltech,reset-gpio = <&tlmm 69 0x01>;
 		focaltech,irq-gpio = <&tlmm 68 0x2008>;
 		focaltech,max-touch-number = <10>;
-		vdd-supply = <&pm8150_l14>;
-		lab-supply = <&lcdb_ldo_vreg>;
-		ibb-supply = <&lcdb_ncp_vreg>;
+
+		vdd-supply = <&pm8150_l13>;
 		focaltech,regulator_dvdd = "vdd";
-		focaltech,regulator_lab = "lab";
-		focaltech,regulator_ibb = "ibb";
-		focaltech,display-coords = <0 0 1080 2340>;
+		vcc_i2c-supply = <&pm8150a_l1>;
+		focaltech,regulator_dvcc_i2c = "vcc_i2c";
+		focaltech,display-coords = <0 0 1080 2400>;
 	};
 };
 
@@ -96,13 +96,12 @@
 			vcc_s4a_1p8-supply = <&pm8150_s4>;
 			vcc_l10a_3p3-supply = <&pm8150_l10>;
 			pinctrl-names = "mcu_active", "mcu_suspend";
-			pinctrl-0 = <&mcu_pin_active &mcu_pin_test_enable &mcu5V_boost_pin_enable &mcu_pin_wakeup_enable &mcu_pin_int_enable>;
-			pinctrl-1 = <&mcu_pin_suspend &mcu_pin_test_disable &mcu5V_boost_pin_disable &mcu_pin_wakeup_disable &mcu_pin_int_disable>;
-			gpios = <&tlmm 112 0>,<&tlmm 113 0>, <&tlmm 62 0>, <&tlmm 114 0> , <&tlmm 162 0>;
+			pinctrl-0 = <&mcu_pin_active &mcu_pin_test_enable &mcu_pin_wakeup_enable &mcu_pin_int_enable>;
+			pinctrl-1 = <&mcu_pin_suspend &mcu_pin_test_disable &mcu_pin_wakeup_disable &mcu_pin_int_disable>;
+			gpios = <&tlmm 112 0>,<&tlmm 113 0>, <&tlmm 114 0> , <&tlmm 162 0>;
 
 			MCU,mcureset-gpios = <&tlmm 112 0x00>;
 			MCU,mcutest-gpios = <&tlmm 113 0x00>;
-			MCU,mcu5V_boost_enable-gpios = <&tlmm 62 0x00>;
 			MCU,mcuwakeup-gpios = <&tlmm 114 0x00>;
 			MCU,mcuint-gpios = <&tlmm 162 0x00>;
 			MCU,slave_address = <0x48>;
@@ -117,6 +116,25 @@
 };
 //ZS670KS Watchdog ++
 
+//ASUS_BSP RIL+++
+&soc {
+	qcom,ipa_fws {
+		compatible = "qcom,pil-tz-generic";
+		vdd-3.0-antenna-supply = <&pm8150_l16>;
+	};
+};
+
+&apps_rsc {
+	rpmh-regulator-ldoa16 {
+		L16A: pm8150_l16: regulator-pm8150-l16 {
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+		};
+	};
+};
+//ASUS_BSP RIL---
+
+
  /*    ====================================
  *    overlay for kona.dtsi - end
  *    ====================================
@@ -127,6 +145,24 @@
  *    overlay for kona-mtp.dtsi - start
  *    ====================================
  */
+ 
+ &pm8150b_vadc {
+	bat_therm@4a {
+		reg = <ADC_BAT_THERM_PU2>;
+		label = "batt_therm";
+		qcom,ratiometric;
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+	
+	wp_therm@4d {
+		reg = <ADC_AMUX_THM1_PU2>;
+		label = "wp_therm";
+		qcom,ratiometric;
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+	};
+};
  
  &thermal_zones { 	
 	virtual-therm {
@@ -142,20 +178,29 @@
 			};
 		};
 	};
+
+	modem-ambient-usr {
+		polling-delay = <1000>;
+	};
+
+	modem-lte-sub6-pa2 {
+		polling-delay = <1000>;
+	};
+
 };
  
 // ZS670KS_Haptics_Ryan_Ren +++++++++
 &pm8150b_haptics {
-	qcom,vmax-mv = <2420>;
+	qcom,vmax-mv = <2200>;
 	qcom,play-rate-us = <4255>;
 	qcom,wf-brake-pattern = [02 02 02 02];
 	wf_0 {
 		/* CLICK */
 		qcom,effect-id = <0>;
-		qcom,wf-vmax-mv = <3596>;
-		qcom,wf-pattern = [3e 3e 3e];
+		qcom,wf-vmax-mv = <3500>;
+		qcom,wf-pattern = [3e 3e 3e 00 00 00 00 00];
 		qcom,wf-play-rate-us = <4255>;
-		qcom,wf-brake-pattern = [02 02 00 00];
+		qcom,wf-brake-pattern = [03 02 00 00];
 		/delete-property/ qcom,wf-repeat-count;
 		/delete-property/ qcom,wf-s-repeat-count;
 		/delete-property/ qcom,lra-auto-resonance-disable;
@@ -225,6 +270,132 @@
 	cd-gpios = <&tlmm 77 GPIO_ACTIVE_HIGH>;
 	status = "ok";
 };
+
+
+//change SDCARD driven from 16 tp 6ma for RF desense issue
+		&sdc2_clk_on{
+			config {
+				pins = "sdc2_clk";
+				bias-disable;		/* NO pull */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+
+		&sdc2_clk_ds_400KHz {
+			config {
+				pins = "sdc2_clk";
+				bias-disable;		/* NO pull */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_clk_ds_50MHz {
+			config {
+				pins = "sdc2_clk";
+				bias-disable;		/* NO pull */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_clk_ds_100MHz {
+			config {
+				pins = "sdc2_clk";
+				bias-disable;		/* NO pull */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_clk_ds_200MHz {
+			config {
+				pins = "sdc2_clk";
+				bias-disable;		/* NO pull */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+
+       &sdc2_cmd_on {
+			config {
+				pins = "sdc2_cmd";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+
+		&sdc2_cmd_ds_400KHz {
+			config {
+				pins = "sdc2_cmd";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_cmd_ds_50MHz {
+			config {
+				pins = "sdc2_cmd";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_cmd_ds_100MHz {
+			config {
+				pins = "sdc2_cmd";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_cmd_ds_200MHz {
+			config {
+				pins = "sdc2_cmd";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_data_on {
+			config {
+				pins = "sdc2_data";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_data_ds_400KHz {
+			config {
+				pins = "sdc2_data";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_data_ds_50MHz {
+			config {
+				pins = "sdc2_data";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_data_ds_100MHz {
+			config {
+				pins = "sdc2_data";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
+		&sdc2_data_ds_200MHz {
+			config {
+				pins = "sdc2_data";
+				bias-pull-up;		/* pull up */
+				drive-strength = <8>;	/* 8 MA */
+			};
+		};
+
 //ZS670KS SDCARD Bevis ---------
 
 
@@ -318,6 +489,12 @@
 };
 /* ASUS_BSP --- icm20690 */
 
+//ASUS_BSP UFS PHY Power Off enable +++
+&ufsphy_mem {
+	/delete-property/ vdda-phy-always-on;
+};
+//ASUS_BSP UFS PHY Power Off enable ---
+
 /*    ====================================
  *    overlay for kona-mtp.dtsi - end
  *    ====================================
@@ -329,7 +506,7 @@
 &vendor {
 	asus_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "fg-gen4-batterydata-mlp466076-3250mah.dtsi"
+		#include "4439538_Asus_Tequila_4830mAh_averaged_MasterSlave_Apr21st2020_PM8150BGUI10014.dtsi"
 	};
 };
 
@@ -343,33 +520,54 @@
 };
 
 &pm8150b_charger {
+	qcom,auto-recharge-soc = <98>;
 	io-channels = <&pm8150b_vadc ADC_MID_CHG_DIV6>,
 		      <&pm8150b_vadc ADC_USB_IN_I>,
 		      <&pm8150b_vadc ADC_SBUx>,
 		      <&pm8150b_vadc ADC_VPH_PWR>,
 		      <&pm8150b_vadc ADC_AMUX_THM3_PU2>,
 		      <&pm8150b_vadc ADC_CHG_TEMP>,
-		      <&pm8150l_vadc ADC_GPIO4>;
+		      <&pm8150l_vadc ADC_GPIO4>,
+		      <&pm8150b_vadc ADC_AMUX_THM1_PU2>;
 	io-channel-names = "mid_voltage",
 			   "usb_in_current",
 			   "sbux_res",
 			   "vph_voltage",
 			   "conn_temp",
 			   "chg_temp",
-			   "asus_adapter_vadc";
+			   "asus_adapter_vadc",
+			   "wp_temp";
 	ADCPWREN_PMI_GP1-gpio82 = <&pm8150b_gpios 3 0x0>; //EVB use PM8150B GPIO3, SR use SM8250 GPIO82
 	ADC_SW_EN-gpio98 = <&tlmm 98 0x0>;
 	qcom,battery-data = <&asus_batterydata>;
+	qcom,chg-term-current-ma = <(-200)>;
 };
 
 &pm8150b_fg {
+	qcom,hold-soc-while-full;
+	qcom,linearize-soc;
 	qcom,battery-data = <&asus_batterydata>;
 	qcom,fg-cutoff-voltage = <3400>;
 	qcom,fg-empty-voltage = <2650>;
 	qcom,fg-cutoff-current = <100>;
 	qcom,fg-force-load-profile;
+	io-channels = <&pm8150b_vadc ADC_BAT_ID_PU2>;
+	io-channel-names = "batt_id";
+};
+
+&smb1390_charger {
+	qcom,min-ilim-ua = <1200000>;
+	qcom,max-temp-alarm-degc = <115>;
 };
 // ASUS_BSP Fuel guage/Charger dtsi overlay ---
+
+&usb1 {
+	extcon = <&pm8150b_charger>;
+};
+
+&extcon_usb1 {
+	status = "disabled";
+};
 
 /*    ====================================
  *    overlay for kona-pinctrl.dtsi - start
@@ -505,7 +703,7 @@
  				config {
  					pins = "gpio121";
  					drive-strength = <2>;
- 					bias-disable;
+ 					bias-pull-down;
  				};
  			};
  			gpio_hall_suspend: gpio_hall_suspend {
@@ -517,7 +715,7 @@
  				config {
  					pins = "gpio121";
  					drive-strength = <2>;
- 					bias-disable;
+ 					bias-pull-down;
  				};
  			};
 		};
@@ -598,32 +796,6 @@ mcu_pin_test_disable: mcu_pin_test_disable {
 	config {
 		pins = "gpio113";
 		bias-pull-down; /* PULL UP */
-		drive-strength = <2>; /* 2 MA */
-	};
-};
-
-mcu5V_boost_pin_enable: mcu5V_boost_pin_enable {
-	mux {
-		pins = "gpio62";
-		function = "gpio";
-	};
-
-	config {
-		pins = "gpio62";
-		bias-pull-up; 
-		drive-strength = <2>; /* 2 MA */
-	};
-};
-
-mcu5V_boost_pin_disable: mcu5V_boost_pin_disable {
-	mux {
-		pins = "gpio62";
-		function = "gpio";
-	};
-
-	config {
-		pins = "gpio62";
-		bias-pull-down; 
 		drive-strength = <2>; /* 2 MA */
 	};
 };
@@ -725,26 +897,21 @@ mcu_pin_int_disable: mcu_pin_int_disable {
  *    ====================================
  */
  
-// ASUS_BSP +++ ClayWang vcnl36866 
 &apps_rsc {
 
 	rpmh-regulator-ldoa10 {
 			L10A: pm8150_l10: regulator-pm8150-l10 {
 				regulator-max-microvolt = <3300000>;
 				qcom,init-voltage = <3300000>;
+				qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 			};
 	};
 
 	rpmh-regulator-ldoa13 {
 		L13A: pm8150_l13: regulator-pm8150-l13 {
-			qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
-		};
-	};
-
-	rpmh-regulator-ldoa16 {
-		L16A: pm8150_l16: regulator-pm8150-l16 {
-			regulator-min-microvolt = <2850000>;
-			qcom,init-voltage = <2850000>;
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			qcom,init-voltage = <3300000>;
 		};
 	};
 
@@ -812,10 +979,9 @@ mcu_pin_int_disable: mcu_pin_int_disable {
 
 	rpmh-regulator-ldoc10 {
 		L10C: pm8150a_l10: regulator-pm8150a-l10 {
-			regulator-min-microvolt = <3000000>;
-			regulator-max-microvolt = <3000000>;
-			qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
-			regulator-always-on;	/* ASUS BSP Always Enable 1.8V for I2C & Sensors */
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			//qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 	};
 
@@ -827,7 +993,6 @@ mcu_pin_int_disable: mcu_pin_int_disable {
 	};
 
 };
-// ASUS_BSP --- ClayWang vcnl36866 
 
 /*    ====================================
  *    overlay for kona-regulator.dtsi - end
@@ -848,6 +1013,18 @@ mcu_pin_int_disable: mcu_pin_int_disable {
     qcom,mi2s-audio-intf = <1>;
     qcom,pri-mi2s-gpios = <&pri_mi2s_gpios>;
 	qcom,audio-routing =
+		"TX DMIC0", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic0",
+		"TX DMIC1", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic1",
+		"TX DMIC2", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic2",
+		"TX DMIC3", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic3",
+		"TX DMIC4", "TX MIC BIAS1",
+		"TX MIC BIAS1", "Digital Mic4",
+		"TX DMIC5", "TX MIC BIAS1",
+		"MIC BIAS4", "Digital Mic5",
 		"RX_TX DEC0_INP", "TX DEC0 MUX",
 		"RX_TX DEC1_INP", "TX DEC1 MUX",
 		"RX_TX DEC2_INP", "TX DEC2 MUX",
@@ -920,7 +1097,11 @@ mcu_pin_int_disable: mcu_pin_int_disable {
 };
 
 &tx_macro {
-    qcom,tx-swr-gpios;
+	tx-vdd-micb-supply = <&L4C>;
+	qcom,tx-vdd-micb-voltage = <1800000 1800000>;
+	qcom,tx-vdd-micb-current = <11200>;
+	qcom,tx-dmic-sample-rate = <2400000>;
+	qcom,tx-swr-gpios;
 };
 
 &rx_macro {
@@ -976,6 +1157,11 @@ mcu_pin_int_disable: mcu_pin_int_disable {
 
 &clock_audio_wsa_2 {
 	status = "disabled";
+};
+
+/* [ABSP] Add for MCU UART logs*/
+&qupv3_se17_4uart {
+	status = "ok";
 };
 
 /*    ====================================

@@ -681,6 +681,7 @@ static void dp_display_send_hpd_event(struct dp_display_private *dp)
 
 	if (dp->mst.mst_active) {
 		DP_DEBUG("skip notification for mst mode\n");
+		dp_display_state_remove(DP_STATE_DISCONNECT_NOTIFIED);
 		return;
 	}
 
@@ -1576,6 +1577,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	}
 
 	g_dp_display->is_mst_supported = dp->parser->has_mst;
+	g_dp_display->no_mst_encoder = dp->parser->no_mst_encoder;
 
 	dp->catalog = dp_catalog_get(dev, dp->parser);
 	if (IS_ERR(dp->catalog)) {
@@ -1891,7 +1893,7 @@ end:
 	mutex_unlock(&dp->session_lock);
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
-	return 0;
+	return rc;
 }
 
 static int dp_display_set_stream_info(struct dp_display *dp_display,
@@ -2537,6 +2539,11 @@ static int dp_display_config_hdr(struct dp_display *dp_display, void *panel,
 		return -EINVAL;
 	}
 
+	if (!dp_display_state_is(DP_STATE_ENABLED)) {
+		dp_display_state_show("[not enabled]");
+		return 0;
+	}
+
 	/*
 	 * In rare cases where HDR metadata is updated independently
 	 * flush the HDR metadata immediately instead of relying on
@@ -2558,10 +2565,18 @@ static int dp_display_setup_colospace(struct dp_display *dp_display,
 		u32 colorspace)
 {
 	struct dp_panel *dp_panel;
+	struct dp_display_private *dp;
 
 	if (!dp_display || !panel) {
 		pr_err("invalid input\n");
 		return -EINVAL;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+
+	if (!dp_display_state_is(DP_STATE_ENABLED)) {
+		dp_display_state_show("[not enabled]");
+		return 0;
 	}
 
 	dp_panel = panel;
@@ -2896,6 +2911,11 @@ static int dp_display_update_pps(struct dp_display *dp_display,
 		return -EINVAL;
 	}
 
+	if (!dp_display_state_is(DP_STATE_ENABLED)) {
+		dp_display_state_show("[not enabled]");
+		return 0;
+	}
+
 	dp_panel = sde_conn->drv_panel;
 	dp_panel->update_pps(dp_panel, pps_cmd);
 	return 0;
@@ -3130,6 +3150,9 @@ int dp_display_get_num_of_displays(void)
 
 int dp_display_get_num_of_streams(void)
 {
+	if (g_dp_display->no_mst_encoder)
+		return 0;
+
 	return DP_STREAM_MAX;
 }
 

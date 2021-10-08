@@ -27,12 +27,16 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/reboot.h>
 #ifdef CONFIG_PON_EVT_LOG
-extern char evtlog_pon_dump[100];
+char evtlog_pon_dump[100];
 char *evtlog_pm8250_dump[17] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 #endif
 
 #ifdef FORCE_RAMDUMP_FEATURE
 extern int g_force_ramdump;
+#endif
+
+#ifdef ZS670KS
+#include <linux/pm_wakeup.h>
 #endif
 
 static int power_key_6s_running = 0;
@@ -264,6 +268,11 @@ static struct qpnp_pon *sys_reset_dev;
 static struct qpnp_pon *modem_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
+
+#ifdef ZS670KS
+extern struct wakeup_source *pk_wake_lock;
+extern bool g_Charger_mode;
+#endif
 
 static u32 s1_delay[PON_S1_COUNT_MAX + 1] = {
 	0, 32, 56, 80, 138, 184, 272, 408, 608, 904, 1352, 2048, 3072, 4480,
@@ -1271,11 +1280,24 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 				vol_down_press_count++;
 			pr_info("vol_down_press_count = %d\r\n",vol_down_press_count);
 			if (vol_down_press_count == 10) {
+			//ABSP++-- user build trigger ramdump condition=>QPST mode enabled in logtool
+			#if defined(ASUS_USER_BUILD) && defined(ZS670KS)
+				printk("[ABSP][keypad][qpnp-power-on.c] dload_type is 0x%02x\n", dload_type);
+				if( dload_type == SCM_DLOAD_FULLDUMP) {
+					download_mode = 1;
+					msm_set_restart_mode(download_mode);
+					panic("special panic/zf7 user build...\r\n");
+				} else {
+					printk("[ABSP][keypad][qpnp-power-on.c] not full ramdump and skip panic\n");
+				}
+			#else
 				dload_type = SCM_DLOAD_FULLDUMP;
 				download_mode = 1;
 				set_dload_mode(dload_type);
 				msm_set_restart_mode(download_mode);
 				panic("special panic...\r\n");
+			#endif
+			//ABSP+-
 			}
 		} else {
 			// Touch debug
@@ -1291,6 +1313,12 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 			}
 		}
 	}
+
+#ifdef ZS670KS
+	if(cfg->key_code == 116 && g_Charger_mode) {
+		__pm_wakeup_event(pk_wake_lock, 1000);
+	}
+#endif
 
 	if (boot_after_60sec) {
 		if (cfg->key_code == 114) {

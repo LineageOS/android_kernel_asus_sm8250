@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -31,6 +31,7 @@
 #include <htt.h>                /* HTT_T2H_MSG_TYPE, etc. */
 #include <qdf_nbuf.h>           /* qdf_nbuf_t */
 
+#include <ol_rx.h>
 #include <ol_htt_rx_api.h>
 #include <ol_htt_tx_api.h>
 #include <ol_txrx_htt_api.h>    /* htt_tx_status */
@@ -176,8 +177,7 @@ static void htt_ipa_op_response(struct htt_pdev_t *pdev, uint32_t *msg_word)
 			sizeof(struct htt_wdi_ipa_op_response_t) +
 			len);
 	cdp_ipa_op_response(cds_get_context(QDF_MODULE_ID_SOC),
-			(struct cdp_pdev *)pdev->txrx_pdev,
-			op_msg_buffer);
+			    OL_TXRX_PDEV_ID, op_msg_buffer);
 }
 #else
 static void htt_ipa_op_response(struct htt_pdev_t *pdev, uint32_t *msg_word)
@@ -348,12 +348,33 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 	}
 	case HTT_T2H_MSG_TYPE_RX_ADDBA:
 	{
-		qdf_print("HTT_T2H_MSG_TYPE_RX_ADDBA not supported ");
+		uint16_t peer_id;
+		uint8_t tid;
+		uint8_t win_sz;
+		uint16_t start_seq_num;
+
+		/*
+		 * FOR NOW, the host doesn't need to know the initial
+		 * sequence number for rx aggregation.
+		 * Thus, any value will do - specify 0.
+		 */
+		start_seq_num = 0;
+		peer_id = HTT_RX_ADDBA_PEER_ID_GET(*msg_word);
+		tid = HTT_RX_ADDBA_TID_GET(*msg_word);
+		win_sz = HTT_RX_ADDBA_WIN_SIZE_GET(*msg_word);
+		ol_rx_addba_handler(pdev->txrx_pdev, peer_id, tid,
+				    win_sz, start_seq_num,
+				    0 /* success */);
 		break;
 	}
 	case HTT_T2H_MSG_TYPE_RX_DELBA:
 	{
-		qdf_print("HTT_T2H_MSG_TYPE_RX_DELBA not supported ");
+		uint16_t peer_id;
+		uint8_t tid;
+
+		peer_id = HTT_RX_DELBA_PEER_ID_GET(*msg_word);
+		tid = HTT_RX_DELBA_TID_GET(*msg_word);
+		ol_rx_delba_handler(pdev->txrx_pdev, peer_id, tid);
 		break;
 	}
 	case HTT_T2H_MSG_TYPE_PEER_MAP:
@@ -463,6 +484,11 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 			pdev->txrx_pdev, compl_msg->desc_id, 1,
 			0, compl_msg->status);
 
+		DPTRACE(qdf_dp_trace_credit_record(QDF_TX_COMP, QDF_CREDIT_INC,
+			1, qdf_atomic_read(&pdev->txrx_pdev->target_tx_credit),
+			qdf_atomic_read(&pdev->txrx_pdev->txq_grps[0].credit),
+			qdf_atomic_read(&pdev->txrx_pdev->txq_grps[1].credit)));
+
 		if (!ol_tx_get_is_mgmt_over_wmi_enabled()) {
 			ol_tx_single_completion_handler(pdev->txrx_pdev,
 							compl_msg->status,
@@ -500,7 +526,8 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		}
 
 		/*len is reduced by sizeof(*msg_word)*/
-		pktlog_process_fw_msg(msg_word + 1, len - sizeof(*msg_word));
+		pktlog_process_fw_msg(OL_TXRX_PDEV_ID, msg_word + 1,
+				      len - sizeof(*msg_word));
 		break;
 	}
 #endif
@@ -532,6 +559,13 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		htt_credit_delta =
 		htt_t2h_adjust_bus_target_delta(pdev, htt_credit_delta);
 		htt_tx_group_credit_process(pdev, msg_word);
+		DPTRACE(qdf_dp_trace_credit_record(QDF_TX_CREDIT_UPDATE,
+			QDF_CREDIT_INC,	htt_credit_delta,
+			qdf_atomic_read(&pdev->txrx_pdev->target_tx_credit) +
+			htt_credit_delta,
+			qdf_atomic_read(&pdev->txrx_pdev->txq_grps[0].credit),
+			qdf_atomic_read(&pdev->txrx_pdev->txq_grps[1].credit)));
+
 		ol_tx_credit_completion_handler(pdev->txrx_pdev,
 						htt_credit_delta);
 		break;
@@ -628,9 +662,10 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 		switch (HTT_RX_OFLD_PKT_ERR_MSG_SUB_TYPE_GET(*msg_word)) {
 		case HTT_RX_OFLD_PKT_ERR_TYPE_MIC_ERR:
 		{
-			struct ol_error_info err_info;
 			struct ol_txrx_vdev_t *vdev;
 			struct ol_txrx_peer_t *peer;
+			uint64_t pn;
+			uint32_t key_id;
 			uint16_t peer_id;
 			int msg_len = qdf_nbuf_len(htt_t2h_msg);
 
@@ -651,22 +686,14 @@ static void htt_t2h_lp_msg_handler(void *context, qdf_nbuf_t htt_t2h_msg,
 				break;
 			}
 			vdev = peer->vdev;
-			err_info.u.mic_err.vdev_id = vdev->vdev_id;
-			err_info.u.mic_err.key_id =
-				HTT_RX_OFLD_PKT_ERR_MIC_ERR_KEYID_GET
+			key_id = HTT_RX_OFLD_PKT_ERR_MIC_ERR_KEYID_GET
 				(*(msg_word + 1));
-			qdf_mem_copy(err_info.u.mic_err.da,
-				 (uint8_t *)(msg_word + 2),
-				 QDF_MAC_ADDR_SIZE);
-			qdf_mem_copy(err_info.u.mic_err.sa,
-				 (uint8_t *)(msg_word + 4),
-				 QDF_MAC_ADDR_SIZE);
-			qdf_mem_copy(&err_info.u.mic_err.pn,
-				 (uint8_t *)(msg_word + 6), 6);
-			qdf_mem_copy(err_info.u.mic_err.ta,
-				 peer->mac_addr.raw, QDF_MAC_ADDR_SIZE);
+			qdf_mem_copy(&pn, (uint8_t *)(msg_word + 6), 6);
 
-			wma_indicate_err(OL_RX_ERR_TKIP_MIC, &err_info);
+			ol_rx_send_mic_err_ind(vdev->pdev, vdev->vdev_id,
+					       peer->mac_addr.raw, 0, 0,
+					       OL_RX_ERR_TKIP_MIC, htt_t2h_msg,
+					       &pn, key_id);
 			break;
 		}
 		default:

@@ -48,7 +48,6 @@
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
-
 #ifdef CONFIG_FB
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -73,6 +72,7 @@
 // ASUS_BSP +++ Touch
 #define GOODIX_ADDR_SPECIAL_CMD			0x4160
 #define GOODIX_ADDR_GOODIX_DEBUG_CMD	0x4154
+#define GOODIX_ADDR_GOODIX_INT_DEBUG_CMD	0x4181
 #define GOODIX_ADDR_EXTERNAL_CMD		0x4280
 // before FW(25) 0x60BB; after FW(27) 0x4290
 #define GOODIX_ADDR_READ_EXTERNAL_CMD	0x4290
@@ -98,7 +98,7 @@
 #define IC_TYPE_NANJING			2
 #define IC_TYPE_YELLOWSTONE		3
 
-#define GOODIX_TOUCH_EVENT			0x80
+#define GOODIX_TOUCH_EVENT		0x80
 #define GOODIX_REQUEST_EVENT		0x40
 #define GOODIX_GESTURE_EVENT		0x20
 #define GOODIX_HOTKNOT_EVENT		0x10
@@ -507,14 +507,12 @@ struct goodix_ts_core {
 	struct goodix_ts_esd ts_esd;
 
 #ifdef CONFIG_FB
- 	struct notifier_block fb_notifier;
+	struct notifier_block fb_notifier;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
-
 // ASUS_BSP +++ Touch
 	bool atr_enable;
-	bool disable_fod;
 	bool game_mode;
 	bool station_insert;
 	bool phone_call_on;
@@ -528,7 +526,6 @@ struct goodix_ts_core {
 	struct mutex gts_suspend_mutex;
 	struct workqueue_struct *gts_suspend_resume_wq;
 	struct delayed_work gts_resume_work;
-	struct delayed_work dclick_work;
 	wait_queue_head_t fp_queue;
 // ASUS_BSP --- Touch
 };
@@ -755,9 +752,9 @@ static inline u16 shex_to_u16(const char *hex_buf, int size)
  *	this condition, you should return EVT_HANDLED in
  *	the callback function.
  * */
-#define EVT_HANDLED				0
+#define EVT_HANDLED			0
 #define EVT_CONTINUE			0
-#define EVT_CANCEL				1
+#define EVT_CANCEL			1
 #define EVT_CANCEL_IRQEVT		1
 #define EVT_CANCEL_SUSPEND		1
 #define EVT_CANCEL_RESUME		1

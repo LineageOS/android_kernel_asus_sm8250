@@ -71,7 +71,7 @@ struct css_task_iter {
 #ifdef CONFIG_CGF_NOTIFY_EVENT
 #define FREEZER_SS_NAME	"freezer"
 #define	FREEZER_KN_NAME	""
-#define	FREEZER_BG_KN_NAME	"bg"
+#define	FREEZER_BG_KN_NAME	"frozen"
 struct cgf_event {
      int type;
 	struct signal_struct *info;
@@ -153,6 +153,8 @@ void cgroup_free(struct task_struct *p);
 
 int cgroup_init_early(void);
 int cgroup_init(void);
+
+int cgroup_parse_float(const char *input, unsigned dec_shift, s64 *v);
 
 /*
  * Iteration helpers and macros.

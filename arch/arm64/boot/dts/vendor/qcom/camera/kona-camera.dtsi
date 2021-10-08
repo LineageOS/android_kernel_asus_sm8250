@@ -215,7 +215,7 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <162>;
 			hw-tbuf = <227>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>; //ASUS_BSP 
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -230,7 +230,7 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <35>;
 			hw-tbuf = <62>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -245,7 +245,7 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <35>;
 			hw-tbuf = <62>;
-			hw-scl-stretch-en = <1>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -260,7 +260,7 @@
 			hw-thd-dat = <16>;
 			hw-thd-sta = <15>;
 			hw-tbuf = <24>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <3>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -287,15 +287,15 @@
 		clock-cntl-level = "lowsvs";
 		clock-rates = <37500000 0>;
 		pinctrl-names = "cam_default", "cam_suspend";
-		pinctrl-0 = <&cci2_active>;
+		pinctrl-0 = <&cci2_active >;
 		pinctrl-1 = <&cci2_suspend>;
 		gpios = <&tlmm 105 0>,
 			<&tlmm 106 0>;
-		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-num = <0 1 >;
 		gpio-req-tbl-flags = <1 1>;
 		gpio-req-tbl-label = "CCI_I2C_DATA2",
 					"CCI_I2C_CLK2";
-					
+
 		i2c_freq_100Khz_cci1: qcom,i2c_standard_mode {
 			hw-thigh = <201>;
 			hw-tlow = <174>;
@@ -304,7 +304,7 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <162>;
 			hw-tbuf = <227>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -319,7 +319,7 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <35>;
 			hw-tbuf = <62>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -334,7 +334,7 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <35>;
 			hw-tbuf = <62>;
-			hw-scl-stretch-en = <1>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -349,7 +349,7 @@
 			hw-thd-dat = <16>;
 			hw-thd-sta = <15>;
 			hw-tbuf = <24>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;//ASUS_BSP
 			hw-trdhld = <3>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;

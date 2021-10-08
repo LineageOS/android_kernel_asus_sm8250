@@ -107,7 +107,7 @@ static int gRTP_PWM = 0xf ;
  * 0x0001: awinic log
  * 0x0002: immersion log
  * 0x0004: immersion data
- * 0x0008: 
+ * 0x0008: GP log
  * 0x0010: 
  * 0x0020: 
  * 0x0100: 
@@ -116,6 +116,10 @@ int gVibDebugLog=0x0000;
 // /sys/module/tspdrv/parameters/
 module_param(gVibDebugLog, int , 0644);
 MODULE_PARM_DESC(gVibDebugLog, "vib kerenl debug");
+
+//int gVibDebugGP=0;
+//module_param(gVibDebugGP, int , 0644);
+//MODULE_PARM_DESC(gVibDebugGP, "vib gamepad debug");
 
 IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_SetSamples(VibeUInt8 nActuatorIndex, VibeUInt16 nOutputSignalBitDepth, VibeUInt16 nBufferSizeInBytes, VibeInt8* pForceOutputBuffer);
 
@@ -151,6 +155,7 @@ struct pm_qos_request pm_qos_req_vb;
  *
  ******************************************************/
 #define AW8697_RTP_NAME_MAX        64
+
 static char *aw8697_ram_name = "aw8697_haptic.bin";
 static char aw8697_rtp_name[][AW8697_RTP_NAME_MAX] = {
 	{"aw8697_osc_rtp_24K_5s.bin"},
@@ -784,6 +789,8 @@ static int aw8697_haptic_set_wav_seq(struct aw8697 *aw8697,
 				     unsigned char wav, unsigned char seq)
 {
 	aw8697_i2c_write(aw8697, AW8697_REG_WAVSEQ1 + wav, seq);
+	
+	
 	return 0;
 }
 
@@ -2004,6 +2011,7 @@ static void aw8697_haptic_audio_work_routine(struct work_struct *work)
 		if (aw8697->haptic_audio.ctr.play == AW8697_HAPTIC_PLAY_ENABLE) {
 			pr_info("%s: haptic_audio_play_start\n", __func__);
 			mutex_lock(&aw8697->lock);
+
 			aw8697_haptic_stop(aw8697);
 			aw8697_haptic_play_mode(aw8697, AW8697_HAPTIC_RAM_MODE);
 
@@ -2524,6 +2532,7 @@ static int aw8697_haptic_init(struct aw8697 *aw8697)
 	aw8697->gain = reg_val & 0xFF;
 
 	aw8697->gain_trig = 0x7F;//ASUS_BSP: init gain for trig mode
+	
 
 	ret = aw8697_i2c_read(aw8697, AW8697_REG_BSTDBG4, &reg_val);
 	aw8697->vmax = (reg_val >> 1) & 0x1F;
@@ -2957,6 +2966,7 @@ static ssize_t aw8697_gain_store(struct device *dev,
 
 	aw8697->gain = val;
 	aw8697_haptic_set_gain(aw8697, aw8697->gain);
+
 	mutex_unlock(&aw8697->lock);
 	return count;
 }
@@ -3377,6 +3387,7 @@ static int aw8697_rtp_play_store_base(struct device *dev,
 	}
 
 	mutex_lock(&aw8697->lock);
+	//pr_info("%s rtp_type=%s\n",__func__, rtp_type);
 
 	cancel_delayed_work(&aw8697->rtp_work);
 	cancel_delayed_work(&aw8697->gain_work);

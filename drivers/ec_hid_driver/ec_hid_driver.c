@@ -78,7 +78,6 @@ extern bool g_skip_ss_lanes;
 extern bool g_station_sleep;
 extern int lid_status;
 extern bool g_station_dp_disconnect;
-
 // For HID wait for completion
 struct completion hid_state;
 EXPORT_SYMBOL(hid_state);

@@ -53,12 +53,10 @@ int goodix_change_config(struct goodix_ts_core *core_data, const char *fw_name);
 void charge_mode_enable(struct goodix_ts_core *core_data, bool en);
 int read_chip_cmd(struct goodix_ts_core *core_data, u16 cmd_addr, int buf_len, u8 *buffer);
 
-#define GoodixDefaultSampleRate 240
 #define GLOVE                  "driver/glove"
 #define FOD                    "driver/fod_event"
 
 static int print_touch_count_max;
-static u32 fod_press = 0x0000;
 static int ts_9886_fod_position[4] = {440, 640, 1960, 2140};
 //static int ts_9896_fod_position[4] = {410, 681, 1651, 1938};
 static int ts_9896_fod_position[4] = {435, 641, 1679, 1868}; //CFG(47)
@@ -72,6 +70,8 @@ static int key_i = -1;
 static bool key_o_sync = false;
 static int fp_status = -1;
 static bool process_resume = false;
+static bool out_of_KEY_O = false;
+static bool out_of_KEY_F = false;
 bool enable_touch_debug = false;
 bool enable_touch_time_debug = false;
 
@@ -79,13 +79,13 @@ bool GoodixTSEnTimestamp = false;
 bool GoodixTSEnTimestampDebug = false;
 bool GoodixTSEnInputTimestampDebug = false;
 bool GoodixTSKeyMappingDebug = false;
+bool GoodixTSINTDebug = false;
 bool finger_press = false;
 int GoodixSampleRate = 240;
 int testkeycode = 0;
 int touch_figer_slot[TOTAL_SLOT] = {0};
 
 struct goodix_ts_core *gts_core_data = NULL;
-
 // ASUS_BSP --- Touch
 
 // ASUS_BSP +++ Touch - ATR
@@ -112,9 +112,7 @@ extern void enable_aod_processing(bool en);
 extern bool get_aod_processing(void);
 extern int asus_display_global_hbm_mode(void);
 extern void asus_display_report_fod_touched(void);
-extern bool wait_dclick(void);
 // ASUS_BSP --- Touch
-
 /**
  * __do_register_ext_module - register external module
  * to register into touch core modules structure
@@ -474,6 +472,11 @@ static ssize_t goodix_ts_chip_info_show(struct device  *dev,
 		return cnt;
 	if (core_data->initialized!=1)
 		return 0;
+	// For I2C power
+	if(atomic_read(&core_data->suspended) == 1) {
+		input_switch_key(core_data->input_dev, KEY_POWER);
+		msleep(100);
+	}
 
 	cnt += snprintf(buf, PAGE_SIZE, "TouchDeviceName:%s\n", ts_dev->name);
 	if (ts_dev->hw_ops->read_version) {
@@ -525,6 +528,11 @@ static ssize_t goodix_ts_read_cfg_show(struct device *dev,
 		return 0;
 	if(core_data->initialized != 1)
 		return -EINVAL;
+	// For I2C power
+	if(atomic_read(&core_data->suspended) == 1) {
+		input_switch_key(core_data->input_dev, KEY_POWER);
+		msleep(100);
+	}
 
 	cfg_buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!cfg_buf)
@@ -767,6 +775,12 @@ static ssize_t goodix_ts_reg_rw_show(struct device *dev,
 		ts_err("invalid rw flag %d, only support [1/2]", rw_flag);
 		return -EINVAL;
 	}
+	
+	// For I2C power
+	if(atomic_read(&core_data->suspended) == 1) {
+		input_switch_key(core_data->input_dev, KEY_POWER);
+		msleep(100);
+	}
 
 	ret = ts_dev->hw_ops->read(ts_dev, rw_addr, show_buf, rw_len);
 	if (ret) {
@@ -802,6 +816,12 @@ static ssize_t goodix_ts_reg_rw_store(struct device *dev,
 	} else {
 		ts_err("string must start with 'r/w'\n");
 		goto err_out;
+	}
+	
+	// For I2C power
+	if(atomic_read(&core_data->suspended) == 1) {
+		input_switch_key(core_data->input_dev, KEY_POWER);
+		msleep(100);
 	}
 
 	/* get addr */
@@ -933,37 +953,6 @@ static ssize_t goodix_ts_print_count_store(struct device *dev,
 
 }
 
-static ssize_t disable_fod_state_show(struct device *dev,
-				     struct device_attribute *attr, char *buf)
-{
-	struct goodix_ts_core *core_data =
-		dev_get_drvdata(dev);
-	
-	if(core_data == NULL)
-	  return snprintf(buf, PAGE_SIZE, "error\n");
-
-        return snprintf(buf, PAGE_SIZE, "%d\n",core_data->disable_fod);
-}
-
-
-static ssize_t disable_fod_state_store(struct device *dev,
-				      struct device_attribute *attr, const char *buf, size_t count)
-{
-  	struct goodix_ts_core *core_data = dev_get_drvdata(dev);
-	int en;
-	
-	if (sscanf(buf, "%d", &en) != 1)
-		return -EINVAL;
-    ts_info("system disable fod %d",en);
-	
-	if(en == 1)
-	  core_data->disable_fod = true;
-	else
-	  core_data->disable_fod = false;
-
-	return count;
-}
-
 static ssize_t goodix_aod_test_mode_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
@@ -1092,6 +1081,7 @@ static ssize_t test_cfg_store(struct device *dev,
 	
 	return count;
 }
+
 static ssize_t goodix_sample_rate_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
@@ -1111,12 +1101,14 @@ static ssize_t goodix_sample_rate_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if(value == 120)
+	if((value == 120) && (core_data->game_mode == true)) {
 		core_data->game_mode = false;
-	else
+		ret = goodix_ts_switch_sample_rate(core_data);
+	} else if ((value == 240) && (core_data->game_mode == false)) {
 		core_data->game_mode = true;
-
-	ret = goodix_ts_switch_sample_rate(core_data);
+		ret = goodix_ts_switch_sample_rate(core_data);
+	} else 
+		ts_info("No need to change sample rate");
 
 	return count;
 }
@@ -1699,6 +1691,7 @@ static ssize_t enable_touch_debug_store(struct device *dev,
 static ssize_t enable_touch_debug_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
+	ts_info("enable_touch_debug %d", enable_touch_debug);
 	return scnprintf(buf, PAGE_SIZE, "%d\n", enable_touch_debug);
 }
 
@@ -1775,6 +1768,31 @@ static ssize_t keymapping_touch_debug_show(struct device *dev,
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", GoodixTSKeyMappingDebug);
 }
+
+static ssize_t touch_INT_debug_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", GoodixTSINTDebug);
+}
+
+static ssize_t touch_INT_debug_store(struct device *dev,
+				      struct device_attribute *attr, const char *buf, size_t count)
+{
+	int en;
+	
+	if (sscanf(buf, "%d", &en) != 1)
+		return -EINVAL;
+	ts_info("touch INT debug %d",en);
+
+	if(en == 1)
+		GoodixTSINTDebug = true;
+	else
+		GoodixTSINTDebug = false;
+
+	return count;
+}
+
+
 // ASUS_BSP --- Touch
 
 static DEVICE_ATTR(extmod_info, S_IRUGO, goodix_ts_extmod_show, NULL);
@@ -1787,13 +1805,11 @@ static DEVICE_ATTR(irq_info, S_IRUGO | S_IWUSR | S_IWGRP,
 		   goodix_ts_irq_info_show, goodix_ts_irq_info_store);
 static DEVICE_ATTR(reg_rw, S_IRUGO | S_IWUSR | S_IWGRP,
 		   goodix_ts_reg_rw_show, goodix_ts_reg_rw_store);
-
 // ASUS_BSP +++ Touch
 static DEVICE_ATTR(power_on_off, S_IWUSR | S_IWGRP, NULL, goodix_ts_power_on_off);
 static DEVICE_ATTR(power_state, S_IRUGO, goodix_ts_power_state, NULL);
 static DEVICE_ATTR(print_touch_count, S_IRUGO | S_IWUSR | S_IWGRP, 
 			goodix_ts_print_count_show, goodix_ts_print_count_store);
-static DEVICE_ATTR(disable_fod_state,S_IRUGO|S_IWUSR, disable_fod_state_show, disable_fod_state_store);
 static DEVICE_ATTR(enable_aod_test,S_IRUGO|S_IWUSR, goodix_aod_test_mode_show, goodix_aod_test_mode_store);
 static DEVICE_ATTR(enable_timestamp,S_IRUGO|S_IWUSR, goodix_timestamp_show, goodix_timestamp_store);
 static DEVICE_ATTR(enable_timestamp_debug,S_IRUGO|S_IWUSR, goodix_timestamp_debug_show, goodix_timestamp_debug_store);
@@ -1818,6 +1834,7 @@ static DEVICE_ATTR(enable_touch_debug,S_IRUGO|S_IWUSR, enable_touch_debug_show, 
 static DEVICE_ATTR(enable_touch_time_debug,S_IRUGO|S_IWUSR, enable_touch_time_debug_show, enable_touch_time_debug_store);
 static DEVICE_ATTR(FP_status,S_IRUGO|S_IWUSR, FP_status_show, FP_status_store);
 static DEVICE_ATTR(keymapping_touch_debug,S_IRUGO|S_IWUSR, keymapping_touch_debug_show, keymapping_touch_debug_store);
+static DEVICE_ATTR(touch_INT_debug,S_IRUGO|S_IWUSR, touch_INT_debug_show, touch_INT_debug_store);
 // ASUS_BSP --- Touch
 
 static struct attribute *sysfs_attrs[] = {
@@ -1833,7 +1850,6 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_power_on_off.attr,
 	&dev_attr_power_state.attr,
 	&dev_attr_print_touch_count.attr,
-	&dev_attr_disable_fod_state.attr,
 	&dev_attr_enable_aod_test.attr,
 	&dev_attr_enable_timestamp.attr,
 	&dev_attr_enable_timestamp_debug.attr,
@@ -1858,6 +1874,7 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_enable_touch_time_debug.attr,
 	&dev_attr_FP_status.attr,
 	&dev_attr_keymapping_touch_debug.attr,
+	&dev_attr_touch_INT_debug.attr,
 // ASUS_BSP --- Touch
 	NULL,
 };
@@ -2033,15 +2050,13 @@ static void input_switch_key(struct input_dev *dev, unsigned int code)
 	input_sync(dev);
 	input_report_key(dev, code, 0);
 	input_sync(dev);
-	
-	//if(code != 116) // Power key
+
 	ts_info("keycode = %d\n", code);
 }
 
 static int goodix_ts_switch_sample_rate(struct goodix_ts_core *core_data)
 {
 	struct goodix_ts_device *ts_dev = core_data->ts_dev;
-
 	u8 cmd_buf[32];
 	int ret;
 	u32 cmd_len = 0;
@@ -2142,12 +2157,12 @@ void charge_mode_enable(struct goodix_ts_core *core_data, bool en)
 		ts_info("goodix touch not vaild or init fail\n"); 
 		return;
 	}
-	
+/*
 	if(core_data->station_insert){
 		ts_info("insert into station , not enter charge mode");
 		return;
 	}
-	
+*/
 	cmd_addr = GOODIX_ADDR_SPECIAL_CMD;
 	cmd_len = 5;
 	if(en == true) {
@@ -2173,6 +2188,32 @@ void charge_mode_enable(struct goodix_ts_core *core_data, bool en)
 	ts_info("[End] charge mode : %d", atomic_read(&core_data->charge_mode));
 	ts_info("%s write to addr (%x) with data %*ph\n",
 		"success", cmd_addr, cmd_len, cmd_buf);
+}
+
+int get_chip_int(struct goodix_ts_core *core_data)
+{
+	struct goodix_ts_device *ts_dev = core_data->ts_dev;
+	u8 show_buf[32];
+	int ret;
+	u32 cmd_len = 1;
+	u16 cmd_addr = GOODIX_ADDR_GOODIX_INT_DEBUG_CMD;
+
+
+	if (core_data == NULL || core_data->initialized != 1) {
+		ts_info("goodix touch not vaild or init fail\n"); 
+		return -1;
+	}
+
+	ret = ts_dev->hw_ops->read(ts_dev, cmd_addr, show_buf, cmd_len);
+	if (ret) {
+		ts_err("failed read addr(%x) length(%d)\n", cmd_addr, cmd_len);
+	}
+	ret = show_buf[0];
+
+	ts_info("Interrupt count = %d", ret);
+
+
+	return ret;
 }
 
 void gts_usb_plugin(bool plugin)
@@ -2209,10 +2250,10 @@ int read_chip_cmd(struct goodix_ts_core *core_data, u16 cmd_addr, int buf_len, u
 
 	return 0;
 }
+// ASUS_BSP --- Touch
 
 static void goodix_resume_work(struct work_struct *work)
 {
-	static bool wait_dclick_enable = true;
 	int retval;
 
 	ts_info("resume_work +++ AOD(%d) PanelOff(%d) FP(%d)", gts_core_data->aod_test_mode, asus_display_in_normal_off(), fp_status);
@@ -2223,16 +2264,6 @@ static void goodix_resume_work(struct work_struct *work)
 			retval = wait_event_interruptible(gts_core_data->fp_queue, (((fp_status == 1) || (fp_status == 3)) || (process_resume == true)));
 			ts_info("resume --- wait sec for FP status(%d) process_resume(%d)", fp_status, process_resume);
 		}
-	}
-
-	if((wait_dclick() == true) && (wait_dclick_enable == true)) {
-		ts_info("resume wait 0.3 sec for dclick");
-		wait_dclick_enable = false;
-		schedule_delayed_work(&gts_core_data->gts_resume_work, msecs_to_jiffies(300)); // 0.3 sec
-		if(process_resume == true) {
-			process_resume = false;
-		}
-		return;
 	}
 	if(get_aod_processing() == true) {
 		if(asus_display_global_hbm_mode() == 0) {
@@ -2246,11 +2277,8 @@ static void goodix_resume_work(struct work_struct *work)
 	} else {
 		ts_info("resume ... ");
 	}
-	wait_dclick_enable = true;
 	mutex_lock(&gts_core_data->gts_suspend_mutex);
 	goodix_ts_resume(gts_core_data);
-	gts_core_data->disable_fod = true;
-
 	goodix_ts_switch_sample_rate(gts_core_data);
 	goodix_ts_rotation(gts_core_data, gts_core_data->rotation);
 
@@ -2301,7 +2329,7 @@ void phone_touch_suspend(void) {
 	ts_info("suspend +++ \n");
 	ts_info("asus_var_regulator_always_on : %d \n", asus_var_regulator_always_on);
 	if(gts_core_data != NULL) {
-		gts_core_data->disable_fod = false;
+		//gts_core_data->disable_fod = false;
 		goodix_ts_suspend(gts_core_data);
 	} else {
 		ts_info("gts_core_data = NULL \n");
@@ -2309,6 +2337,7 @@ void phone_touch_suspend(void) {
 	ts_info("suspend --- \n");
 }
 EXPORT_SYMBOL_GPL(phone_touch_suspend);
+// ASUS_BSP +++ Touch
 
 void ATR_touch_new(struct device *dev, int id,int action, int x, int y, int random)
 {
@@ -2679,7 +2708,6 @@ static struct atr_queue* atr_buf_init(unsigned int _capacity)
 }
 // ASUS_BSP --- Touch
 
-
 static void goodix_ts_report_finger(struct input_dev *dev,
 		struct goodix_touch_data *touch_data)
 {
@@ -2689,8 +2717,12 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 // ASUS_BSP +++ Touch
 	struct goodix_ts_core *core_data = input_get_drvdata(dev);
 	static int touch_count = 0;
+	static int driver_touch_count = 0;
 	static bool first_data = true;
 	u8 buffer[BUF_LEN_4154]={0x0};
+	static int start_count = 0;
+	static int end_count = 0;
+	int chip_diff_count = 0;
 // ASUS_BSP --- Touch
 
 	// gesture mode lost key_U +++
@@ -2710,26 +2742,42 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 		} else {
 			input_report_key(dev, BTN_TOUCH, 1);
 			finger_press = true;
+			if (GoodixTSINTDebug == true) {
+				start_count = get_chip_int(core_data);
+			}
 		}
 	} else if (!touch_num && pre_fin) {
 		if (core_data->atr_enable){
 		    ts_info("game enable, ignore up event"); 
 		} else {
-			if (aod_press == true) {
+			if (aod_press == true || out_of_KEY_F == true) {
 				input_switch_key(dev, KEY_U);
 				ts_info("KEY_U");
 				aod_press = false;
+				out_of_KEY_F = false;
 				key_i = -1;
-				if (key_o_sync == true) {
+				if (key_o_sync == true || out_of_KEY_O == true) {
 					key_o_sync = false;
+					out_of_KEY_O = false;
 					ts_info("release KEY_O");
 				}
 			}
 			input_report_key(dev, BTN_TOUCH, 0);
 			finger_press = false;
-			fod_press = 0x0000;
 			first_data = true;
+			
+			if (GoodixTSINTDebug == true) {
+				end_count = get_chip_int(core_data);
+				chip_diff_count = ((driver_touch_count >> 8) << 8) + end_count - start_count + 1;
+				if (end_count <= start_count)
+					chip_diff_count += 256;
+
+				ts_info("HW chip (%5d) | SW driver (%5d)", chip_diff_count, driver_touch_count);
+				if(chip_diff_count != driver_touch_count)
+					ts_info("HW chip != SW driver");
+			}
 			touch_count = 0;
+			driver_touch_count = 1;
 		}
 	}
 
@@ -2739,15 +2787,17 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 		if (!touch_data->coords[i].status)
 			continue;
 		if (touch_data->coords[i].status == TS_RELEASE) {
-			if((aod_press == true) && (key_i == i)) {
+			if((aod_press == true || out_of_KEY_F == true) && (key_i == i)) {
 				input_switch_key(dev, KEY_U);
 				ts_info("KEY_U");
 				aod_press = false;
+				out_of_KEY_F = false;
 				key_i = -1;
 			}
-			if ((key_o_sync == true) && (key_i == i)) {
+			if (((key_o_sync == true) || (out_of_KEY_O == true)) && (key_i == i)) {
 				ts_info("release KEY_O");
 				key_o_sync = false;
+				out_of_KEY_O = false;
 				key_i = -1;
 			}
 
@@ -2758,27 +2808,6 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 			}
 			continue;
 		}
-// Jiunhau_Test_1 +++
-		//ts_info("%d\n", fod_position[0]);
-#if 1
-		if (!core_data->disable_fod) {
-			if (fod_position[0] < touch_data->coords[i].x && touch_data->coords[i].x < fod_position[1] && 
-				fod_position[2] < touch_data->coords[i].y && touch_data->coords[i].y < fod_position[3]) {
-				if (!fod_press) { // first fod
-					input_mt_slot(dev, i);
-					input_mt_report_slot_state(dev, MT_TOOL_FINGER, false);
-					input_sync(dev);
-					fod_press |= 1 << i;
-				}
-				continue;
-			} else if (fod_press == (1<<i)){ 
-				continue;
-			}
-		} else if (fod_press == (1<<i)){ 
-			continue;
-		}
-#endif
-// Jiunhau_Test_1 ---
 		if (core_data->aod_test_mode == 0) {
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
@@ -2791,6 +2820,7 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 			input_report_abs(dev, ABS_MT_PRESSURE,
 					 touch_data->coords[i].w);
 // ASUS_BSP +++ Touch
+			driver_touch_count ++;
 			touch_count ++ ;
 			if ((touch_count == 1) && (first_data == true)) {
 				first_data = false;
@@ -2852,7 +2882,7 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 			// KEY_F
 			if (fod_position[0] < touch_data->coords[i].x && touch_data->coords[i].x < fod_position[1] && 
 				fod_position[2] < touch_data->coords[i].y && touch_data->coords[i].y < fod_position[3]) {
-				if (aod_press == false) {
+				if ((aod_press == false) && (out_of_KEY_F == false)) {
 					key_i = i;
 					if(TouchArea >= FPArea) {
 						if (key_o_sync == true) {
@@ -2875,6 +2905,17 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 						ts_info("FPArea %d < %d", TouchArea, FPArea);
 					}
 				}
+			} else {
+				if (key_o_sync == true) {
+					key_o_sync = false;
+					out_of_KEY_O = true;
+					ts_info("KEY_O out of FPArea");
+				}
+				if (aod_press == true) {
+					aod_press = false;
+					out_of_KEY_F = true;
+					ts_info("KEY_F out of FPArea");
+				}
 			}
 			if(!(((key_o_sync == true) || (aod_press == true)) && (key_i == i))){
 				input_mt_slot(dev, i);
@@ -2887,6 +2928,7 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 						 touch_data->coords[i].w);
 				input_report_abs(dev, ABS_MT_PRESSURE,
 						 touch_data->coords[i].w);
+				driver_touch_count ++;
 				touch_count ++ ;
 				if ((touch_count == 1) && (first_data == true)) {
 					first_data = false;
@@ -3108,7 +3150,6 @@ int goodix_ts_power_on(struct goodix_ts_core *core_data)
 	}
 
 	core_data->power_on = 1;
-
 	return 0;
 }
 
@@ -3140,7 +3181,6 @@ int goodix_ts_power_off(struct goodix_ts_core *core_data)
 	}
 
 	core_data->power_on = 0;
-
 	return 0;
 }
 
@@ -3329,7 +3369,6 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 	input_set_capability(input_dev, EV_KEY, KEY_W);
 	input_set_capability(input_dev, EV_KEY, KEY_S);
 	input_set_capability(input_dev, EV_KEY, KEY_E);
-	input_set_capability(input_dev, EV_KEY, KEY_C);
 	input_set_capability(input_dev, EV_KEY, KEY_Z);
 	input_set_capability(input_dev, EV_KEY, KEY_V);
 	input_set_capability(input_dev, EV_KEY, KEY_M);
@@ -3343,7 +3382,6 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 	input_set_capability(input_dev, EV_KEY, KEY_REWIND);
 	input_set_capability(input_dev, EV_KEY, KEY_FORWARD);
 // ASUS_BSP --- Touch
-
 	r = input_register_device(input_dev);
 	if (r < 0) {
 		ts_err("Unable to register input device");
@@ -3659,10 +3697,13 @@ out:
 		ts_info("KEY_U");
 		aod_press = false;
 		key_i = -1;
-		if (key_o_sync == true) {
+		if (key_o_sync == true || out_of_KEY_O == true) {
 			key_o_sync = false;
+			out_of_KEY_O = false;
 			ts_info("release KEY_O");
 		}
+		if (out_of_KEY_F == true)
+			out_of_KEY_F = false;
 	}
 	if (finger_press == true) { // normal touch
 		input_report_key(core_data->input_dev, BTN_TOUCH, 0);
@@ -4004,10 +4045,9 @@ out:
 	else
 		core_data->initialized = 1;
 	goodix_modules.core_data = core_data;
-	
+
 // ASUS_BSP +++ Touch
 	print_touch_count_max = 100;
-	core_data->disable_fod = true;
 	core_data->station_insert = false;
 	core_data->phone_call_on = false;
 	core_data->aod_test_mode = 0;
@@ -4016,10 +4056,9 @@ out:
 	atomic_set(&core_data->charge_mode, 0);
 	atomic_set(&core_data->testcfg, 0);
 	atomic_set(&core_data->glove_mode, 0);
-	core_data->game_mode = false;
+	core_data->game_mode = true;
 	core_data->atr_enable = false;
 	init_waitqueue_head(&core_data->fp_queue);
-
 	if (asus_var_panel_stage[0]!='B'){
 		fod_position = ts_9886_fod_position;
 	}else{

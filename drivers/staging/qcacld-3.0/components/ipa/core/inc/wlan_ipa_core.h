@@ -349,7 +349,7 @@ bool wlan_ipa_is_rm_released(struct wlan_ipa_priv *ipa_ctx)
 
 #ifdef FEATURE_METERING
 
-#ifndef QCA_WIFI_QCA6390
+#ifndef WDI3_STATS_UPDATE
 /**
  * wlan_ipa_uc_op_metering() - IPA uC operation for stats and quota limit
  * @ipa_ctx: IPA context
@@ -393,6 +393,8 @@ void wlan_ipa_init_metering(struct wlan_ipa_priv *ipa_ctx);
 /**
  * wlan_ipa_update_tx_stats() - send embedded tx traffic in bytes to IPA
  * @ipa_ctx: IPA context
+ * @sta_tx: tx in bytes on sta interface
+ * @sap_tx: tx in bytes on sap interface
  *
  * Return: void
  */
@@ -659,7 +661,6 @@ static inline void wlan_ipa_mcc_work_handler(void *data)
  * wlan_ipa_wlan_evt() - IPA event handler
  * @net_dev: Interface net device
  * @device_mode: Net interface device mode
- * @sta_id: station id for the event
  * @session_id: session id for the event
  * @type: event enum of type ipa_wlan_event
  * @mac_address: MAC address associated with the event
@@ -667,7 +668,7 @@ static inline void wlan_ipa_mcc_work_handler(void *data)
  * Return: QDF_STATUS
  */
 QDF_STATUS wlan_ipa_wlan_evt(qdf_netdev_t net_dev, uint8_t device_mode,
-			     uint8_t sta_id, uint8_t session_id,
+			     uint8_t session_id,
 			     enum wlan_ipa_wlan_event ipa_event_type,
 			     uint8_t *mac_addr);
 
@@ -743,5 +744,16 @@ void wlan_ipa_uc_ssr_cleanup(struct wlan_ipa_priv *ipa_ctx);
  */
 void wlan_ipa_fw_rejuvenate_send_msg(struct wlan_ipa_priv *ipa_ctx);
 
+/**
+ * wlan_ipa_flush_pending_vdev_events() - flush pending vdev ipa events
+ * @ipa_ctx: IPA context
+ * vdev_id: vdev id
+ *
+ * This function is to flush vdev wlan ipa pending events
+ *
+ * Return: None
+ */
+void wlan_ipa_flush_pending_vdev_events(struct wlan_ipa_priv *ipa_ctx,
+					uint8_t vdev_id);
 #endif /* IPA_OFFLOAD */
 #endif /* _WLAN_IPA_CORE_H_ */

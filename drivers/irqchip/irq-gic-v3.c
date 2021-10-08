@@ -44,7 +44,7 @@
 
 #include "irq-gic-common.h"
 
-//ASUS_BSP +++
+//ASUS_BSP +++ yujoe
 int gic_irq_cnt,gic_resume_irq;//[Power]Add these values to save IRQ's counts and number
 //ASUS_BSP ---
 struct redist_region {
@@ -346,6 +346,32 @@ static int gic_suspend(void)
 	return 0;
 }
 
+/*AS-K Log Modem Wake Up QMI Info+*/
+#define MODEM_IRQ_VALUE 664
+static int modem_resume_irq_flag = 0;
+int modem_resume_irq_flag_function(void) {
+    if( modem_resume_irq_flag == 1 ) {
+        modem_resume_irq_flag = 0;
+        return 1;
+    }
+    return 0;
+}
+EXPORT_SYMBOL(modem_resume_irq_flag_function);
+/*AS-K Log Modem Wake Up QMI Info-*/
+
+/*AS-K Log Wake Up IP Address Info+*/
+#define IPA_IRQ_VALUE 107
+static int ipa_resume_irq_flag = 0;
+int ipa_resume_irq_flag_function(void) {
+    if( ipa_resume_irq_flag == 1 ) {
+        ipa_resume_irq_flag = 0;
+        return 1;
+    }
+    return 0;
+}
+EXPORT_SYMBOL(ipa_resume_irq_flag_function);
+/*AS-K Log Wake Up IP Address Info-*/
+
 static void gic_show_resume_irq(struct gic_chip_data *gic)
 {
 	unsigned int i;
@@ -379,12 +405,24 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = desc->action->name;
 
 		pr_warn("[PM] %s: %d triggered %s\n", __func__, irq, name);
+
+		/*AS-K Log Modem Wake Up QMI Info+*/
+		if(irq == MODEM_IRQ_VALUE) {
+			modem_resume_irq_flag = 1;
+                }
+		/*AS-K Log Modem Wake Up QMI Info-*/
+
+		/*AS-K Log Wake Up IP Address Info+*/
+		if(irq == IPA_IRQ_VALUE) {
+			ipa_resume_irq_flag = 1;
+                }
+		/*AS-K Log Wake Up IP Address Info-*/
+
 //ASUS_BSP +++ [PM]save IRQ's counts and number
 		gic_resume_irq = irq;
 		gic_irq_cnt++;
 //ASUS_BSP --- [PM]save IRQ's counts and number
 	}
-	printk("irq count: %d\n", gic_irq_cnt);
 }
 
 static void gic_resume_one(struct gic_chip_data *gic)
@@ -1352,7 +1390,7 @@ static void __init gic_of_setup_kvm_info(struct device_node *node)
 	gic_set_kvm_info(&gic_v3_kvm_info);
 }
 
-static int __init gic_of_init(struct device_node *node, struct device_node *parent)
+static int __init gicv3_of_init(struct device_node *node, struct device_node *parent)
 {
 	void __iomem *dist_base;
 	struct redist_region *rdist_regs;
@@ -1420,7 +1458,7 @@ out_unmap_dist:
 	return err;
 }
 
-IRQCHIP_DECLARE(gic_v3, "arm,gic-v3", gic_of_init);
+IRQCHIP_DECLARE(gic_v3, "arm,gic-v3", gicv3_of_init);
 
 #ifdef CONFIG_ACPI
 static struct
@@ -1429,6 +1467,7 @@ static struct
 	struct redist_region *redist_regs;
 	u32 nr_redist_regions;
 	bool single_redist;
+	int enabled_rdists;
 	u32 maint_irq;
 	int maint_irq_mode;
 	phys_addr_t vcpu_base;
@@ -1523,8 +1562,10 @@ static int __init gic_acpi_match_gicc(struct acpi_subtable_header *header,
 	 * If GICC is enabled and has valid gicr base address, then it means
 	 * GICR base is presented via GICC
 	 */
-	if ((gicc->flags & ACPI_MADT_ENABLED) && gicc->gicr_base_address)
+	if ((gicc->flags & ACPI_MADT_ENABLED) && gicc->gicr_base_address) {
+		acpi_data.enabled_rdists++;
 		return 0;
+	}
 
 	/*
 	 * It's perfectly valid firmware can pass disabled GICC entry, driver
@@ -1554,8 +1595,10 @@ static int __init gic_acpi_count_gicr_regions(void)
 
 	count = acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT,
 				      gic_acpi_match_gicc, 0);
-	if (count > 0)
+	if (count > 0) {
 		acpi_data.single_redist = true;
+		count = acpi_data.enabled_rdists;
+	}
 
 	return count;
 }

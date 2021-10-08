@@ -63,7 +63,7 @@ static void scm_disable_sdi(void);
  * There is no API from TZ to re-enable the registers.
  * So the SDI cannot be re-enabled when it already by-passed.
  */
-
+int download_mode = 1;
 static struct kobject dload_kobj;
 
 static int in_panic;
@@ -79,42 +79,28 @@ static bool dload_mode_enabled;
 static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 
-static bool force_warm_reboot;
-
 #ifdef FORCE_RAMDUMP_FEATURE
 void set_dload_mode(int on);
 int g_force_ramdump = 0;
-int download_mode = 1;
 static int set_download_mode(char *str)
 {
 	if ( strcmp("y", str) == 0 || strcmp("Y", str) == 0 ) {
 		download_mode = 1;
-		g_force_ramdump = 1;
 		set_dload_mode(download_mode);
-	} else
+		g_force_ramdump = 1;
+	} else {
 		download_mode = 0;
+		set_dload_mode(download_mode);
+		g_force_ramdump = 0;
+        }
 
 	printk("download mode = %d\n",download_mode);
 	return 0;
 }
 __setup("RDUMP=", set_download_mode);
-static int set_download_mode_by_uart(char *str)
-{
-	if ( strcmp("y", str) == 0 || strcmp("Y", str) == 0 ) {
-		download_mode = 1;
-		set_dload_mode(download_mode);
-		g_force_ramdump = 1;
-	} else
-		download_mode = 0;
+#endif //#ifdef FORCE_RAMDUMP_FEATURE
 
-	printk("download mode = %d\n",download_mode);
-	return 0;
-}
-
-__setup("UART=", set_download_mode_by_uart);
-#else
-static int download_mode = 1;
-#endif
+static bool force_warm_reboot;
 
 /* interface for exporting attributes */
 struct reset_attribute {
@@ -208,12 +194,6 @@ void set_dload_mode(int on)
 {
 	int ret;
 
-#ifdef FORCE_RAMDUMP_FEATURE
-// turn on to always force ramdump
-//	if(g_force_ramdump && dload_mode_enabled) {
-//		return ;
-//	}
-#endif
 
 	if (dload_mode_addr) {
 		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
@@ -535,6 +515,17 @@ static void msm_restart_prepare(const char *cmd)
 	 * Kill download mode if master-kill switch is set
 	 */
 
+#ifdef FORCE_RAMDUMP_FEATURE
+	if (cmd != NULL) {
+		if (!strncmp(cmd, "apexd-failed", 12)) {
+            if(g_force_ramdump) {
+                in_panic = 1;
+                panic("apexd-failed\n");
+            }
+		} 
+    }
+#endif
+
 	set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD));
 
@@ -598,10 +589,6 @@ static void msm_restart_prepare(const char *cmd)
 		} else if (!strncmp(cmd, "official-unlock", 15)) {
 				qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_UNLOCK);
-			__raw_writel(0x6f656d08, restart_reason);
-		} else if (!strncmp(cmd, "switch_active_slot", 18)) {
-				qpnp_pon_set_restart_reason(
-				PON_RESTART_REASON_SWITCH_ACTIVE_SLOT);
 			__raw_writel(0x6f656d08, restart_reason);
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;

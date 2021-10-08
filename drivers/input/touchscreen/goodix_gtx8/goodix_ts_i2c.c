@@ -35,7 +35,7 @@
 #define TS_WAIT_CMD_FREE_RETRY_TIMES	10
 
 #define TS_REG_COORDS_BASE		0x824E
-#define TS_REG_CMD				0x8040
+#define TS_REG_CMD			0x8040
 #define TS_REG_REQUEST			0x8044
 #define TS_REG_VERSION			0x8240
 #define TS_REG_CFG_BASE			0x8050
@@ -53,8 +53,8 @@
 #define REQUEST_RELOADFW		0x05
 #define REQUEST_IDLE			0xff
 
-#define COMMAND_SLEEP				0x05
-#define COMMAND_CLOSE_HID			0xaa
+#define COMMAND_SLEEP			0x05
+#define COMMAND_CLOSE_HID		0xaa
 #define COMMAND_START_SEND_CFG		0x80
 #define COMMAND_END_SEND_CFG		0x83
 #define COMMAND_SEND_SMALL_CFG		0x81
@@ -255,7 +255,6 @@ static int goodix_parse_dt(struct device_node *node,
 	ts_debug("[DT]x:%d, y:%d, w:%d, p:%d", board_data->panel_max_x,
 		 board_data->panel_max_y, board_data->panel_max_w,
 		 board_data->panel_max_p);
-
 	return 0;
 }
 #endif
@@ -1442,8 +1441,6 @@ static void goodix_parse_finger_nor(struct goodix_ts_device *dev,
 	}
 	pre_key_map = cur_key_map;
 }
-
-int release_count = 0;
 
 static void goodix_parse_finger_ys(struct goodix_ts_device *dev,
 	struct goodix_touch_data *touch_data, unsigned char *buf, int touch_num)

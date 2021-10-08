@@ -67,6 +67,38 @@
 
 /*
  * <ini>
+ * sifs_burst_mask - Set sifs burst mask
+ * @Min: 0
+ * @Max: 3
+ * @Default: 1
+ *
+ * This ini is used to set 11n and legacy(non 11n/wmm)
+ * sifs burst. Especially under running multi stream
+ * traffic test case, it can be useful to let the low
+ * priority AC, or legacy mode device, or the specified
+ * AC to aggressively contend air medium, then have a
+ * obvious improvement of throughput. Bit0 is the switch
+ * of sifs burst, it must be set if want to enable sifs
+ * burst, Bit1 is for legacy mode.
+ * Supported configuration:
+ * 0: disabled
+ * 1: enabled, but disabled for legacy mode
+ * 3: all enabled
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_SET_SIFS_BURST CFG_INI_UINT( \
+		"sifs_burst_mask", \
+		0, \
+		3, \
+		1, \
+		CFG_VALUE_OR_DEFAULT, \
+		"Set SIFS burst mask")
+
+/*
+ * <ini>
  * gMaxMPDUsInAMPDU - max mpdus in ampdu
  * @Min: 0
  * @Max: 64
@@ -358,8 +390,8 @@
 	"gFwDebugModuleLoglevel", \
 	0, \
 	FW_MODULE_LOG_LEVEL_STRING_LENGTH, \
-	"2,1,3,1,5,1,9,1,13,1,14,1,18,1,19,1,26,1,28,1,29,1,31,1,36,1,38,1,"\
-	"46,1,47,1,50,1,52,1,53,1,56,1,60,1,61,1,4,1", \
+	"2,1,3,1,4,1,5,1,9,1,13,1,14,1,17,1,18,1,19,1,22,1,26,1,28,1,29,1," \
+	"31,1,36,1,38,1,46,1,47,1,50,1,52,1,53,1,56,1,60,1,61,1", \
 	"Set modulized firmware debug log level")
 
 #ifdef FEATURE_WLAN_RA_FILTERING
@@ -431,6 +463,40 @@
 #define __CFG_SET_TSF_IRQ_HOST_GPIO_PIN CFG(CFG_SET_TSF_IRQ_HOST_GPIO_PIN)
 #else
 #define __CFG_SET_TSF_IRQ_HOST_GPIO_PIN
+#endif
+
+#ifdef WLAN_FEATURE_TSF_PLUS_EXT_GPIO_SYNC
+/*
+ * <ini>
+ * gtsf_sync_host_gpio_pin
+ * @Min: 0
+ * @Max: 254
+ * @Default: 255
+ *
+ * TSF sync GPIO pin of host platform
+ *
+ * The driver will use this gpio on host platform
+ * to drive the TSF sync pin on wlan chip.
+ * Toggling this gpio  will generate a strobe to fw
+ * for latching TSF.
+ *
+ * Related: None
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_SET_TSF_SYNC_HOST_GPIO_PIN CFG_INI_UINT( \
+		"gtsf_sync_host_gpio_pin", \
+		0, \
+		254, \
+		255, \
+		CFG_VALUE_OR_DEFAULT, \
+		"TSF sync GPIO pin of host platform")
+
+#define __CFG_SET_TSF_SYNC_HOST_GPIO_PIN CFG(CFG_SET_TSF_SYNC_HOST_GPIO_PIN)
+#else
+#define __CFG_SET_TSF_SYNC_HOST_GPIO_PIN
 #endif
 
 #if defined(WLAN_FEATURE_TSF) && defined(WLAN_FEATURE_TSF_PLUS)
@@ -666,6 +732,7 @@
 	CFG_FWOL_DHCP \
 	CFG(CFG_ENABLE_ANI) \
 	CFG(CFG_SET_RTS_FOR_SIFS_BURSTING) \
+	CFG(CFG_SET_SIFS_BURST) \
 	CFG(CFG_MAX_MPDUS_IN_AMPDU) \
 	CFG(CFG_ENABLE_PHY_REG) \
 	CFG(CFG_UPPER_BRSSI_THRESH) \
@@ -680,6 +747,7 @@
 	CFG(CFG_RA_FILTER_ENABLE) \
 	CFG(CFG_SET_TSF_GPIO_PIN) \
 	__CFG_SET_TSF_IRQ_HOST_GPIO_PIN \
+	__CFG_SET_TSF_SYNC_HOST_GPIO_PIN \
 	__CFG_SET_TSF_PTP_OPT \
 	CFG(CFG_LPRX) \
 	__CFG_IS_SAE_ENABLED \

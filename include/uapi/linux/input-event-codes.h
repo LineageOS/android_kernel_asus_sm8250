@@ -279,7 +279,6 @@
 #define GPBTN_M3			0xc6
 #define GPBTN_M4			0xc7
 
-
 #define KEY_PLAYCD		200
 #define KEY_PAUSECD		201
 #define KEY_PROG3		202

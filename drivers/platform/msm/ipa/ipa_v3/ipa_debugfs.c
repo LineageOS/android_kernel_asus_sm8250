@@ -384,8 +384,8 @@ static ssize_t ipa3_read_mpm_ring_size_dl(struct file *file, char __user *ubuf,
 	int nbytes;
 
 	nbytes = scnprintf(dbg_buff, IPA_MAX_MSG_LEN,
-				"IPA_MPM_RING_SIZE_DL = %d\n",
-				ipa3_ctx->mpm_ring_size_dl);
+			"IPA_MPM_RING_SIZE_DL = %d\n",
+			ipa3_ctx->mpm_ring_size_dl);
 
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, nbytes);
 }
@@ -396,8 +396,8 @@ static ssize_t ipa3_read_mpm_ring_size_ul(struct file *file, char __user *ubuf,
 	int nbytes;
 
 	nbytes = scnprintf(dbg_buff, IPA_MAX_MSG_LEN,
-				"IPA_MPM_RING_SIZE_UL = %d\n",
-				ipa3_ctx->mpm_ring_size_ul);
+			"IPA_MPM_RING_SIZE_UL = %d\n",
+			ipa3_ctx->mpm_ring_size_ul);
 
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, nbytes);
 }
@@ -408,21 +408,19 @@ static ssize_t ipa3_read_mpm_uc_thresh(struct file *file, char __user *ubuf,
 	int nbytes;
 
 	nbytes = scnprintf(dbg_buff, IPA_MAX_MSG_LEN,
-				"IPA_MPM_UC_THRESH = %d\n",
-				ipa3_ctx->mpm_uc_thresh);
+			"IPA_MPM_UC_THRESH = %d\n", ipa3_ctx->mpm_uc_thresh);
 
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, nbytes);
 }
 
 static ssize_t ipa3_read_mpm_teth_aggr_size(struct file *file,
-	char __user *ubuf,
-	size_t count, loff_t *ppos)
+	char __user *ubuf, size_t count, loff_t *ppos)
 {
 	int nbytes;
 
 	nbytes = scnprintf(dbg_buff, IPA_MAX_MSG_LEN,
-				"IPA_MPM_TETH_AGGR_SIZE = %d\n",
-				ipa3_ctx->mpm_teth_aggr_size);
+			"IPA_MPM_TETH_AGGR_SIZE = %d\n",
+			ipa3_ctx->mpm_teth_aggr_size);
 
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, nbytes);
 }
@@ -456,11 +454,11 @@ static ssize_t ipa3_write_mpm_ring_size_ul(struct file *file,
 	ret = kstrtos8_from_user(buf, count, 0, &option);
 	if (ret)
 		return ret;
-	/* as option is type s8, max it can take is 127 */
+	/* as option type is s8, max it can take is 127 */
 	if ((option > 0) && (option <= IPA_MPM_MAX_RING_LEN))
 		ipa3_ctx->mpm_ring_size_ul = option;
 	else
-		IPAERR("Invalid ul ring size =%d: range is 1 to %d\n",
+		IPAERR("Invalid ul ring size =%d: range is only 1 to %d\n",
 			option, IPA_MPM_MAX_RING_LEN);
 	return count;
 }
@@ -475,11 +473,11 @@ static ssize_t ipa3_write_mpm_uc_thresh(struct file *file,
 	ret = kstrtos8_from_user(buf, count, 0, &option);
 	if (ret)
 		return ret;
-	/* as option is type s8, max it can take is 127 */
+	/* as option type is s8, max it can take is 127 */
 	if ((option > 0) && (option <= IPA_MPM_MAX_UC_THRESH))
 		ipa3_ctx->mpm_uc_thresh = option;
 	else
-		IPAERR("Invalid uc thresh =%d: range is 1 to %d\n",
+		IPAERR("Invalid ul ring size =%d: range is only 1 to %d\n",
 			option, IPA_MPM_MAX_UC_THRESH);
 	return count;
 }
@@ -494,11 +492,11 @@ static ssize_t ipa3_write_mpm_teth_aggr_size(struct file *file,
 	ret = kstrtos8_from_user(buf, count, 0, &option);
 	if (ret)
 		return ret;
-	/* as option is type s8, max it can take is 127 */
+	/* as option type is s8, max it can take is 127 */
 	if ((option > 0) && (option <= IPA_MAX_TETH_AGGR_BYTE_LIMIT))
 		ipa3_ctx->mpm_teth_aggr_size = option;
 	else
-		IPAERR("Invalid teth aggr size =%d: range is 1 to %d\n",
+		IPAERR("Invalid ul ring size =%d: range is only 1 to %d\n",
 			option, IPA_MAX_TETH_AGGR_BYTE_LIMIT);
 	return count;
 }
@@ -1504,9 +1502,9 @@ static ssize_t ipa3_read_ntn(struct file *file, char __user *ubuf,
 		size_t count, loff_t *ppos)
 {
 #define TX_STATS(y) \
-	ipa3_ctx->uc_ntn_ctx.ntn_uc_stats_mmio->tx_ch_stats[0].y
+	stats.tx_ch_stats[0].y
 #define RX_STATS(y) \
-	ipa3_ctx->uc_ntn_ctx.ntn_uc_stats_mmio->rx_ch_stats[0].y
+	stats.rx_ch_stats[0].y
 
 	struct Ipa3HwStatsNTNInfoData_t stats;
 	int nbytes;
@@ -2965,6 +2963,15 @@ struct dentry *ipa_debugfs_get_root(void)
 EXPORT_SYMBOL(ipa_debugfs_get_root);
 
 #else /* !CONFIG_DEBUG_FS */
+#define INVALID_NO_OF_CHAR (-1)
 void ipa3_debugfs_init(void) {}
 void ipa3_debugfs_remove(void) {}
+int _ipa_read_ep_reg_v3_0(char *buf, int max_len, int pipe)
+{
+	return INVALID_NO_OF_CHAR;
+}
+int _ipa_read_ep_reg_v4_0(char *buf, int max_len, int pipe)
+{
+	return INVALID_NO_OF_CHAR;
+}
 #endif

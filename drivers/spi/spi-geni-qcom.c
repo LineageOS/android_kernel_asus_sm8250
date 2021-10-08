@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 
@@ -94,6 +94,16 @@
 #define MAX_TX_SG		(3)
 #define NUM_SPI_XFER		(8)
 
+/* SPI sampling registers */
+#define SE_GENI_CGC_CTRL	(0x28)
+#define SE_GENI_CFG_SEQ_START	(0x84)
+#define SE_GENI_CFG_REG108	(0x2B0)
+#define SE_GENI_CFG_REG109	(0x2B4)
+#define CPOL_CTRL_SHFT	1
+#define RX_IO_POS_FF_EN_SEL_SHFT	4
+#define RX_IO_EN2CORE_EN_DELAY_SHFT	8
+#define RX_SI_EN2IO_DELAY_SHFT 12
+
 struct gsi_desc_cb {
 	struct spi_master *spi;
 	struct spi_transfer *xfer;
@@ -148,9 +158,12 @@ struct spi_geni_master {
 	int num_rx_eot;
 	int num_xfers;
 	void *ipc;
-	bool shared_se;
+	bool shared_se; /* GSI Mode */
+	bool shared_ee; /* Dual EE use case */
 	bool dis_autosuspend;
 	bool cmd_done;
+	bool set_miso_sampling;
+	u32 miso_sampling_ctrl_val;
 };
 
 static struct spi_master *get_spi_master(struct device *dev)
@@ -717,6 +730,32 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 {
 	int ret = 0;
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
+	int count;
+
+	if (mas->shared_ee) {
+		if (mas->setup) {
+			ret = pm_runtime_get_sync(mas->dev);
+			if (ret < 0) {
+				dev_err(mas->dev,
+					"%s:pm_runtime_get_sync failed %d\n",
+							__func__, ret);
+				pm_runtime_put_noidle(mas->dev);
+				goto exit_prepare_message;
+			}
+			ret = 0;
+
+			if (mas->dis_autosuspend) {
+				count =
+				atomic_read(&mas->dev->power.usage_count);
+				if (count <= 0)
+					GENI_SE_ERR(mas->ipc, false, NULL,
+					"resume usage count mismatch:%d",
+								count);
+			}
+		} else {
+			mas->setup = true;
+		}
+	}
 
 	mas->cur_xfer_mode = select_xfer_mode(spi, spi_msg);
 
@@ -734,6 +773,7 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 		ret = setup_fifo_params(spi_msg->spi, spi);
 	}
 
+exit_prepare_message:
 	return ret;
 }
 
@@ -741,13 +781,30 @@ static int spi_geni_unprepare_message(struct spi_master *spi_mas,
 					struct spi_message *spi_msg)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi_mas);
+	int count = 0;
 
 	mas->cur_speed_hz = 0;
 	mas->cur_word_len = 0;
 	if (mas->cur_xfer_mode == GSI_DMA)
 		spi_geni_unmap_buf(mas, spi_msg);
+
+	if (mas->shared_ee) {
+		if (mas->dis_autosuspend) {
+			pm_runtime_put_sync(mas->dev);
+			count = atomic_read(&mas->dev->power.usage_count);
+			if (count < 0)
+				GENI_SE_ERR(mas->ipc, false, NULL,
+					"suspend usage count mismatch:%d",
+								count);
+		} else {
+			pm_runtime_mark_last_busy(mas->dev);
+			pm_runtime_put_autosuspend(mas->dev);
+		}
+	}
+
 	return 0;
 }
+
 int asus_get_se_proto(struct spi_device *spi)
 {
 	struct spi_controller *ctlr = spi->controller;
@@ -761,6 +818,56 @@ int asus_get_se_proto(struct spi_device *spi)
 	mutex_unlock(&spi->controller->bus_lock_mutex);
 	return proto;
 }
+static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
+	unsigned int major, unsigned int minor)
+{
+	u32 cpol, cpha, cfg_reg108, cfg_reg109, cfg_seq_start;
+
+	cpol = geni_read_reg(mas->base, SE_SPI_CPOL);
+	cpha = geni_read_reg(mas->base, SE_SPI_CPHA);
+	cfg_reg108 = geni_read_reg(mas->base, SE_GENI_CFG_REG108);
+	cfg_reg109 = geni_read_reg(mas->base, SE_GENI_CFG_REG109);
+	/* clear CPOL bit */
+	cfg_reg108 &= ~(1 << CPOL_CTRL_SHFT);
+
+	if (major == 1 && minor == 0) {
+		/* Write 1 to RX_SI_EN2IO_DELAY reg */
+		cfg_reg108 &= ~(0x7 << RX_SI_EN2IO_DELAY_SHFT);
+		cfg_reg108 |= (1 << RX_SI_EN2IO_DELAY_SHFT);
+		/* Write 0 to RX_IO_POS_FF_EN_SEL reg */
+		cfg_reg108 &= ~(1 << RX_IO_POS_FF_EN_SEL_SHFT);
+	} else if ((major < 2) || (major == 2 && minor < 5)) {
+		/* Write 0 to RX_IO_EN2CORE_EN_DELAY reg */
+		cfg_reg108 &= ~(0x7 << RX_IO_EN2CORE_EN_DELAY_SHFT);
+	} else {
+		/*
+		 * Write miso_sampling_ctrl_set to
+		 * RX_IO_EN2CORE_EN_DELAY reg
+		 */
+		cfg_reg108 &= ~(0x7 << RX_IO_EN2CORE_EN_DELAY_SHFT);
+		cfg_reg108 |= (mas->miso_sampling_ctrl_val <<
+				RX_IO_EN2CORE_EN_DELAY_SHFT);
+	}
+
+	geni_write_reg(cfg_reg108, mas->base, SE_GENI_CFG_REG108);
+
+	if (cpol == 0 && cpha == 0)
+		cfg_reg109 = 1;
+	else if (cpol == 1 && cpha == 0)
+		cfg_reg109 = 0;
+	geni_write_reg(cfg_reg109, mas->base,
+				SE_GENI_CFG_REG109);
+	if (!(major == 1 && minor == 0))
+		geni_write_reg(1, mas->base, SE_GENI_CFG_SEQ_START);
+	cfg_reg108 = geni_read_reg(mas->base, SE_GENI_CFG_REG108);
+	cfg_reg109 = geni_read_reg(mas->base, SE_GENI_CFG_REG109);
+	cfg_seq_start = geni_read_reg(mas->base, SE_GENI_CFG_SEQ_START);
+
+	GENI_SE_DBG(mas->ipc, false, mas->dev,
+		"%s cfg108: 0x%x cfg109: 0x%x cfg_seq_start: 0x%x\n",
+		__func__, cfg_reg108, cfg_reg109, cfg_seq_start);
+}
+
 static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
@@ -770,7 +877,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 
 	/* Adjust the IB based on the max speed of the slave.*/
 	rsc->ib = max_speed * DEFAULT_BUS_WIDTH;
-	if (mas->shared_se) {
+	if (mas->shared_se && !mas->shared_ee) {
 		struct se_geni_rsc *rsc;
 		int ret = 0;
 
@@ -782,20 +889,23 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 			"%s: Error %d pinctrl_select_state\n", __func__, ret);
 	}
 
-	ret = pm_runtime_get_sync(mas->dev);
-	if (ret < 0) {
-		dev_err(mas->dev, "%s:Error enabling SE resources %d\n",
+	if (!mas->setup || !mas->shared_ee) {
+		ret = pm_runtime_get_sync(mas->dev);
+		if (ret < 0) {
+			dev_err(mas->dev,
+				"%s:pm_runtime_get_sync failed %d\n",
 							__func__, ret);
-		pm_runtime_put_noidle(mas->dev);
-		goto exit_prepare_transfer_hardware;
-	} else {
+			pm_runtime_put_noidle(mas->dev);
+			goto exit_prepare_transfer_hardware;
+		}
 		ret = 0;
-	}
-	if (mas->dis_autosuspend) {
-		count = atomic_read(&mas->dev->power.usage_count);
-		if (count <= 0)
-			GENI_SE_ERR(mas->ipc, false, NULL,
+
+		if (mas->dis_autosuspend) {
+			count = atomic_read(&mas->dev->power.usage_count);
+			if (count <= 0)
+				GENI_SE_ERR(mas->ipc, false, NULL,
 				"resume usage count mismatch:%d", count);
+		}
 	}
 	if (unlikely(!mas->setup)) {
 		int proto = get_se_proto(mas->base);
@@ -816,16 +926,23 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 		/* Transmit an entire FIFO worth of data per IRQ */
 		mas->tx_wm = 1;
 
-		mas->tx = dma_request_slave_channel(mas->dev, "tx");
-		if (IS_ERR_OR_NULL(mas->tx)) {
-			dev_info(mas->dev, "Failed to get tx DMA ch %ld\n",
+		mas->shared_se =
+			(geni_read_reg(mas->base, GENI_IF_FIFO_DISABLE_RO) &
+							FIFO_IF_DISABLE);
+		if (mas->shared_se) {
+			mas->tx = dma_request_slave_channel(mas->dev, "tx");
+			if (IS_ERR_OR_NULL(mas->tx)) {
+				dev_info(mas->dev,
+					"Failed to get tx DMA ch %ld\n",
 							PTR_ERR(mas->tx));
-		} else {
+				goto setup_ipc;
+			}
 			mas->rx = dma_request_slave_channel(mas->dev, "rx");
 			if (IS_ERR_OR_NULL(mas->rx)) {
 				dev_info(mas->dev, "Failed to get rx DMA ch %ld\n",
 							PTR_ERR(mas->rx));
 				dma_release_channel(mas->tx);
+				goto setup_ipc;
 			}
 			mas->gsi = devm_kzalloc(mas->dev,
 				(sizeof(struct spi_geni_gsi) * NUM_SPI_XFER),
@@ -869,7 +986,8 @@ setup_ipc:
 		dev_info(mas->dev, "tx_fifo %d rx_fifo %d tx_width %d\n",
 			mas->tx_fifo_depth, mas->rx_fifo_depth,
 			mas->tx_fifo_width);
-		mas->setup = true;
+		if (!mas->shared_ee)
+			mas->setup = true;
 		hw_ver = geni_se_qupv3_hw_version(mas->wrapper_dev, &major,
 							&minor, &step);
 		if (hw_ver)
@@ -882,9 +1000,10 @@ setup_ipc:
 				"%s:Major:%d Minor:%d step:%dos%d\n",
 			__func__, major, minor, step, mas->oversampling);
 		}
-		mas->shared_se =
-			(geni_read_reg(mas->base, GENI_IF_FIFO_DISABLE_RO) &
-							FIFO_IF_DISABLE);
+
+		if (mas->set_miso_sampling)
+			spi_geni_set_sampling_rate(mas, major, minor);
+
 		if (mas->dis_autosuspend)
 			GENI_SE_DBG(mas->ipc, false, mas->dev,
 					"Auto Suspend is disabled\n");
@@ -897,6 +1016,9 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
 	int count = 0;
+
+	if (mas->shared_ee)
+		return 0;
 
 	if (mas->shared_se) {
 		struct se_geni_rsc *rsc;
@@ -920,6 +1042,7 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 		pm_runtime_mark_last_busy(mas->dev);
 		pm_runtime_put_autosuspend(mas->dev);
 	}
+
 	return 0;
 }
 
@@ -1068,12 +1191,30 @@ static void handle_fifo_timeout(struct spi_geni_master *mas,
 				"Failed to cancel/abort m_cmd\n");
 	}
 	if (mas->cur_xfer_mode == SE_DMA) {
-		if (xfer->tx_buf)
+		if (xfer->tx_buf) {
+			reinit_completion(&mas->xfer_done);
+			writel_relaxed(1, mas->base +
+				SE_DMA_TX_FSM_RST);
+			timeout =
+			wait_for_completion_timeout(&mas->xfer_done, HZ);
+			if (!timeout)
+				dev_err(mas->dev,
+					"DMA TX RESET failed\n");
 			geni_se_tx_dma_unprep(mas->wrapper_dev,
-					xfer->tx_dma, xfer->len);
-		if (xfer->rx_buf)
+				xfer->tx_dma, xfer->len);
+		}
+		if (xfer->rx_buf) {
+			reinit_completion(&mas->xfer_done);
+			writel_relaxed(1, mas->base +
+				SE_DMA_RX_FSM_RST);
+			timeout =
+			wait_for_completion_timeout(&mas->xfer_done, HZ);
+			if (!timeout)
+				dev_err(mas->dev,
+					"DMA RX RESET failed\n");
 			geni_se_rx_dma_unprep(mas->wrapper_dev,
-					xfer->rx_dma, xfer->len);
+				xfer->rx_dma, xfer->len);
+		}
 	}
 
 }
@@ -1088,6 +1229,12 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 
 	if ((xfer->tx_buf == NULL) && (xfer->rx_buf == NULL)) {
 		dev_err(mas->dev, "Invalid xfer both tx rx are NULL\n");
+		return -EINVAL;
+	}
+
+	/* Check for zero length transfer */
+	if (xfer->len < 1) {
+		dev_err(mas->dev, "Zero length transfer\n");
 		return -EINVAL;
 	}
 
@@ -1471,6 +1618,24 @@ static int spi_geni_probe(struct platform_device *pdev)
 	geni_mas->dis_autosuspend =
 		of_property_read_bool(pdev->dev.of_node,
 				"qcom,disable-autosuspend");
+	/*
+	 * This property will be set when spi is being used from
+	 * dual Execution Environments unlike shared_se flag
+	 * which is set if SE is in GSI mode.
+	 */
+	geni_mas->shared_ee =
+		of_property_read_bool(pdev->dev.of_node,
+				"qcom,shared_ee");
+
+	geni_mas->set_miso_sampling = of_property_read_bool(pdev->dev.of_node,
+				"qcom,set-miso-sampling");
+	if (geni_mas->set_miso_sampling) {
+		if (!of_property_read_u32(pdev->dev.of_node,
+				"qcom,miso-sampling-ctrl-val",
+				&geni_mas->miso_sampling_ctrl_val))
+			dev_info(&pdev->dev, "MISO_SAMPLING_SET: %d\n",
+				geni_mas->miso_sampling_ctrl_val);
+	}
 	geni_mas->phys_addr = res->start;
 	geni_mas->size = resource_size(res);
 	geni_mas->base = devm_ioremap(&pdev->dev, res->start,
@@ -1548,14 +1713,19 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
+	if (geni_mas->shared_ee)
+		goto exit_rt_suspend;
+
 	if (geni_mas->shared_se) {
 		ret = se_geni_clks_off(&geni_mas->spi_rsc);
 		if (ret)
 			GENI_SE_ERR(geni_mas->ipc, false, NULL,
 			"%s: Error %d turning off clocks\n", __func__, ret);
-	} else {
-		ret = se_geni_resources_off(&geni_mas->spi_rsc);
+		return ret;
 	}
+
+exit_rt_suspend:
+	ret = se_geni_resources_off(&geni_mas->spi_rsc);
 	return ret;
 }
 
@@ -1565,14 +1735,19 @@ static int spi_geni_runtime_resume(struct device *dev)
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
+	if (geni_mas->shared_ee)
+		goto exit_rt_resume;
+
 	if (geni_mas->shared_se) {
 		ret = se_geni_clks_on(&geni_mas->spi_rsc);
 		if (ret)
 			GENI_SE_ERR(geni_mas->ipc, false, NULL,
 			"%s: Error %d turning on clocks\n", __func__, ret);
-	} else {
-		ret = se_geni_resources_on(&geni_mas->spi_rsc);
+		return ret;
 	}
+
+exit_rt_resume:
+	ret = se_geni_resources_on(&geni_mas->spi_rsc);
 	return ret;
 }
 

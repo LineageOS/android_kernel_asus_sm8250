@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -8,7 +8,6 @@
 #include "cam_flash_soc.h"
 #include "cam_flash_core.h"
 #include "cam_common_util.h"
-#include "asus_flash.h"
 
 static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		void *arg, struct cam_flash_private_soc *soc_private)
@@ -34,17 +33,15 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 	case CAM_ACQUIRE_DEV: {
 		struct cam_sensor_acquire_dev flash_acq_dev;
 		struct cam_create_dev_hdl bridge_params;
-		asus_flash_set_camera_state(1);//ASUS_BSP Zhengwei "porting flash"
+
 		CAM_DBG(CAM_FLASH, "CAM_ACQUIRE_DEV");
 
 		if (fctrl->flash_state != CAM_FLASH_STATE_INIT) {
 			CAM_ERR(CAM_FLASH,
 				"Cannot apply Acquire dev: Prev state: %d",
 				fctrl->flash_state);
-#ifndef CAM_FACTORY_CONFIG
 			rc = -EINVAL;
 			goto release_mutex;
-#endif
 		}
 
 		if (fctrl->bridge_intf.device_hdl != -1) {
@@ -83,15 +80,8 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			rc = -EFAULT;
 			goto release_mutex;
 		}
-		CAM_INFO(CAM_FLASH,
-			"CAM_ACQUIRE_DEV flash_acq_dev.device_handle %d fctrl:%d fctrl->pdev:%d change state from %d to %d",
-			flash_acq_dev.device_handle,
-			fctrl,
-			fctrl->pdev,
-			fctrl->flash_state,
-			CAM_FLASH_STATE_ACQUIRE);//ASUS_BSP Shianliang "add log for debug"
 		fctrl->flash_state = CAM_FLASH_STATE_ACQUIRE;
-		cam_flash_copy_fctrl(fctrl); ////ASUS_BSP Shianliang add low battery checking
+		cam_flash_copy_fctrl(fctrl); ////ASUS_BSP Shianliang add low battery checking		
 		break;
 	}
 	case CAM_RELEASE_DEV: {
@@ -133,12 +123,6 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		if (fctrl->func_tbl.power_ops(fctrl, false))
 			CAM_WARN(CAM_FLASH, "Power Down Failed");
 
-		CAM_INFO(CAM_FLASH,
-			"CAM_RELEASE_DEV fctrl:%d fctrl->pdev:%d change state from %d to %d",
-			fctrl,
-			fctrl->pdev,
-			fctrl->flash_state,
-			CAM_FLASH_STATE_INIT);//ASUS_BSP Shianliang "add log for debug"
 		fctrl->flash_state = CAM_FLASH_STATE_INIT;
 		break;
 	}
@@ -359,6 +343,25 @@ static int32_t cam_flash_i2c_driver_remove(struct i2c_client *client)
 	return rc;
 }
 
+static int cam_flash_subdev_open(struct v4l2_subdev *sd,
+	struct v4l2_subdev_fh *fh)
+{
+	struct cam_flash_ctrl *fctrl =
+		v4l2_get_subdevdata(sd);
+
+	if (!fctrl) {
+		CAM_ERR(CAM_FLASH, "Flash ctrl ptr is NULL");
+		return -EINVAL;
+	}
+
+	mutex_lock(&fctrl->flash_mutex);
+	fctrl->open_cnt++;
+	CAM_DBG(CAM_FLASH, "Flash open count %d", fctrl->open_cnt);
+	mutex_unlock(&fctrl->flash_mutex);
+
+	return 0;
+}
+
 static int cam_flash_subdev_close(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh)
 {
@@ -371,9 +374,16 @@ static int cam_flash_subdev_close(struct v4l2_subdev *sd,
 	}
 
 	mutex_lock(&fctrl->flash_mutex);
-	cam_flash_shutdown(fctrl);
+	if (fctrl->open_cnt <= 0) {
+		mutex_unlock(&fctrl->flash_mutex);
+		return -EINVAL;
+	}
+	fctrl->open_cnt--;
+	CAM_DBG(CAM_FLASH, "Flash open count %d", fctrl->open_cnt);
+	if (fctrl->open_cnt == 0)
+		cam_flash_shutdown(fctrl);
 	mutex_unlock(&fctrl->flash_mutex);
-	asus_flash_set_camera_state(0);//ASUS_BSP Zhengwei "porting flash"
+
 	return 0;
 }
 
@@ -389,6 +399,7 @@ static struct v4l2_subdev_ops cam_flash_subdev_ops = {
 };
 
 static const struct v4l2_subdev_internal_ops cam_flash_internal_ops = {
+	.open  = cam_flash_subdev_open,
 	.close = cam_flash_subdev_close,
 };
 
@@ -420,7 +431,7 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 	struct cam_flash_ctrl *fctrl = NULL;
 	struct device_node *of_parent = NULL;
 
-	CAM_INFO(CAM_FLASH, "Flash probe Enter");
+	CAM_DBG(CAM_FLASH, "Enter");
 	if (!pdev->dev.of_node) {
 		CAM_ERR(CAM_FLASH, "of_node NULL");
 		return -EINVAL;
@@ -494,11 +505,26 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 		fctrl->func_tbl.power_ops = cam_flash_i2c_power_ops;
 		fctrl->func_tbl.flush_req = cam_flash_i2c_flush_request;
 	} else {
-		/* PMIC Flash */
-		fctrl->func_tbl.parser = cam_flash_pmic_pkt_parser;
-		fctrl->func_tbl.apply_setting = cam_flash_pmic_apply_setting;
-		fctrl->func_tbl.power_ops = cam_flash_pmic_power_ops;
-		fctrl->func_tbl.flush_req = cam_flash_pmic_flush_request;
+		if (fctrl->soc_info.gpio_data) {
+			rc = cam_sensor_util_request_gpio_table(
+				&fctrl->soc_info,
+				true);
+			if (rc) {
+				CAM_ERR(CAM_FLASH,
+					"GPIO table request failed: rc: %d",
+					rc);
+				goto free_gpio_resource;
+			}
+		}
+		/* PMIC GPIO Flash */
+		fctrl->func_tbl.parser =
+			cam_flash_pmic_gpio_pkt_parser;
+		fctrl->func_tbl.apply_setting =
+			cam_flash_pmic_gpio_apply_setting;
+		fctrl->func_tbl.power_ops =
+			cam_flash_pmic_gpio_power_ops;
+		fctrl->func_tbl.flush_req =
+			cam_flash_pmic_gpio_flush_request;
 	}
 
 	rc = cam_flash_init_subdev(fctrl);
@@ -520,13 +546,17 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 	mutex_init(&(fctrl->flash_mutex));
 
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
-	asus_flash_init(fctrl);//ASUS_BSP Zhengwei "porting flash"
-	CAM_INFO(CAM_FLASH, "Flash probe succeed");
+	fctrl->open_cnt = 0;
+	CAM_DBG(CAM_FLASH, "Probe success");
 	return rc;
 
 free_cci_resource:
 	kfree(fctrl->io_master_info.cci_client);
 	fctrl->io_master_info.cci_client = NULL;
+free_gpio_resource:
+	cam_sensor_util_request_gpio_table(&fctrl->soc_info, false);
+	kfree(fctrl->soc_info.gpio_data);
+	fctrl->soc_info.gpio_data = NULL;
 free_resource:
 	kfree(fctrl->i2c_data.per_frame);
 	kfree(fctrl->soc_info.soc_private);
@@ -535,7 +565,6 @@ free_resource:
 	fctrl->soc_info.soc_private = NULL;
 	kfree(fctrl);
 	fctrl = NULL;
-	CAM_INFO(CAM_FLASH, "Flash probe failed");
 	return rc;
 }
 
@@ -607,6 +636,7 @@ static int32_t cam_flash_i2c_driver_probe(struct i2c_client *client,
 
 	mutex_init(&(fctrl->flash_mutex));
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
+	fctrl->open_cnt = 0;
 
 	return rc;
 

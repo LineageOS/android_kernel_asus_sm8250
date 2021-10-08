@@ -57,11 +57,6 @@
 
 #define sde_hdcp_1x_state(x) (hdcp->hdcp_state == x)
 
-/* ASUS BSP DP +++ */
-extern uint8_t gDongleType;
-extern bool dt_hdmi;
-/* ASUS BSP DP --- */
-
 struct sde_hdcp_sink_addr {
 	char *name;
 	u32 addr;
@@ -1062,8 +1057,10 @@ static void sde_hdcp_1x_auth_work(struct work_struct *work)
 		return;
 	}
 
-	if (atomic_read(&hdcp->abort))
+	if (atomic_read(&hdcp->abort)) {
+		rc = -EINVAL;
 		goto end;
+	}
 
 	hdcp->sink_r0_ready = false;
 	hdcp->reauth = false;
@@ -1467,19 +1464,13 @@ static int sde_hdcp_1x_cp_irq(void *input)
 			buf & BIT(2) ? "LINK_INTEGRITY_FAILURE" :
 				"REAUTHENTICATION_REQUEST");
 
-		/* ASUS BSP DP +++ */
-		if ((buf & BIT(2)) && (gDongleType == 3 && dt_hdmi)) {
-			pr_err("ignore LINK_INTEGRITY_FAILURE\n");
-		} else {
-			hdcp->reauth = true;
+		hdcp->reauth = true;
 
-			if (!sde_hdcp_1x_state(HDCP_STATE_INACTIVE))
-				hdcp->hdcp_state = HDCP_STATE_AUTH_FAIL;
+		if (!sde_hdcp_1x_state(HDCP_STATE_INACTIVE))
+			hdcp->hdcp_state = HDCP_STATE_AUTH_FAIL;
 
-			complete_all(&hdcp->sink_r0_available);
-			sde_hdcp_1x_update_auth_status(hdcp);
-		}
-		/* ASUS BSP DP --- */
+		complete_all(&hdcp->sink_r0_available);
+		sde_hdcp_1x_update_auth_status(hdcp);
 	} else if (buf & BIT(1)) {
 		pr_debug("R0' AVAILABLE\n");
 		hdcp->sink_r0_ready = true;
@@ -1506,6 +1497,8 @@ static void sde_hdcp_1x_abort(void *data, bool abort)
 	atomic_set(&hdcp->abort, abort);
 	cancel_delayed_work_sync(&hdcp->hdcp_auth_work);
 	flush_workqueue(hdcp->workq);
+	if (sde_hdcp_1x_state(HDCP_STATE_AUTHENTICATING))
+		hdcp->hdcp_state = HDCP_STATE_AUTH_FAIL;
 }
 
 void *sde_hdcp_1x_init(struct sde_hdcp_init_data *init_data)

@@ -18,6 +18,9 @@
 #include <linux/asusdebug.h>
 
 #ifdef ASUS_ZS661KS_PROJECT
+
+#define FORCE_RAMDUMP_FEATURE 1
+
 enum DEVICE_HWID
 {
        HW_REV_INVALID = -1,
@@ -146,8 +149,6 @@ extern enum DEVICE_NFCID g_ASUS_nfcID;
 
 #endif //ZS670KS
 //ASUS_SZ_BSP 2019/11/19 Cassie : Add for zs670ks id ---
-
-#define FORCE_RAMDUMP_FEATURE 1
 
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))

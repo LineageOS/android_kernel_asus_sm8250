@@ -128,9 +128,7 @@ int btfm_slim_enable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 			SLIM_PUSH : SLIM_AUTO_ISO;
 	prop.baser = ((rates == 44100) || (rates == 88200)) ?
 			SLIM_RATE_11025HZ : SLIM_RATE_4000HZ;
-	prop.dataf = ((rates == 48000) || (rates == 44100) ||
-		(rates == 88200) || (rates == 96000)) ?
-			SLIM_CH_DATAF_NOT_DEFINED : SLIM_CH_DATAF_LPCM_AUDIO;
+	prop.dataf = SLIM_CH_DATAF_NOT_DEFINED;
 
 	/* for feedback channel, PCM bit should not be set */
 	if (btfm_feedback_ch_setting) {
@@ -371,6 +369,9 @@ static int btfm_slim_alloc_port(struct btfmslim *btfmslim)
 int btfm_slim_hw_init(struct btfmslim *btfmslim)
 {
 	int ret;
+	int chipset_ver;
+	struct slim_device *slim;
+	struct slim_device *slim_ifd;
 
 	BTFMSLIM_DBG("");
 	if (!btfmslim)
@@ -380,7 +381,66 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 		BTFMSLIM_DBG("Already enabled");
 		return 0;
 	}
+
+	slim = btfmslim->slim_pgd;
+	slim_ifd = &btfmslim->slim_ifd;
+
 	mutex_lock(&btfmslim->io_lock);
+		BTFMSLIM_INFO(
+			"PGD Enum Addr: %.02x:%.02x:%.02x:%.02x:%.02x: %.02x",
+			slim->e_addr[0], slim->e_addr[1], slim->e_addr[2],
+			slim->e_addr[3], slim->e_addr[4], slim->e_addr[5]);
+		BTFMSLIM_INFO(
+			"IFD Enum Addr: %.02x:%.02x:%.02x:%.02x:%.02x: %.02x",
+			slim_ifd->e_addr[0], slim_ifd->e_addr[1],
+			slim_ifd->e_addr[2], slim_ifd->e_addr[3],
+			slim_ifd->e_addr[4], slim_ifd->e_addr[5]);
+
+	chipset_ver = get_chipset_version();
+	BTFMSLIM_INFO("chipset soc version:%x", chipset_ver);
+
+	if (chipset_ver == QCA_HSP_SOC_ID_0100 ||
+		chipset_ver == QCA_HSP_SOC_ID_0110 ||
+		chipset_ver == QCA_HSP_SOC_ID_0200) {
+		BTFMSLIM_INFO("chipset is hastings prime, overwriting EA");
+		slim->e_addr[0] = 0x00;
+		slim->e_addr[1] = 0x01;
+		slim->e_addr[2] = 0x21;
+		slim->e_addr[3] = 0x02;
+		slim->e_addr[4] = 0x17;
+		slim->e_addr[5] = 0x02;
+
+		slim_ifd->e_addr[0] = 0x00;
+		slim_ifd->e_addr[1] = 0x00;
+		slim_ifd->e_addr[2] = 0x21;
+		slim_ifd->e_addr[3] = 0x02;
+		slim_ifd->e_addr[4] = 0x17;
+		slim_ifd->e_addr[5] = 0x02;
+	} else if (chipset_ver == QCA_HASTINGS_SOC_ID_0200) {
+		BTFMSLIM_INFO("chipset is hastings 2.0, overwriting EA");
+		slim->e_addr[0] = 0x00;
+		slim->e_addr[1] = 0x01;
+		slim->e_addr[2] = 0x20;
+		slim->e_addr[3] = 0x02;
+		slim->e_addr[4] = 0x17;
+		slim->e_addr[5] = 0x02;
+
+		slim_ifd->e_addr[0] = 0x00;
+		slim_ifd->e_addr[1] = 0x00;
+		slim_ifd->e_addr[2] = 0x20;
+		slim_ifd->e_addr[3] = 0x02;
+		slim_ifd->e_addr[4] = 0x17;
+		slim_ifd->e_addr[5] = 0x02;
+	}
+		BTFMSLIM_INFO(
+			"PGD Enum Addr: %.02x:%.02x:%.02x:%.02x:%.02x: %.02x",
+			slim->e_addr[0], slim->e_addr[1], slim->e_addr[2],
+			slim->e_addr[3], slim->e_addr[4], slim->e_addr[5]);
+		BTFMSLIM_INFO(
+			"IFD Enum Addr: %.02x:%.02x:%.02x:%.02x:%.02x: %.02x",
+			slim_ifd->e_addr[0], slim_ifd->e_addr[1],
+			slim_ifd->e_addr[2], slim_ifd->e_addr[3],
+			slim_ifd->e_addr[4], slim_ifd->e_addr[5]);
 
 	/* Assign Logical Address for PGD (Ported Generic Device)
 	 * enumeration address

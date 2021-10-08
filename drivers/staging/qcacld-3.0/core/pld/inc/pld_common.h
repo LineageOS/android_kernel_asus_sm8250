@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -51,6 +51,7 @@
  * @PLD_BUS_TYPE_USB : USB bus
  * @PLD_BUS_TYPE_SNOC_FW_SIM : SNOC FW SIM bus
  * @PLD_BUS_TYPE_PCIE_FW_SIM : PCIE FW SIM bus
+ * @PLD_BUS_TYPE_IPCI : IPCI bus
  */
 enum pld_bus_type {
 	PLD_BUS_TYPE_NONE = -1,
@@ -60,6 +61,7 @@ enum pld_bus_type {
 	PLD_BUS_TYPE_USB,
 	PLD_BUS_TYPE_SNOC_FW_SIM,
 	PLD_BUS_TYPE_PCIE_FW_SIM,
+	PLD_BUS_TYPE_IPCI,
 };
 
 #define PLD_MAX_FIRMWARE_SIZE (1 * 1024 * 1024)
@@ -72,6 +74,7 @@ enum pld_bus_type {
  * @PLD_BUS_WIDTH_MEDIUM: vote for medium bus bandwidth
  * @PLD_BUS_WIDTH_HIGH: vote for high bus bandwidth
  * @PLD_BUS_WIDTH_VERY_HIGH: vote for very high bus bandwidth
+ * @PLD_BUS_WIDTH_LOW_LATENCY: vote for low latency bus bandwidth
  */
 enum pld_bus_width_type {
 	PLD_BUS_WIDTH_NONE,
@@ -80,6 +83,7 @@ enum pld_bus_width_type {
 	PLD_BUS_WIDTH_MEDIUM,
 	PLD_BUS_WIDTH_HIGH,
 	PLD_BUS_WIDTH_VERY_HIGH,
+	PLD_BUS_WIDTH_LOW_LATENCY,
 };
 
 #define PLD_MAX_FILE_NAME NAME_MAX
@@ -113,10 +117,12 @@ struct pld_fw_files {
  * enum pld_platform_cap_flag - platform capability flag
  * @PLD_HAS_EXTERNAL_SWREG: has external regulator
  * @PLD_HAS_UART_ACCESS: has UART access
+ * @PLD_HAS_DRV_SUPPORT: has PCIe DRV support
  */
 enum pld_platform_cap_flag {
 	PLD_HAS_EXTERNAL_SWREG = 0x01,
 	PLD_HAS_UART_ACCESS = 0x02,
+	PLD_HAS_DRV_SUPPORT = 0x04,
 };
 
 /**
@@ -140,6 +146,7 @@ enum pld_uevent {
 	PLD_FW_DOWN,
 	PLD_FW_CRASHED,
 	PLD_FW_RECOVERY_START,
+	PLD_FW_HANG_EVENT,
 };
 
 /**
@@ -153,6 +160,10 @@ struct pld_uevent_data {
 		struct {
 			bool crashed;
 		} fw_down;
+		struct {
+			void *hang_event_data;
+			u16 hang_event_data_len;
+		} hang_data;
 	};
 };
 
@@ -264,6 +275,8 @@ struct pld_wlan_enable_cfg {
  * @PLD_EPPING: EPPING mode
  * @PLD_WALTEST: WAL test mode, FW standalone test mode
  * @PLD_OFF: OFF mode
+ * @PLD_COLDBOOT_CALIBRATION: Cold Boot Calibration Mode
+ * @PLD_FTM_COLDBOOT_CALIBRATION: Cold Boot Calibration for FTM Mode
  */
 enum pld_driver_mode {
 	PLD_MISSION,
@@ -271,7 +284,8 @@ enum pld_driver_mode {
 	PLD_EPPING,
 	PLD_WALTEST,
 	PLD_OFF,
-	PLD_COLDBOOT_CALIBRATION = 7
+	PLD_COLDBOOT_CALIBRATION = 7,
+	PLD_FTM_COLDBOOT_CALIBRATION = 10
 };
 
 /**
@@ -328,6 +342,18 @@ enum pld_recovery_reason {
 	PLD_REASON_DEFAULT,
 	PLD_REASON_LINK_DOWN
 };
+
+#ifdef FEATURE_WLAN_TIME_SYNC_FTM
+/**
+ * enum pld_wlan_time_sync_trigger_type - WLAN time sync trigger type
+ * @PLD_TRIGGER_POSITIVE_EDGE: Positive edge trigger
+ * @PLD_TRIGGER_NEGATIVE_EDGE: Negative edge trigger
+ */
+enum pld_wlan_time_sync_trigger_type {
+	PLD_TRIGGER_POSITIVE_EDGE,
+	PLD_TRIGGER_NEGATIVE_EDGE
+};
+#endif /* FEATURE_WLAN_TIME_SYNC_FTM */
 
 /**
  * struct pld_driver_ops - driver callback functions
@@ -403,7 +429,7 @@ int pld_register_driver(struct pld_driver_ops *ops);
 void pld_unregister_driver(void);
 
 int pld_wlan_enable(struct device *dev, struct pld_wlan_enable_cfg *config,
-		    enum pld_driver_mode mode, const char *host_version);
+		    enum pld_driver_mode mode);
 int pld_wlan_disable(struct device *dev, enum pld_driver_mode mode);
 int pld_set_fw_log_mode(struct device *dev, u8 fw_log_mode);
 void pld_get_default_fw_files(struct pld_fw_files *pfw_files);
@@ -416,6 +442,13 @@ void pld_is_pci_link_down(struct device *dev);
 int pld_shadow_control(struct device *dev, bool enable);
 void pld_schedule_recovery_work(struct device *dev,
 				enum pld_recovery_reason reason);
+
+#ifdef FEATURE_WLAN_TIME_SYNC_FTM
+int pld_get_audio_wlan_timestamp(struct device *dev,
+				 enum pld_wlan_time_sync_trigger_type type,
+				 uint64_t *ts);
+#endif /* FEATURE_WLAN_TIME_SYNC_FTM */
+
 #ifdef CONFIG_CNSS_UTILS
 /**
  * pld_set_wlan_unsafe_channel() - Set unsafe channel
@@ -637,6 +670,16 @@ void *pld_smmu_get_mapping(struct device *dev);
 #endif
 int pld_smmu_map(struct device *dev, phys_addr_t paddr,
 		 uint32_t *iova_addr, size_t size);
+#ifdef CONFIG_SMMU_S1_UNMAP
+int pld_smmu_unmap(struct device *dev,
+		   uint32_t iova_addr, size_t size);
+#else
+static inline int pld_smmu_unmap(struct device *dev,
+				 uint32_t iova_addr, size_t size)
+{
+	return 0;
+}
+#endif
 int pld_get_user_msi_assignment(struct device *dev, char *user_name,
 				int *num_vectors, uint32_t *user_base_data,
 				uint32_t *base_vector);
@@ -742,7 +785,7 @@ int pld_srng_free_irq(struct device *dev, int irq, void *ctx);
 void pld_srng_enable_irq(struct device *dev, int irq);
 
 /**
- * pld_disable_irq() - Disable IRQ for SRNG
+ * pld_srng_disable_irq() - Disable IRQ for SRNG
  * @dev: device
  * @irq: IRQ number
  *
@@ -838,4 +881,52 @@ static inline int pld_nbuf_pre_alloc_free(struct sk_buff *skb)
  * Return: PLD bus type
  */
 enum pld_bus_type pld_get_bus_type(struct device *dev);
+
+static inline int pfrm_request_irq(struct device *dev, unsigned int ce_id,
+				   irqreturn_t (*handler)(int, void *),
+				   unsigned long flags, const char *name,
+				   void *ctx)
+{
+	return pld_srng_request_irq(dev, ce_id, handler, flags, name, ctx);
+}
+
+static inline int pfrm_free_irq(struct device *dev, int irq, void *ctx)
+{
+	return pld_srng_free_irq(dev, irq, ctx);
+}
+
+static inline void pfrm_enable_irq(struct device *dev, int irq)
+{
+	pld_srng_enable_irq(dev, irq);
+}
+
+static inline void pfrm_disable_irq_nosync(struct device *dev, int irq)
+{
+	pld_srng_disable_irq(dev, irq);
+}
+
+static inline int pfrm_read_config_word(struct pci_dev *pdev, int offset,
+					uint16_t *val)
+{
+	return pld_pci_read_config_word(pdev, offset, val);
+}
+
+static inline int pfrm_write_config_word(struct pci_dev *pdev, int offset,
+					 uint16_t val)
+{
+	return pld_pci_write_config_word(pdev, offset, val);
+}
+
+static inline int pfrm_read_config_dword(struct pci_dev *pdev, int offset,
+					 uint32_t *val)
+{
+	return pld_pci_read_config_dword(pdev, offset, val);
+}
+
+static inline int pfrm_write_config_dword(struct pci_dev *pdev, int offset,
+					  uint32_t val)
+{
+	return pld_pci_write_config_dword(pdev, offset, val);
+}
+
 #endif

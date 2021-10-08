@@ -175,6 +175,8 @@ int upload_firmware_fwd(struct snt8100fsr *snt8100fsr, char *filename) {
 	/* ASUS BSP Clay: load different fw version according to HWID +++ */
 	if(g_ASUS_hwID < HW_REV_PR){
 		rst_work->filename = ER_FW_PATH;
+	}else if(snt8100fsr_g->fw_sec_source == true){
+		rst_work->filename = FW_PATH_2ND;
 	}else{
 		rst_work->filename = FW_PATH;
 	}
@@ -249,6 +251,8 @@ int upload_firmware(struct snt8100fsr *snt8100fsr, char *filename) {
 	/* ASUS BSP Clay: load different fw version according to HWID +++ */
 	if(g_ASUS_hwID < HW_REV_PR){
 		work->filename = ER_FW_PATH;
+	}else if(snt8100fsr_g->fw_sec_source == true){
+		work->filename = FW_PATH_2ND;
 	}else{
 		work->filename = FW_PATH;
 	}
@@ -307,6 +311,15 @@ int irq_handler_fwd( void) {
 }
 void upload_wq_func(struct work_struct *work_orig) {
     //upload_firmware_internal((struct upload_work *)work);
+    if(snt8100fsr_g->fw_info_check == false){
+	PRINT_INFO("delay due to fw info check");
+	schedule_delayed_work(&own_work, msecs_to_jiffies(1000));
+	return;
+    }else{
+      if(snt8100fsr_g->fw_sec_source == true){
+	work->filename = FW_PATH_2ND;
+      }
+    }
     upload_firmware_internal(work);
     PRINT_DEBUG("SNT upload_wq_func done");
     return;
@@ -371,8 +384,12 @@ static int open_firmware_file(struct upload_work *w) {
         	}
         }
     }
-	if(i > retry_times){
-		ASUSEvtlog("[Grip] Sensor: can't find firmware file!!!");
+	if(i >= retry_times){
+		w->filename = FW_PATH;
+		ret = file_open(w->filename, O_RDONLY, 0, &w->f);
+		if(ret) {
+			ASUSEvtlog("[Grip] Sensor: can't find firmware file!!!");
+		}
 	}
     return ret;     
 }

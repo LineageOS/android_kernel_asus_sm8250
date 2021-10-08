@@ -31,7 +31,6 @@
 #include <linux/debugfs.h>
 #include <linux/version.h>
 #include <linux/input.h>
-#include <linux/miscdevice.h>
 #include "inc/config.h"
 #include "inc/tfa98xx.h"
 #include "inc/tfa.h"
@@ -51,6 +50,11 @@
  */
 /*#define TFA98XX_ALSA_CTRL_PROF_CHG_ON_VOL	1
 */
+
+#ifdef CONFIG_SND_SOC_TFA9874
+extern int register_receiver_dai_name(struct device *dev, int i2cbus, int addr);
+extern int register_speaker_dai_name(struct device *dev, int i2cbus, int addr);
+#endif
 
 /* Supported rates and data formats */
 #define TFA98XX_RATES SNDRV_PCM_RATE_8000_48000
@@ -1727,6 +1731,13 @@ static int tfa98xx_append_i2c_address(struct device *dev,
 			dai_drv[i].name = tfa98xx_devm_kstrdup(dev, buf);
             pr_info("TFA9874 dai_drv[%d].name =  %s\n", i, dai_drv[i].name);
 
+#ifdef CONFIG_SND_SOC_TFA9874
+            if(addr == 52){
+                register_receiver_dai_name(dev, i2cbus, addr);
+            }else if(addr == 53){
+                register_speaker_dai_name(dev, i2cbus, addr);
+            }
+#endif
 			snprintf(buf, 50, "%s-%x-%x",
 						dai_drv[i].playback.stream_name,
 						i2cbus, addr);
@@ -2763,12 +2774,10 @@ enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(struct tfa98xx *tfa98xx)
 		bytes[nr++] = (uint8_t)((dsp_cal_value >> 8) & 0xff);
 		bytes[nr++] = (uint8_t)(dsp_cal_value & 0xff);
 
-		dev_err(&tfa98xx->i2c->dev, "%s: cal value 0x%x(%d)\n", __func__, dsp_cal_value, value);
+		dev_err(&tfa98xx->i2c->dev, "%s: cal value 0x%x\n", __func__, dsp_cal_value);
 
 		/* Receiver RDC */
-		if (value < 4845 || value > 6555)
-			dev_err(&tfa98xx->i2c->dev, "%s: cal value Out of range try to use golden value!\n", __func__);
-		else
+		if (value > 25200 && value < 30800)
 			bytes[0] |= 0x01;
 	}
 	
@@ -2783,12 +2792,10 @@ enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(struct tfa98xx *tfa98xx)
 		bytes[nr++] = (uint8_t)((dsp_cal_value >> 8) & 0xff);
 		bytes[nr++] = (uint8_t)(dsp_cal_value & 0xff);
 
-		dev_err(&tfa98xx->i2c->dev, "%s: cal value 0x%x(%d)\n", __func__, dsp_cal_value, value);
+		dev_err(&tfa98xx->i2c->dev, "%s: cal value 0x%x\n", __func__, dsp_cal_value);
 
 		/* Speaker RDC */
-		if (value < 5525 || value > 7475)
-			dev_err(&tfa98xx->i2c->dev, "%s: cal value Out of range try to use golden value!\n", __func__);
-		else
+		if (value > 6300 && value < 7700)
 			bytes[0] |= 0x10;
 	}
 
@@ -3176,83 +3183,6 @@ retry:
 	return ((ret > 1) ? count : -EIO);
 }
 
-/* For CSC check&self calibration Receiver & Speaker for userversion 20180821 +++ */
-static ssize_t tfa98xx_misc_rpc_read(struct file *file,
-				     char __user *user_buf, size_t count,
-				     loff_t *ppos)
-{
-	struct i2c_client *i2c = file->private_data;
-	//struct tfa98xx *tfa98xx = i2c_get_clientdata(i2c);
-	int ret = 0;
-	uint8_t *buffer;
-
-	buffer = kmalloc(count, GFP_KERNEL);
-	if (buffer == NULL) {
-		pr_err("[0x%x] can not allocate memory\n", i2c->addr);
-		return -ENOMEM;
-	}
-
-	//mutex_lock(&tfa98xx->dsp_lock);
-
-	ret = send_tfa_cal_apr(buffer, count, true);
-	pr_err("[0x%x] send_tfa_cal_apr error: %d\n", i2c->addr, ret);
-
-	//mutex_unlock(&tfa98xx->dsp_lock);
-	if (ret) {
-		pr_err("[0x%x] dsp_msg_read error: %d\n", i2c->addr, ret);
-		kfree(buffer);
-		return -EFAULT;
-	}
-
-	ret = copy_to_user(user_buf, buffer, count);
-	kfree(buffer);
-	if (ret)
-		return -EFAULT;
-
-	*ppos += count;
-	return count;
-}
-
-static ssize_t tfa98xx_misc_rpc_send(struct file *file,
-				     const char __user *user_buf,
-				     size_t count, loff_t *ppos)
-{
-	struct i2c_client *i2c = file->private_data;
-	//struct tfa98xx *tfa98xx = i2c_get_clientdata(i2c);
-	uint8_t *buffer;
-	int err = 0;
-
-	if (count == 0)
-		return 0;
-
-	/* msg_file.name is not used */
-	buffer = kmalloc(count, GFP_KERNEL);
-	if ( buffer == NULL ) {
-		pr_err("[0x%x] can not allocate memory\n", i2c->addr);
-		return  -ENOMEM;
-	}
-	if (copy_from_user(buffer, user_buf, count))
-		return -EFAULT;
-
-	//mutex_lock(&tfa98xx->dsp_lock);
-
-	err = send_tfa_cal_apr(buffer, count, false);
-	if (1) {
-		pr_err("[0x%x] send_tfa_cal_apr error: %d\n", i2c->addr, err);
-	}
-
-	mdelay(2);
-
-	//mutex_unlock(&tfa98xx->dsp_lock);
-
-	kfree(buffer);
-
-	if (err)
-		return err;
-	return count;
-}
-/* For CSC check&self calibration Receiver & Speaker for userversion 20180821 --- */
-
 static struct bin_attribute dev_attr_rw = {
 	.attr = {
 		.name = "rw",
@@ -3272,28 +3202,6 @@ static struct bin_attribute dev_attr_reg = {
 	.read = NULL,
 	.write = tfa98xx_reg_write,
 };
-
-/* For CSC check&self calibration Receiver & Speaker for userversion 20180821 +++ */
-static const struct file_operations tfa98xx_misc_rpc_fops = {
-	.owner = THIS_MODULE,
-	.open = simple_open,
-	.read = tfa98xx_misc_rpc_read,
-	.write = tfa98xx_misc_rpc_send,
-	.llseek = default_llseek,
-};
-
-struct miscdevice tfa98xx_rpc_misc34 = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = "ASUS_rpc_34",
-	.fops = &tfa98xx_misc_rpc_fops,
-};
-
-struct miscdevice tfa98xx_rpc_misc35 = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = "ASUS_rpc_35",
-	.fops = &tfa98xx_misc_rpc_fops,
-};
-/* For CSC check&self calibration Receiver & Speaker for userversion 20180821 --- */
 
 static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 			     const struct i2c_device_id *id)
@@ -3510,20 +3418,6 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	ret = device_create_bin_file(&i2c->dev, &dev_attr_reg);
 	if (ret)
 		dev_info(&i2c->dev, "error creating sysfs files\n");
-
-/* For CSC check&self calibration Receiver & Speaker for userversion 20180821 +++ */
-	if (i2c->addr == 0x35)	{
-		dev_info(&i2c->dev, "tfa98xx try to registered misc_register(%s)\n", tfa98xx_rpc_misc34.name);
-		ret = misc_register(&tfa98xx_rpc_misc34);
-		if (ret)
-			dev_info(&i2c->dev, "error creating miscfs files\n");
-	} else	{
-		dev_info(&i2c->dev, "tfa98xx try to registered misc_register(%s)\n", tfa98xx_rpc_misc35.name);
-		ret = misc_register(&tfa98xx_rpc_misc35);
-		if (ret)
-			dev_info(&i2c->dev, "error creating miscfs files\n");
-	}
-/* For CSC check&self calibration Receiver & Speaker for userversion 20180821 --- */
 
 	pr_info("%s Probe completed successfully!\n", __func__);
 

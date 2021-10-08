@@ -67,9 +67,21 @@ static signed char iCloseCounter=0;
 static signed char iOpenCounter=0;
 int (*fManualMode)(int , int , int );
 
-
+enum UserK_State {
+	UserK_TBD = 0,
+	UserK_Start,
+	UserK_rMCU_Ready,
+	UserK_SaveK,
+	UserK_NoSaveK,
+	UserK_AbortK,
+	UserK_Reset,
+	UserK_Finish
+}UserKState=UserK_TBD;
+static void mcu_cal_work(struct work_struct *work);
+static DECLARE_DELAYED_WORK(cal_work, mcu_cal_work);
 static void mcu_do_work_later(struct work_struct *work);
 static DECLARE_DELAYED_WORK(report_work, mcu_do_work_later);
+void mStopConditionInit(void);
 
 //const int powerUpDuration=200;
 #define DEFAULT_POWERDOWNDURATION 30000
@@ -81,6 +93,10 @@ typedef enum{
     MOTOR_ANGLE,
     MOTOR_ROTATE,
     MOTOR_FORCE,
+    MOTOR_DRVINT,
+    MOTOR_GET_ANGLE,
+    MOTOR_COPY_MCU_FILE,
+    MOTOR_K_FINISH,
 }MotorOpCode;
 
 typedef enum{
@@ -88,6 +104,72 @@ typedef enum{
     ROTATE_CANCEL,
     ROTATE_STOP,
 }RotateStopReason;
+
+//Backup S
+#include <linux/mm.h>
+#include <linux/syscalls.h>
+#define MCU_BAKEUP_FILE_NAME "/motor_fw1/mcu_bak"
+#define MCU_BAKEUP_RAW_FILE_NAME "/motor_fw1/mcu_raw"
+#define MCU_BAKEUP_USER_FILE_NAME "/motor_fw2/mcu_bak2"
+#define MCU_BAKEUP_USER_RAW_FILE_NAME "/motor_fw2/mcu_raw2"
+#define CAL_DATA_OFFSET	0
+#define FILE_OP_WRITE 1
+#define FILE_OP_READ  0
+
+#define CalLength	(24+80+6)
+#define RawLength	40
+typedef union
+{
+	uint8_t Cal_val[CalLength];
+	struct
+	{
+		int16_t Cal_offSetPoint[2];		//4 bytes
+		int16_t Cal_gain[2];			//4 bytes
+		float 	Cal_zeroBias;			//4 bytes
+		float 	Cal_rotAngle[1];		//4 bytes
+		uint16_t AKMThrd[4];			//8 bytes BOP1Y_15_0/BRP1Y_15_0/BOP1Z_15_0/BRP1Z_15_0.
+		float 	Cal3CorrectionA[10][2];		//80 bytes
+		int16_t Cal_firstMAGdata[3]; 	//6 bytes
+	} CalParam;
+}CAL_TABLE;
+
+CAL_TABLE fcal_val;
+CAL_TABLE fcal_val_UserK;
+CAL_TABLE fcal_val_rPhone;
+CAL_TABLE fcal_val_rMCU;
+
+static int backup_mcu_cal_thed(void);
+static int read_mcu_cal_thed(void);
+static int Zen7_MSP430FR2311_wI2CtoMCU(uint8_t *buf, uint8_t len);
+int Zen7_MSP430FR2311_rI2CtoCPU(uint8_t cmd, uint8_t *rBuf, uint8_t len);
+static void bak_raw(void);
+int ManualMode_AfterAndPR2_NOSS(int dir, int angle, int speed);
+
+//user K
+static char IsFileNull(const char *filename);
+static void UserCaliReset(void);
+static int Backup_user_cal_thed(void);
+static int read_usek_cal3threshlod(void);
+static int CompareCaliData(char *filename);
+
+#define bit0	0x01
+#define bit1	0x02
+#define bit2	0x04
+#define bit3	0x08
+#define bit4	0x10
+#define bit5	0x20
+#define bit6	0x40
+#define bit7	0x80
+
+/* MASK operation macros */
+#define SET_MASK(reg, bit_mask) 	    ((reg)|=(bit_mask))
+#define CLEAR_MASK(reg, bit_mask) 	    ((reg)&=(~(bit_mask)))
+#define IS_MASK_SET(reg, bit_mask) 	    (((reg)&(bit_mask))!=0)
+#define IS_MASK_CLEAR(reg, bit_mask)    (((reg)&(bit_mask))==0)
+//Backup E
+
+static int cal_cmd = 0;						//0:factory K; 1:user K.
+static unsigned char FacOrUserClaFlg = 0;	//0:factory K; 1:user K.
 
 static void waitDelayAndShowText(char * s) {
 	int i=10;
@@ -192,10 +274,81 @@ if (numOfWriteBytes>32||numOfReadBytes>=32) {
     return true;
 }
 
+bool MSP430_I2CWriteReadA_Nolog (uint8_t slave_addr, uint8_t* writeBuffer,  
+	uint32_t numOfWriteBytes, uint8_t* readBuffer, uint32_t numOfReadBytes)
+{
+	uint8_t loop_i;
+
+__u8* rxDMA;
+		__u8* txDMA;
+
+struct i2c_msg msgs[] = {
+	{
+	 .addr = slave_addr,
+	 .flags = 0,
+	 .len = numOfWriteBytes,
+	 .buf = writeBuffer,
+	},		 
+	{
+	 .addr = slave_addr,
+	 .flags = I2C_M_RD,
+	 .len = numOfReadBytes,
+	 .buf = readBuffer,
+	},		 
+};
+
+if (numOfWriteBytes>32||numOfReadBytes>=32) {
+	rxDMA = kzalloc(sizeof(uint8_t)*numOfReadBytes, GFP_DMA | GFP_KERNEL);
+	txDMA = kzalloc(sizeof(uint8_t)*numOfWriteBytes, GFP_DMA | GFP_KERNEL);
+//	memcpy(rxDMA, readBuffer, numOfReadBytes);
+	memcpy(txDMA, writeBuffer, numOfWriteBytes);
+	msgs[0].buf=txDMA;
+	msgs[1].buf=rxDMA;
+}
+	
+		//dumpI2CData("I2C_WR_w",msgs[0].addr,  writeBuffer, numOfWriteBytes);
+
+		for (loop_i = 0; loop_i < I2C_RETRY_COUNT; loop_i++) {
+		
+			if (i2c_transfer(mcu_info->i2c_client->adapter, msgs, 2) > 0)
+				break;
+		
+			/*check intr GPIO when i2c error*/
+			if (loop_i == 0 || loop_i == I2C_RETRY_COUNT -1)
+				pr_err("[MCU][mcp error] %s, i2c err, slaveAddr 0x%x\n",
+					__func__, slave_addr);
+			msleep(10);
+		}
+		
+		if (loop_i >= I2C_RETRY_COUNT) {
+			pr_err(KERN_ERR "[MCU][mcp error] %s slaveAddr:0x%x retry over(i2c_err) %d\n",
+				__func__, slave_addr, I2C_RETRY_COUNT);
+			
+			if (numOfWriteBytes>32||numOfReadBytes>=32) {
+				memcpy(readBuffer, rxDMA, numOfReadBytes);
+				kfree(rxDMA);
+				kfree(txDMA);
+				
+			}
+			dumpI2CData("I2C_WR_r i2c err,", msgs[1].addr, readBuffer, numOfReadBytes);
+			return false;
+		}
+		
+		if (numOfWriteBytes>32||numOfReadBytes>=32) {
+			memcpy(readBuffer, rxDMA, numOfReadBytes);
+			kfree(rxDMA);
+			kfree(txDMA);
+		}
+		//dumpI2CData("I2C_WR_r", msgs[1].addr, readBuffer, numOfReadBytes);
+
+	return true;
+}
+
+
 bool MSP430_I2CWriteRead (uint8_t* writeBuffer,  
     uint32_t numOfWriteBytes, uint8_t* readBuffer, uint32_t numOfReadBytes)
 {
-  return MSP430_I2CWriteReadA(mcu_info->slave_addr, writeBuffer, numOfWriteBytes, readBuffer, numOfReadBytes);
+  return MSP430_I2CWriteReadA_Nolog(mcu_info->slave_addr, writeBuffer, numOfWriteBytes, readBuffer, numOfReadBytes);
 }
 
 bool MSP430_I2CAction(struct i2c_msg* msgs, uint8_t slave_addr, uint8_t* buffer, uint32_t numberOfBytes)
@@ -242,6 +395,23 @@ bool MSP430_I2CRead(uint8_t slave_addr, uint8_t* buffer, uint32_t numberOfBytes)
 	return false;
 }
 
+bool MSP430_I2CRead_NoLog(uint8_t slave_addr, uint8_t* buffer, uint32_t numberOfBytes)
+{
+	struct i2c_msg msgs[] = {
+		{
+		 .addr = slave_addr,
+		.flags = I2C_M_RD,
+		 .len = numberOfBytes,
+		 .buf = buffer,
+		},		 
+	};
+
+	if ( MSP430_I2CAction(msgs, slave_addr, buffer, numberOfBytes)) {
+		//dumpI2CData("I2C_r", slave_addr, buffer, numberOfBytes);
+		return true;
+	};
+	return false;
+}
 
 bool MSP430_I2CWriteA(uint8_t slave_addr, uint8_t* buffer, uint32_t numberOfBytes)
 {
@@ -255,6 +425,21 @@ bool MSP430_I2CWriteA(uint8_t slave_addr, uint8_t* buffer, uint32_t numberOfByte
 	};
 
 	dumpI2CData("I2C_w", slave_addr, buffer, numberOfBytes);
+	return MSP430_I2CAction(msgs, slave_addr, buffer, numberOfBytes);
+}
+
+bool MSP430_I2CWriteA_NoLog(uint8_t slave_addr, uint8_t* buffer, uint32_t numberOfBytes)
+{
+	struct i2c_msg msgs[] = {
+		{
+		 .addr = slave_addr,
+		 .flags = 0,
+		 .len = numberOfBytes,
+		 .buf = buffer,
+		},		 
+	};
+
+	//dumpI2CData("I2C_w", slave_addr, buffer, numberOfBytes);
 	return MSP430_I2CAction(msgs, slave_addr, buffer, numberOfBytes);
 }
 
@@ -272,6 +457,7 @@ uint16_t defaultManualSpeed[22] = {0, 0, 8, 73, 10, 73, 20, 73, 120, 0, 160, 0, 
 
 //Factory note.
 uint16_t TightenMode[]={1, 4, 4, 4, 4, 4, 4, 100, 0, 0, 0, 0, 0, 73, 73, 73, 73, 73, 73};
+uint16_t SmallAngle[]={1, 4, 4, 4, 4, 4, 4, 6, 0, 0, 0, 0, 0, 73, 73, 73, 73, 73, 73};	//for camera apk
 
 //Auto mode(0_180/180_0).
 uint16_t ConvertFRQMode[][19]={
@@ -294,6 +480,10 @@ uint16_t AutoWarmUpMode2[] = {0, 120, 120, 120, 120, 120, 120, 255, 55, 0, 0, 0,
 //Main memory erase password.
 uint8_t bslPassword[32] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,	\
 						   0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+
+//Motor stop condition and cali command.
+uint16_t StopCondition[]={1, 179, 4, 0, 73, 4, 0, 73};
+uint16_t CaliCmd[]={4, 2, 0};
 
 static int parse_param(char* buf, const char* title, uint16_t* target, int count) {
 #define PARSE_DIG_PARAM_1 "%d"
@@ -356,7 +546,7 @@ do {
 	while (buf[0]==0xd || buf[0]==0xa) buf++;
 	
 	{  //debug
-			D("[MCU] >>> %s", buf);
+			//D("[MCU] >>> %s", buf);
 	}
 
 	parse_param(buf, "CONST_FRQ_SPEED", &ConstSpeedMode[1], 18);
@@ -373,6 +563,9 @@ do {
 	parse_param(buf, "CONVERT_FRQ_DOWN_FS_STEP", &CONVERT_FRQ_FS_STEP[1], 1);
 	parse_param(buf, "MANUAL_SPEED", &defaultManualSpeed[2], 20);
 	parse_param(buf, "TIGHTEN_STEP", &TightenMode[1], 18);
+	parse_param(buf, "STOP_CONDITION", &StopCondition[0], 8);
+	parse_param(buf, "CALI_CMD", &CaliCmd[0], 3);
+	parse_param(buf, "S_ANGLE", &SmallAngle[1], 18);
 
 	//parse_param(buf, "PASSWORD", (uint16_t*)(&bslPassword[0]), 32);
 	
@@ -391,7 +584,11 @@ do {
 extern bool read_kernel_file(const char*, void (*)(char*, ssize_t) );
 
 void read_cali_file() {	
-	const char mcu_cali[]= {"/vendor/firmware/mcu_cali"};
+	#ifdef ASUS_FTM_BUILD
+		const char mcu_cali[]= {"/vendor/firmware/mcu_cali_factory"};
+	#else
+		const char mcu_cali[]= {"/vendor/firmware/mcu_cali"};
+	#endif
 	read_kernel_file(mcu_cali,  process_cali_item);
 }
 
@@ -406,9 +603,14 @@ static uint32_t resetVectorValue;
 
 
 static int MSP43FR2311_Go_BSL_Mode(void) {
-	waitDelayAndShowText("simulator bsl protocol");
+	uint8_t isAfterSR;
 	
-	#define isAfterSR 1
+	waitDelayAndShowText("simulator bsl protocol");
+if ((g_ASUS_hwID == HW_REV_EVB) || (g_ASUS_hwID == HW_REV_SR) || (g_ASUS_hwID == HW_REV_SR2) || (g_ASUS_hwID == HW_REV_SR3)) 	//EVB or SR
+	isAfterSR = 1;
+else
+	isAfterSR = 0;
+	
 	//gpio_set_value(mcu_info->mcu_test, 0^isAfterSR);
 	gpio_set_value(mcu_info->mcu_reset, 0);
 	msleep(20);
@@ -427,6 +629,7 @@ static int MSP43FR2311_Go_BSL_Mode(void) {
 	//gpio_set_value(mcu_info->mcu_test, 0);
 
 	D("[MCU] INFO: Invoking the BSL .\n");
+	msleep(50);	//Wait mcu hw go to bsl mode ready.
 	return MSP430BSL_invokeBSL(invokeString, 8);			
 }
 
@@ -491,7 +694,7 @@ static int MSP43FR2311_Update_Firmware_Load_File(bool bLoadFromFile) {
 			waitDelayAndShowText("Erase main memory");
 			if(MSP430BSL_unlockDevice(bslPassword) != MSP430_STATUS_OPERATION_OK )
 			{
-				pr_err("[MCU] ERROR: Could not unlock device!\n");
+				pr_err("[MCU] ERROR: Could not unlock device! Cnt:%d\n", ii);
 //				goto BSLCleanUp;
 			}
 		}
@@ -592,12 +795,23 @@ static int MSP43FR2311_Update_Firmware_Load_File(bool bLoadFromFile) {
 	
 	D("[MCU] INFO: power off the device.\n");
 	MSP430FR2311_power_control(0);
-	gpio_set_value(mcu_info->mcu_5v_boost_enable, 0);
+	//gpio_set_value(mcu_info->mcu_5v_boost_enable, 0);
 	msleep(5);
 	pr_err("[MCU] INFO: re-power on the device.\n");
 	MSP430FR2311_power_control(1);
-	gpio_set_value(mcu_info->mcu_5v_boost_enable, 1);
-	msleep(200);
+	//gpio_set_value(mcu_info->mcu_5v_boost_enable, 1);
+	//copy file to asdf folder.
+	//report_motor_event(MOTOR_COPY_MCU_FILE, 2);	// /factory/mcu_bak --> asdf.
+	msleep(3000);	//Delay to wait MCU i2c slave init ok.
+
+	//Re-write backup calibration and threadhold data to MCU.
+	MCUState=MCU_READY; 	//Cmd 0xbf logic also will set MCU_READY when this function end, so can set MCU_READY early here.
+	//read_mcu_cal_thed();
+	if(IsFileNull(MCU_BAKEUP_USER_FILE_NAME) == 1){
+		read_usek_cal3threshlod();	//read motor_fw2 file to mcu.
+	}else{
+		read_mcu_cal_thed();		//read factory file to mcu.
+	}
 	
 	return res;
 	
@@ -614,11 +828,11 @@ BSLCleanUp:
 	
 	//Zen7, power off/on when go to bsl mode fail.
 	MSP430FR2311_power_control(0);
-	gpio_set_value(mcu_info->mcu_5v_boost_enable, 0);
+	//gpio_set_value(mcu_info->mcu_5v_boost_enable, 0);
 	msleep(5);
 	pr_err("[MCU] re-power on the device when run bsl logic fail.\n");
 	MSP430FR2311_power_control(1);
-	gpio_set_value(mcu_info->mcu_5v_boost_enable, 1);
+	//gpio_set_value(mcu_info->mcu_5v_boost_enable, 1);
 	msleep(200);
 	
 	return res;
@@ -628,7 +842,7 @@ BSLCleanUp:
 
 static int MSP43FR2311_Update_Firmware(void) {
 	int rc=0;
-	if (g_ASUS_hwID == HW_REV_ER ) return MSP43FR2311_Update_Firmware_Load_File(0);
+	//if (g_ASUS_hwID == HW_REV_ER ) return MSP43FR2311_Update_Firmware_Load_File(0);
 
 	rc=MSP43FR2311_Update_Firmware_Load_File(1);
 	if (rc != MSP430_STATUS_INVOKE_FAIL) {
@@ -659,11 +873,11 @@ void MSP430FR2311_wakeup(uint8_t enable) {
 		//power up
 		iOpenCounter++;
 		if (iOpenCounter==1) {				
-			if (g_ASUS_hwID == HW_REV_ER  || g_ASUS_hwID == HW_REV_SR) {
-			} else {
+			//if (g_ASUS_hwID == HW_REV_ER  || g_ASUS_hwID == HW_REV_SR) {
+			//} else {
 				gpio_set_value(mcu_info->mcu_wakeup, 0);
-				msleep(1);
-			}
+				//msleep(1);
+			//}
 		} 
 	}  else {
 		iCloseCounter++;
@@ -677,34 +891,46 @@ void MSP430FR2311_wakeup(uint8_t enable) {
 
 int MSP430FR2311_Get_Version(char * version) {
 	char i2cfwversion[] = { 0xAA, 0x55, 0x0A};
+	unsigned char i;
 
 	MSP430FR2311_wakeup(1);
-	if (!MSP430_I2CWriteA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion))  | !MSP430_I2CWriteReadA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion), version, 4)) {
-		pr_err("[MCU] %s I2C error!", __func__);
-		MSP430FR2311_wakeup(0);
-		return -1;
+	for(i=0; i<3; i++){
+		if (!MSP430_I2CWriteA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion))  | !MSP430_I2CWriteReadA(MSP430_READY_I2C, i2cfwversion, sizeof(i2cfwversion), version, 4)) {
+			pr_err("[MCU] %s I2C error!", __func__);
+			MSP430FR2311_wakeup(0);
+			return -1;
+		}
+
+		if(gFWVersion[0] == 20){	//Compare with 20 because make sure that: MCU version format in fw is 20 xx xx xx.
+			i = 3;
+		}else{
+			pr_err("[MCU] get error fw version:0x%x %x %x %x.\n", gFWVersion[0], gFWVersion[1], gFWVersion[2], gFWVersion[3]);
+		}
 	}
 	MSP430FR2311_wakeup(0);
 	
 	D("[MCU] get fw version:0x%x %x %x %x.\n", gFWVersion[0], gFWVersion[1], gFWVersion[2], gFWVersion[3]);
 	return 0;
 }
-/*
+
 #define MCU_SHOW_INFO_IN_SETTING
 #ifdef MCU_SHOW_INFO_IN_SETTING
-#include "../power/supply/qcom/fg-core.h"
-#include "../power/supply/qcom/fg-reg.h"
-#include "../power/supply/qcom/fg-alg.h"
+//#include "../power/supply/qcom/fg-core.h"
+//#include "../power/supply/qcom/fg-reg.h"
+//#include "../power/supply/qcom/fg-alg.h"
 #include <linux/extcon-provider.h>
 extern void asus_extcon_set_fnode_name(struct extcon_dev *edev, const char *fname);
 extern void asus_extcon_set_name(struct extcon_dev *edev, const char *name);
 
 struct extcon_dev *mcu_ver_extcon;
 char mcuVersion[13];
+static const unsigned int asus_motor_extcon_cable[] = {
+	EXTCON_NONE,
+};
 
 void registerMCUVersion() {
 	int rc=0;
-	mcu_ver_extcon = extcon_dev_allocate(asus_fg_extcon_cable);
+	mcu_ver_extcon = extcon_dev_allocate(asus_motor_extcon_cable);
 	if (IS_ERR(mcu_ver_extcon)) {
 		rc = PTR_ERR(mcu_ver_extcon);
 		pr_err("[MCU] failed to allocate ASUS mcu_ver_extcon device rc=%d\n", rc);
@@ -718,17 +944,17 @@ void registerMCUVersion() {
 	asus_extcon_set_name(mcu_ver_extcon, mcuVersion);
 }
 #endif
-*/
+
 int MSP430FR2311_Check_Version(void) {
 	memset(gFWVersion, 0x0, sizeof(gFWVersion));
 	if (MSP430FR2311_Get_Version(gFWVersion)==MSP430_STATUS_OPERATION_OK){
 		tMSPMemorySegment* tTXTFile = NULL;
 		
-		if (g_ASUS_hwID == HW_REV_ER) {
-			tTXTFile = MSP430BSL_parseTextFile();
-		} else {
+		//if (g_ASUS_hwID == HW_REV_ER) {
+		//	tTXTFile = MSP430BSL_parseTextFile();
+		//} else {
 			tTXTFile = read_firmware_file();	//zen7 used.
-		}
+		//}
 		if (tTXTFile==NULL) {
 			pr_err("[MCU] read firmware file error, can not to check firmware version");
 			
@@ -767,9 +993,9 @@ int MSP430FR2311_Check_Version(void) {
 			g_motor_status = 1; //probe success
 			pr_err("[MCU] fw is newest, not need to update.\n"); 
 			
-			if (g_ASUS_hwID != HW_REV_ER) {
+			//if (g_ASUS_hwID != HW_REV_ER) {
 				read_cali_file();
-			}
+			//}
 
 #ifdef MCU_SHOW_INFO_IN_SETTING
 			registerMCUVersion();
@@ -778,9 +1004,9 @@ int MSP430FR2311_Check_Version(void) {
 			pr_err("[MCU] Firmware need to be updated.\n"); 
 		}
 
-		if (g_ASUS_hwID != HW_REV_ER) {
+		//if (g_ASUS_hwID != HW_REV_ER) {
 			MSP430BSL_cleanUpPointer();
-		} 
+		//} 
 
 	} else {
 		pr_err("[MCU] Firmware version get error.\n");
@@ -812,6 +1038,7 @@ void mcu_loop_test(void) {
 }
 
 int MSP430FR2311_Pulldown_Drv_Power() {
+	/*
 	char MSP430PullDownDrvMode[]={0xAA, 0x55, 0x0E, 0x00};	
 
 	if (MCUState<MCU_READY) {
@@ -821,7 +1048,7 @@ int MSP430FR2311_Pulldown_Drv_Power() {
 	if (!MSP430_I2CWriteA(MSP430_READY_I2C, MSP430PullDownDrvMode, sizeof(MSP430PullDownDrvMode))) {
 		pr_err("[MCU] %s I2C error!", __func__);
 		return -1;
-	}			
+	}*/		
 	D("[MSP430FR2311] %s\n", __func__);
 	return 0;
 	
@@ -847,6 +1074,8 @@ void mcu_do_later_power_down() {
 
 static void mcu_do_work_later(struct work_struct *work)
 {
+	static unsigned char scinitFlg = 0; 
+		
 	loopCounter++;
 	pr_err("[MCU] %s loopCounter=%d, state=%d",__func__, loopCounter, MCUState);	
 
@@ -860,18 +1089,29 @@ static void mcu_do_work_later(struct work_struct *work)
 		if (MCUState==MCU_EMPTY) { 
 			if (MSP430FR2311_Check_Version()) {
 				pr_err("[MCU] %s: Fail.\n", __func__); 	
+			}else{
+				if(MCUState == MCU_READY){		//If first time check FW don't need update.
+					cancel_delayed_work(&report_work);
+					queue_delayed_work(mcu_info->mcu_wq, &report_work, 100);	//Cue to run mStopConditionInit().
+					return;
+				}
 			}
 		}
 		
 		if (MCUState==MCU_CHECKING_READY) {
-			if (MSP430FR2311_Check_Version()!=0 && loopCounter <UPDATE_FW_RETRY_COUNT) {
+			if (MSP430FR2311_Check_Version()!=0 && loopCounter <UPDATE_FW_RETRY_COUNT) {	//if this condition true, no any help in this handle.
 				MCUState=MCU_PROGRAMMING;
 				queue_delayed_work(mcu_info->mcu_wq, &report_work, mcu_info->mcu_polling_delay);		 
 			} else {
+				if(MCUState == MCU_READY){		//If check FW has been update success.
+					cancel_delayed_work(&report_work);
+					queue_delayed_work(mcu_info->mcu_wq, &report_work, 100);	//Cue to run mStopConditionInit().
+					return;
+				}
 			}
 			return;
 		}
-
+		/*
 		if (MCUState==MCU_WAIT_POWER_READY) {
 			D("[MCU] power ready");
 			MCUState=MCU_READY;
@@ -887,19 +1127,24 @@ static void mcu_do_work_later(struct work_struct *work)
 				MCUState=MCU_READY;
 			}
 			return;
-		}
+		}*/
 		
-		if (MCUState!=MCU_READY && MSP43FR2311_Update_Firmware()==0) {
+		if (MCUState!=MCU_READY && MSP43FR2311_Update_Firmware()==0) {	//If update FW fail, will retry 3 times in function MSP43FR2311_Update_Firmware().
 			MCUState=MCU_CHECKING_READY;
 		}
 
 		//finally, we do not update firmware successfully, do this again
 		if (MCUState<=MCU_CHECKING_READY  && loopCounter <UPDATE_FW_RETRY_COUNT) {
-			queue_delayed_work(mcu_info->mcu_wq, &report_work, mcu_info->mcu_polling_delay);		 
+			cancel_delayed_work(&report_work);
+			queue_delayed_work(mcu_info->mcu_wq, &report_work, 100);	//Let MCUState change to MCU_READY in next cycle (function: MSP430FR2311_Check_Version()).
 		} else {
 //			pr_err("[MCU] FATAL, mcu firmware update fail !!!! loopCounter=%d, state=%d", loopCounter, MCUState); 
 		}
 	}  else {	
+		if(scinitFlg == 0){
+			scinitFlg = 1;	//Only init once when MCU_READY。
+			mStopConditionInit();
+		}
 		mcu_do_later_power_down();
 
 	}
@@ -927,6 +1172,14 @@ static long mcu_ioctl(struct file *file, unsigned int cmd,
 	int ret = 0;
 	char nameMotor[ASUS_MOTOR_NAME_SIZE];
 	motorDrvManualConfig_t data;
+	motorCal gAngle;
+	uint8_t wBuf[9] = {0xAA, 0x55, 0x81, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	float gPrecision = 3.456; 
+	unsigned int sbuf[2];	
+	MICRO_STEP microstep;
+	int special_angle = 0;
+	int JudgeStopConditionFlg = 0;	
+	int UserKThreshold = 0;
 
 	pr_err("[MCU] %s cmd %d\n", __func__, _IOC_NR(cmd));
 
@@ -956,6 +1209,20 @@ static long mcu_ioctl(struct file *file, unsigned int cmd,
 			ret = MSP430FR2311_Set_ManualMode(data.dir, data.angle, data.speed);
 			if(ret < 0)
 				pr_err("Set ManualMode failed\n");
+
+			break;
+
+		case ASUS_MOTOR_DRV_MANUAL_MODE_NOSS:
+			ret = copy_from_user(&data, (int __user*)arg, sizeof(data));
+			if(ret < 0 ){
+				pr_err("%s: cmd = ASUS_MOTOR_DRV_MANUAL_MODE_NOSS, copy_from_user error(%d)\n", __func__, ret);
+				goto end;
+			}
+			
+			pr_err("[MCU] %s NOSS manual mode dir:%d, angle:%d, speed:%d.\n",  __func__, data.dir, data.angle, data.speed);
+			ret = ManualMode_AfterAndPR2_NOSS(data.dir, data.angle, data.speed);
+			if(ret < 0)
+				pr_err("Set NOSS ManualMode failed\n");
 
 			break;
 			
@@ -998,7 +1265,153 @@ static long mcu_ioctl(struct file *file, unsigned int cmd,
 			flush_delayed_work(&report_work);
 			D("[MCU]ASUS_MOTOR_DRV_CLOSE---, ask mcu power down immediately\n");			
 			break;
+
+		case ASUS_MOTOR_DRV_SET_ANGLE:
+			ret = copy_from_user(&gAngle, (int __user*)arg, sizeof(gAngle));
+			if(ret < 0 ){
+				pr_err("%s: cmd = ASUS_MOTOR_DRV_SET_ANGLE, copy_from_user error(%d)\n", __func__, ret);
+				goto end;
+			}
 			
+			pr_err("[MCU] %s phone set angle:%d %d.\n",  __func__, gAngle.integer, gAngle.decimals);
+			wBuf[2] = 0x81;
+			wBuf[3] = (gAngle.integer >> 8);
+			wBuf[4] = (gAngle.integer&0x00FF);
+			wBuf[5] = (gAngle.decimals >> 8);
+			wBuf[6] = (gAngle.decimals&0x00FF);
+			ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, sizeof(wBuf));
+			if(ret < 0)
+				pr_err("[MCU] Set angle to mcu failed\n");
+			break;
+
+		case ASUS_MOTOR_CALIBRATION:
+			ret = copy_from_user(&cal_cmd, (int __user*)arg, sizeof(cal_cmd));			
+			if(ret < 0 ){
+				pr_err("%s: cmd = ASUS_MOTOR_CALIBRATION, copy_from_user error(%d)\n", __func__, ret);
+				goto end;
+			}
+
+			if(cal_cmd == 0)
+				FacOrUserClaFlg = 0;	//Fac
+			else
+				FacOrUserClaFlg = 1;	//User
+
+			pr_err("[MCU] %s phone set calibration:%d %d.\n", __func__, cal_cmd, FacOrUserClaFlg);
+	 
+			wBuf[2] = 0x61;
+			wBuf[3] = CaliCmd[0];
+			wBuf[4] = CaliCmd[1];
+			wBuf[5] = CaliCmd[2];
+			ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, 6);		//2header + 4bytes.
+			if(ret < 0){
+				UserKState = UserK_TBD;
+				FacOrUserClaFlg = 0;	//default factory K.
+				pr_err("[MCU] Motor calibration failed.\n");
+			}else{
+				if(FacOrUserClaFlg == 1)	//Need add judge condition (&& UserKState == UserK_TBD)  ????
+					UserKState = UserK_Start;
+			}
+			break;
+
+		case ASUS_MOTOR_GET_MICRO_STEP:
+		    //snprintf(nameMotor, sizeof(nameMotor), "%s", ASUS_MOTOR_DRV_DEV_PATH);
+		    gPrecision = 0.144*4*SmallAngle[7];
+			sbuf[0] = (unsigned int)gPrecision;
+			sbuf[1] = ((unsigned int)(gPrecision*1000))%1000;
+			pr_err("[MCU] min_angle:%d.%d\n", sbuf[0], sbuf[1]);
+			ret = copy_to_user((int __user*)arg, &sbuf, sizeof(microstep));
+			break;
+
+		case ASUS_MOTOR_SPECIAL_ANGLE:
+			ret = copy_from_user(&special_angle, (int __user*)arg, sizeof(special_angle));
+			pr_err("[MCU] %s phone set special_angle:%d.\n", __func__, special_angle);
+			if(ret < 0 ){
+				pr_err("%s: cmd = ASUS_MOTOR_SPECIAL_ANGLE, copy_from_user error(%d)\n", __func__, ret);
+				goto end;
+			}
+			
+			wBuf[2] = 0xFE;
+			wBuf[3] = special_angle;
+			ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, 4);		//2header + 2bytes.
+			if(ret < 0)
+				pr_err("[MCU] Motor special_angle failed.\n");
+			break;
+
+		case ASUS_MOTOR_RESET_USER_CAL:
+			pr_err("[MCU] %s phone reset calibration value, UserKState:%d.\n", __func__, UserKState);
+			UserKState = UserK_Reset;
+			queue_delayed_work(mcu_info->cal_wq, &cal_work, 20);  //20ms	
+
+			break;
+
+		case ASUS_MOTOR_SAVE_USER_CAL:
+			pr_err("[MCU] %s phone save calibration value, UserKState:%d.\n", __func__, UserKState);
+
+			if(UserKState == UserK_rMCU_Ready){
+				UserKState = UserK_SaveK;
+				queue_delayed_work(mcu_info->cal_wq, &cal_work, 20);	
+			}
+			break;
+
+		case ASUS_MOTOR_NOTSAVE_USER_CAL:
+			pr_err("[MCU] %s phone don't save calibration value, UserKState:%d.\n", __func__, UserKState);
+			if(UserKState == UserK_rMCU_Ready){
+				UserKState = UserK_NoSaveK;
+				queue_delayed_work(mcu_info->cal_wq, &cal_work, 20);	
+			}
+
+			break;
+		
+		case ASUS_MOTOR_ABROT_USER_CAL:
+			pr_err("[MCU] %s phone abrot calibration, UserKState:%d.\n", __func__, UserKState);
+			if(UserKState == UserK_Start){
+				UserKState = UserK_AbortK;
+				queue_delayed_work(mcu_info->cal_wq, &cal_work, 20);	
+			}	
+
+			break;	
+			
+		case ASUS_MOTOR_JUDGEANGLECONDITION:
+			ret = copy_from_user(&JudgeStopConditionFlg, (int __user*)arg, sizeof(JudgeStopConditionFlg));			
+			if(ret < 0 ){
+				pr_err("%s: cmd = ASUS_MOTOR_JUDGEANGLECONDITION, copy_from_user error(%d)\n", __func__, ret);
+				goto end;
+			}
+
+			wBuf[2] = 0x87;
+			wBuf[3] = JudgeStopConditionFlg;	//1:MCU will not use judge angle to stop motor rotate.  0:use judge angle to stop motor.
+			ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, 4); 	//2header + 2bytes.
+			if(ret < 0)
+				pr_err("[MCU] ioctl disable judge angle failed.\n");
+		
+			pr_err("[MCU] %s phone set jasc:%d, %s jasc function.\n", __func__, JudgeStopConditionFlg, JudgeStopConditionFlg?"not use":"use");
+		
+			break;
+
+		case ASUS_MOTOR_SETUSERKTHRESHOLD:
+			ret = copy_from_user(&UserKThreshold, (int __user*)arg, sizeof(UserKThreshold));			
+			if(ret < 0 ){
+				pr_err("%s: cmd = ASUS_MOTOR_SETUSERKTHRESHOLD, copy_from_user error(%d)\n", __func__, ret);
+				goto end;
+			}
+		
+			wBuf[2] = 0x88;
+			wBuf[3] = UserKThreshold;	
+			ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, 4); 	//2header + 2bytes.
+			if(ret < 0)
+				pr_err("[MCU] UserKThreshold write failed.\n");
+		
+			pr_err("[MCU] %s phone set UserKThreshold:%d.\n", __func__, UserKThreshold);
+		
+			break;
+
+		case ASUS_MOTOR_MCU_STATE:
+			ret = MCUState;
+			ret = copy_to_user((int __user*)arg, &ret, sizeof(ret));
+
+			pr_err("[MCU] %s phone get mcu state:%d, ret:%d.\n", __func__, MCUState, ret);
+			break;
+		
 		default:
 			pr_err("[MCU][MSP430FR2311 error]%s: invalid cmd %d\n",
 				__func__, _IOC_NR(cmd));
@@ -1038,27 +1451,107 @@ static int mcu_setup(void)
 
 }
 
-#define extract_mcu_len	8
+#define F_Status_AKMAngleChange			bit0
+#define F_Status_MotorRoateState		bit1
+#define F_Status_AKMThreadInt	 		bit2
+#define F_Status_MotorKMCUCal	 	 	bit3
+#define F_Status_MotorKMCUThred			bit4
+#define F_Status_MotorRoateForceStop	bit5	//#define F_Status_DrvInt	 	 			bit5
+#define F_Status_ReqG_Angle 			bit6
+#define F_Status_ReqG_Timeout			bit7
+
+#define extract_mcu_len	2
 static void extract_mcu_data(void){
-	unsigned char rBuf[extract_mcu_len];
-	
-	if (!MSP430_I2CRead(MSP430_READY_I2C, rBuf, extract_mcu_len)) {
+	unsigned char rBuf[6] = {0,0,0,0,0,0};
+	uint8_t CmdBuf[3] = {0xAA, 0x55, 0xE0};
+	uint8_t EventState = 0;
+
+	CmdBuf[2] = 0xE0;
+	if (!MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf)) | !MSP430_I2CRead_NoLog(MSP430_READY_I2C, rBuf, extract_mcu_len)) {
 		pr_err("[MCU] %s i2c read error!\n", __func__);
 		return;
 	}else{
-		if((rBuf[0] == 0x11) && (rBuf[1] == 0x22)){		//report angle.
-			report_motor_event(MOTOR_ANGLE, ((rBuf[2]<<24) | (rBuf[3]<<16) | (rBuf[4]<<8)| rBuf[5]));
-			pr_err("[MCU] angle:%x.\n", ((rBuf[2]<<24) | (rBuf[3]<<16) | (rBuf[4]<<8)| rBuf[5]));
+		EventState = rBuf[0];
+		
+		if(IS_MASK_SET(EventState, F_Status_AKMAngleChange)){		//report angle.
+			CmdBuf[2] = 0xE1;
+			if(!MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf)) | !MSP430_I2CRead_NoLog(MSP430_READY_I2C, rBuf, 6)){
+				pr_err("[MCU] %s cmd:0xE1 i2c read error!\n", __func__);
+			}else{
+				report_motor_event(MOTOR_ANGLE, ((rBuf[2]<<24) | (rBuf[3]<<16) | (rBuf[4]<<8)| rBuf[5]));
+			}
+			//pr_err("[MCU] angle:%x.\n", ((rBuf[2]<<24) | (rBuf[3]<<16) | (rBuf[4]<<8)| rBuf[5]));
 		}
 
-		if((rBuf[0] == 0x11) && (rBuf[1] == 0x33)){		//roate finish.
+		if(IS_MASK_SET(EventState, F_Status_MotorRoateState)){		//roate finish.
 			report_motor_event(MOTOR_ROTATE, ROTATE_FINISH);
-			pr_err("[MCU] roate finish.\n");
+			pr_err("[MCU] INT:roate finish.\n");
 		}	
 
-		if((rBuf[0] == 0x11) && (rBuf[1] == 0x44)){		//akm interrupt.
+		if(IS_MASK_SET(EventState, F_Status_AKMThreadInt)){		//akm interrupt.
 			report_motor_event(MOTOR_FORCE, rBuf[2]);
-			pr_err("[MCU] akm interrupt trigger.\n");
+			pr_err("[MCU] INT:akm interrupt trigger.\n");
+		}
+		
+		//Notify IMS force stop cmd success. 			  
+		if(IS_MASK_SET(EventState, F_Status_MotorRoateForceStop)){		//roate force stop.
+			report_motor_event(MOTOR_ROTATE, ROTATE_STOP);
+			pr_err("[MCU] INT:Phone force rotate stop trigger.\n");
+		}
+
+		if(FacOrUserClaFlg == 0){
+			if(IS_MASK_SET(EventState, F_Status_MotorKMCUCal)){		//Calibration and threadhold data backup.
+				if(!Zen7_MSP430FR2311_rI2CtoCPU(0x70, &(fcal_val.Cal_val[0]), CalLength)){				
+					backup_mcu_cal_thed();
+					bak_raw();
+					report_motor_event(MOTOR_K_FINISH, 0);
+					pr_err("[MCU] INT:backup calibration data trigger.\n");
+				}else
+					pr_err("[MCU] INT:%s i2c backup calibration read error!\n", __func__);			
+			}
+
+			if(IS_MASK_SET(EventState, F_Status_MotorKMCUThred)){		//Calibration and threadhold data backup.
+				if(!Zen7_MSP430FR2311_rI2CtoCPU(0x70, &(fcal_val.Cal_val[0]), CalLength)){				
+					backup_mcu_cal_thed();
+					pr_err("[MCU] INT:backup theadhold data trigger.\n");
+				}else
+					pr_err("[MCU] INT:%s i2c backup theadhold read error!\n", __func__);			
+			}
+		}else{	//User K
+			if(IS_MASK_SET(EventState, F_Status_MotorKMCUCal)){		//Calibration and threadhold data backup.
+				if(UserKState == UserK_Start){
+					if(!Zen7_MSP430FR2311_rI2CtoCPU(0x70, &(fcal_val_UserK.Cal_val[0]), CalLength)){				
+						UserKState = UserK_rMCU_Ready;
+						report_motor_event(MOTOR_K_FINISH, 0);
+						pr_err("[MCU] INT:backup userK calibration data trigger.\n");
+					}else
+						pr_err("[MCU] INT:%s read userK calibration data error!\n", __func__);		
+										
+				}else{
+					UserKState = UserK_TBD;
+					pr_err("[MCU] INT: missing UserK interrupt.\n");
+				}
+				
+				FacOrUserClaFlg = 0;	//Default fac K.
+			}
+		}
+		/*
+		//fault_status_reg, diag_status1_reg, diag_status2_reg.			      
+		if(IS_MASK_SET(EventState, F_Status_DrvInt)){		//Drv interrupt.
+			report_motor_event(MOTOR_DRVINT, ((rBuf[2]<<16) | (rBuf[3]<<8) | rBuf[4]));
+			pr_err("[MCU] INT:Drv interrupt trigger.\n");
+		}*/
+		
+		//Notify IMS that MCU need get current angle.			      
+		if(IS_MASK_SET(EventState, F_Status_ReqG_Angle)){		//get g-sensor's angle.
+			report_motor_event(MOTOR_GET_ANGLE, 0);
+			pr_err("[MCU] INT:Get g-sensor's angle trigger.\n");
+		}
+
+		//Notify IMS that MCU get current angle timeout.			      
+		if(IS_MASK_SET(EventState, F_Status_ReqG_Timeout)){		//get g-sensor's angle timeout.
+			report_motor_event(MOTOR_GET_ANGLE, 1);
+			pr_err("[MCU] INT:Get g-sensor's angle timeout trigger.\n");
 		}
 	}
 }
@@ -1067,10 +1560,10 @@ static irqreturn_t mcu_interrupt_handler(int irq, void *dev_id)
 {	
 	//Only L2H level be dealt.
 	if(gpio_get_value(mcu_info->mcu_int) == 1){
-		pr_err("[MCU] L2H trigger.\n");
+		//pr_err("[MCU] L2H trigger.\n");
 		extract_mcu_data();		
-	}else
-		D("[MCU] H2L trigger.\n");
+	}//else
+	//	D("[MCU] H2L trigger.\n");
 		
 	return IRQ_HANDLED;
 }
@@ -1088,7 +1581,7 @@ static int init_irq(void){
 	}
 
 	ret = request_threaded_irq(mcu_info->mcu_irq, NULL, mcu_interrupt_handler,
-				IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 				"mcu_int", mcu_info);
 
 	if (ret < 0){
@@ -1236,6 +1729,7 @@ int MSP430FR2311_power_control(uint8_t enable)
 			MCU_I2C_power_control(enable);
 
 		g_motor_power_state = enable;
+		/*
 		#ifdef MCU_5V_ALWAYS_ON
 		if (g_ASUS_hwID == HW_REV_ER	|| g_ASUS_hwID == HW_REV_SR ) 
 		#endif
@@ -1246,7 +1740,7 @@ int MSP430FR2311_power_control(uint8_t enable)
 				pr_err("[MCU] 3V enable failed ret=%d\n", ret);
 				g_motor_power_state = 0;
 			}
-		}
+		}*/
 		if (enable) {
 			//power up
 //			for ( i=0;i<1000;i++)	udelay(powerUpDuration);
@@ -1265,6 +1759,7 @@ int MSP430FR2311_power_control(uint8_t enable)
 int FrqConvertMode(int dir, int angle, int speed) {
 	uint16_t MotorDefault[]={0, 120, 120, 56, 28, 20, 12, 255, 47, 2, 2, 2, 40, 0, 0, 73, 73, 73, 73};
 	uint16_t FS_steps = 0;
+	int gearStep = LEAD_DELTA;
 	
 	memcpy(MotorDefault, ConvertFRQMode[dir], sizeof(MotorDefault));
 	
@@ -1280,17 +1775,16 @@ int FrqConvertMode(int dir, int angle, int speed) {
 			MotorDefault[0] = dir;
 		
 		}else{	//ASUS_MOTOR_DRV_AUTO_MODE_WITH_ANGLE, angle range is 10~180 degree.
-			FS_steps = angle*CONVERT_FRQ_FS_STEP[dir]/180;
-			
-			//Step 0 + Step 1 + step5 equal total expect steps, other step don't move(steps = 0).
+			FS_steps = (CONVERT_FRQ_FS_STEP[dir])*angle/180;	
+			//Step 0 + Step 1 + step5 equal total expect steps, other step don't move(steps = 0).		
 			if(FS_steps <= 255){
 				MotorDefault[7]  = FS_steps;
 				MotorDefault[8]  = 0;
-				MotorDefault[12] = CONVERT_FRQ_SS_STEP[dir];
+				MotorDefault[12] = (gearStep+CONVERT_FRQ_SS_STEP[dir]);	//(gearStep+CONVERT_FRQ_SS_STEP[dir])*angle/180;
 			}else{
 				MotorDefault[7] = 255;
 				MotorDefault[8] = (FS_steps - 255);
-				MotorDefault[12]= CONVERT_FRQ_SS_STEP[dir];
+				MotorDefault[12]= (gearStep+CONVERT_FRQ_SS_STEP[dir]);	//(gearStep+CONVERT_FRQ_SS_STEP[dir])*angle/180;
 			}
 
 			MotorDefault[9]  = 0;
@@ -1350,12 +1844,34 @@ int MSP430FR2311_Set_AutoModeWithAngle(int mode, int angle) {
 		return rc;
 	}
 
+	//For camera app
+	if(mode==243){ 	//0 to 180
+	 	int rc=0;
+		uint16_t MotorDefault[]={0, 4, 4, 4, 4, 4, 4, 6, 0, 0, 0, 0, 0, 73, 73, 73, 73, 73, 73};	
+	
+		memcpy(MotorDefault, SmallAngle, sizeof(MotorDefault));
+		MotorDefault[0] = 0;
+		rc= Zen7_MSP430FR2311_Set_ParamMode(MotorDefault);
+		return rc;
+	}
+
+	if(mode==244){ 	//180 to 0
+	 	int rc=0;
+		uint16_t MotorDefault[]={1, 4, 4, 4, 4, 4, 4, 6, 0, 0, 0, 0, 0, 73, 73, 73, 73, 73, 73};	
+	
+		memcpy(MotorDefault, SmallAngle, sizeof(MotorDefault));
+		MotorDefault[0] = 1;
+		rc= Zen7_MSP430FR2311_Set_ParamMode(MotorDefault);
+		return rc;
+	}
+	//For camera app
+
    	if(mode==1 || mode==2){
-		if (g_ASUS_hwID == HW_REV_ER  || g_ASUS_hwID == HW_REV_SR) {
-			return MSP430FR2311_Set_ManualMode(--mode, angle, 6);
-		} else {
+		//if (g_ASUS_hwID == HW_REV_ER  || g_ASUS_hwID == HW_REV_SR) {
+		//	return MSP430FR2311_Set_ManualMode(--mode, angle, 6);
+		//} else {
 			return FrqConvertMode(--mode, angle, 6);		
-		}
+		//}
    	}
 	
 	if(mode==3 || mode==4){ 
@@ -1542,15 +2058,15 @@ int ManualMode_AfterAndPR2(int dir, int angle, int speed) {
 		} 	
 		
 		//Not use 0 instead of formula. I wish that: every step can be set different speed in manual mode, but it seems IMS only set one speed.
-		manual_steps = (CONVERT_FRQ_FS_STEP[0]+CONVERT_FRQ_SS_STEP[0])*angle/180;	//Maybe need modify ???
+		manual_steps = (CONVERT_FRQ_FS_STEP[dir])*angle/180;	//Maybe need modify ???
 		if(manual_steps <= 255){
 			MotorDefault[7]  = manual_steps;
 			MotorDefault[8]  = 0;
-			MotorDefault[12] = gearStep;
+			MotorDefault[12] = (gearStep+CONVERT_FRQ_SS_STEP[dir]);
 		}else{
 			MotorDefault[7] = 255;
 			MotorDefault[8] = (manual_steps - 255);
-			MotorDefault[12]= gearStep;
+			MotorDefault[12]= (gearStep+CONVERT_FRQ_SS_STEP[dir]);
 		}
 
 		MotorDefault[9] = 0;
@@ -1579,6 +2095,58 @@ int ManualMode_AfterAndPR2(int dir, int angle, int speed) {
 		return Zen7_MSP430FR2311_Set_ParamMode(MotorDefault);
 	else
 		return MSP430FR2311_Set_ParamMode(MotorDefault);
+}
+
+int ManualMode_AfterAndPR2_NOSS(int dir, int angle, int speed) {
+	uint16_t MotorDefault[]={0, 120, 120, 120, 120, 120, 120, 255, 85, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+	uint16_t manual_steps = 0;
+	int gearStep = 0;
+	
+	memcpy(MotorDefault, ConstSpeedMode, sizeof(MotorDefault));
+	if (MCUState!=MCU_READY) {
+		pr_err("[MCU] %s Not ready!, state=%d", __func__, MCUState);
+		return -MCUState;
+	}
+	
+	MotorDefault[0]=dir;
+
+	if(old_dir!=dir){
+		gearStep+=LEAD_DELTA;
+	} 	
+	
+	//Not use 0 instead of formula. I wish that: every step can be set different speed in manual mode, but it seems IMS only set one speed.
+	manual_steps = (CONVERT_FRQ_FS_STEP[dir])*angle/180;	//Maybe need modify ???
+	if(manual_steps <= 255){
+		MotorDefault[7]  = manual_steps;
+		MotorDefault[8]  = 0;
+		MotorDefault[12] = (gearStep);
+	}else{
+		MotorDefault[7] = 255;
+		MotorDefault[8] = (manual_steps - 255);
+		MotorDefault[12]= (gearStep);
+	}
+
+	MotorDefault[9] = 0;
+	MotorDefault[10]= 0;
+	MotorDefault[11]= 0;
+	pr_err("[MCU] NOSS PR2 manual control (dir:%d, angle:%d, speed:%d, manual_steps:%d, gear_step:%d).", dir, angle, speed, manual_steps, gearStep);
+
+	old_dir=dir;	
+
+ 
+	if(speed <= 10){//micro-step process
+		int i=0;
+
+		for (i=0;i<6;i++){
+			MotorDefault[i+1] = defaultManualSpeed[2*speed];
+			MotorDefault[i+13]= defaultManualSpeed[(2*speed) + 1];
+		}		 
+
+	}else{
+		pr_err("[MCU] %s don't support this(%d) manual speed.", __func__, speed);
+	}
+
+	return Zen7_MSP430FR2311_Set_ParamMode(MotorDefault);
 }
 
 
@@ -1654,7 +2222,7 @@ static int MSP430FR2311_power_init(void)
 					}
 	}
 	*/
-
+	/*
 	ret = gpio_request(mcu_info->mcu_5v_boost_enable, "gpio_msp430fr423111_5v_boost_enable");
 	if (ret < 0) {
 		pr_err("[MCU] %s: gpio %d request failed (%d)\n",
@@ -1669,7 +2237,7 @@ static int MSP430FR2311_power_init(void)
 			__func__, mcu_info->mcu_5v_boost_enable, ret);
 	gpio_free(mcu_info->mcu_5v_boost_enable);
 	return ret;
-	}
+	}*/
 
 	return ret;
 
@@ -1687,7 +2255,7 @@ static int MSP430FR2311_parse_dt(struct device *dev)
 	int rc;
 	
 	D("[MCU] %s\n", __func__);
-	
+	/*
 	rc = of_get_named_gpio_flags(np, "MCU,mcu5V_boost_enable-gpios",
 			0, NULL);
 	if (rc < 0) {
@@ -1698,7 +2266,7 @@ static int MSP430FR2311_parse_dt(struct device *dev)
 	{
 		mcu_info->mcu_5v_boost_enable= rc;
  	  D("[MCU] %s GET mcu 5v enable PIN =%d\n", __func__, rc);   
-	}
+	}*/
 
 	rc = of_get_named_gpio_flags(np, "MCU,mcureset-gpios",
 			0, NULL);
@@ -1824,7 +2392,6 @@ static int MSP430FR2311_probe(struct i2c_client *client,
 //		pr_err("[MCU][MSP430FR2311 ]%s: Fail\n", __func__);		
 //		goto err_initial_MSP430FR2311_gpio;
 //	}
-	init_irq();
 
 	mutex_init(&MSP430FR2311_control_mutex);
 
@@ -1834,12 +2401,20 @@ static int MSP430FR2311_probe(struct i2c_client *client,
 			__func__);
 		goto err_mcu_setup;
 	}
-  
+
+	init_irq();  
 
 //	if (MCUState!=MCU_READY) {
 		mcu_info->mcu_wq = create_singlethread_workqueue("MSP430FR2311_wq");
 		if (!mcu_info->mcu_wq) {
 			pr_err("[MCU] %s: can't create workqueue\n", __func__);
+			ret = -ENOMEM;
+			goto err_create_singlethread_workqueue;
+		}
+
+		mcu_info->cal_wq = create_singlethread_workqueue("mcu_cal_wq");
+		if (!mcu_info->cal_wq) {
+			pr_err("[MCU] %s: can't create cal_wq workqueue\n", __func__);
 			ret = -ENOMEM;
 			goto err_create_singlethread_workqueue;
 		}
@@ -1879,6 +2454,7 @@ err_create_mcu_device:
 	class_destroy(mcu_info->MSP430FR2311_class);
 err_create_class:
 	if (mcu_info->mcu_wq) destroy_workqueue(mcu_info->mcu_wq);
+	if (mcu_info->cal_wq) destroy_workqueue(mcu_info->cal_wq);	
 err_create_singlethread_workqueue:
 err_mcu_setup:
 	mutex_destroy(&MSP430FR2311_control_mutex);
@@ -1913,7 +2489,7 @@ static int mcu_suspend(struct device *dev)
 	struct mcu_info *mpi;
 	mpi = dev_get_drvdata(dev);
 	pr_err("[MCU] go to power off");
-	MSP430FR2311_power_control(0);
+	//MSP430FR2311_power_control(0);
 
 	return 0;
 }
@@ -1923,6 +2499,7 @@ static int mcu_resume(struct device *dev)
 	struct mcu_info *mpi;
 	mpi = dev_get_drvdata(dev);
 	pr_err("[MCU] go to power on");
+	/*
 #ifdef MCU_5V_ALWAYS_ON
 	if (g_ASUS_hwID == HW_REV_ER	|| g_ASUS_hwID == HW_REV_SR ) 
 #endif
@@ -1931,8 +2508,8 @@ static int mcu_resume(struct device *dev)
 			MCUState=MCU_WAIT_POWER_READY;
 			queue_delayed_work(mcu_info->mcu_wq, &report_work, 20);  //20 for 200ms		 
 		}
-	}
-	MSP430FR2311_power_control(1);
+	}*/
+	//MSP430FR2311_power_control(1);
 
 
 	return 0;
@@ -1975,6 +2552,405 @@ MODULE_LICENSE("GPL v2");
 
 
 //==========================================Zen7========================================
+//=====
+static int file_op(const char *filename, loff_t offset, char *buf, int length, int operation)
+{
+	int filep;
+	mm_segment_t old_fs;
+	int ret = 0;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	if (FILE_OP_READ == operation)
+		filep= ksys_open(filename, O_RDONLY | O_CREAT | O_SYNC, 0777);
+	else if (FILE_OP_WRITE == operation)
+		filep= ksys_open(filename, O_RDWR | O_CREAT | O_SYNC, 0777);
+	else {
+		ksys_close(filep);
+		set_fs(old_fs);
+		pr_err("[MCU] Unknown partition op err!\n");
+		return -1;
+	}
+	if (filep < 0) {
+		ksys_close(filep);
+		set_fs(old_fs);
+		pr_err("[MCU] open %s err! error code:%d\n", filename, filep);
+		return -1;
+	}
+	else {
+		pr_err("[MCU] open %s success!\n", filename);
+	}
+	
+	//ksys_chown(filename, 1015, 1015);	//#define AID_SDCARD_RW 1015
+	ksys_lseek(filep, offset, SEEK_SET);
+	if (FILE_OP_READ == operation)
+		ret = ksys_read(filep, buf, length);
+	else if (FILE_OP_WRITE == operation) {
+		ret = ksys_write(filep, buf, length);
+		ksys_sync();
+	}
+	ksys_close(filep);
+	set_fs(old_fs);
+	pr_err("[MCU] %s %s length:%d ret:%d.\n", __func__, operation?"w":"r", length, ret);
+	return length;
+}
+
+//Backup 110 bytes to mcu_bak.
+static int backup_mcu_cal_thed(void)
+{
+	char buf[400]={0};
+	char MCUBuf[10];
+	unsigned char i;
+	int rc;
+
+	pr_err("[MCU] %s.\n", __func__);
+
+	for(i=0; i<CalLength; i++){
+		sprintf(MCUBuf, " %X", fcal_val.Cal_val[i]);
+		strcat(buf, MCUBuf);		
+	}
+	rc = file_op(MCU_BAKEUP_FILE_NAME, CAL_DATA_OFFSET,
+		(char *)&buf, 3*CalLength*sizeof(char), FILE_OP_WRITE);
+	if (rc<0)
+		pr_err("[MCU] %s:Write file:%s err!\n", __FUNCTION__, MCU_BAKEUP_FILE_NAME);
+	
+	return rc;
+}
+
+//Read 110 bytes to mcu.
+static int read_mcu_cal_thed(void)
+{
+	char buf[400]={0};
+	int rc;
+	unsigned char i;
+	uint8_t wBuf[CalLength+3] = {0xAA, 0x55, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	
+	pr_err("[MCU] %s.\n", __func__);
+	
+	for(i=0; i<CalLength; i++)
+		fcal_val.Cal_val[i] = 0;
+	
+	rc = file_op(MCU_BAKEUP_FILE_NAME, CAL_DATA_OFFSET,
+		(char *)&buf, 3*CalLength*sizeof(char), FILE_OP_READ);
+	if (rc<0){
+		pr_err("%s:read file:%s err!\n", __FUNCTION__, MCU_BAKEUP_FILE_NAME);
+		return rc;
+	}
+
+	//pr_err("[MCU]:%s\n", buf);
+
+	sscanf(buf, "%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n", \
+		&(fcal_val.Cal_val[0]), &(fcal_val.Cal_val[1]), &(fcal_val.Cal_val[2]), &(fcal_val.Cal_val[3]), &(fcal_val.Cal_val[4]),	\
+		&(fcal_val.Cal_val[5]), &(fcal_val.Cal_val[6]), &(fcal_val.Cal_val[7]), &(fcal_val.Cal_val[8]), &(fcal_val.Cal_val[9]),	\
+		&(fcal_val.Cal_val[10]), &(fcal_val.Cal_val[11]), &(fcal_val.Cal_val[12]), &(fcal_val.Cal_val[13]), &(fcal_val.Cal_val[14]),	\
+		&(fcal_val.Cal_val[15]), &(fcal_val.Cal_val[16]), &(fcal_val.Cal_val[17]), &(fcal_val.Cal_val[18]), &(fcal_val.Cal_val[19]),	\
+		&(fcal_val.Cal_val[20]), &(fcal_val.Cal_val[21]), &(fcal_val.Cal_val[22]), &(fcal_val.Cal_val[23]),	\
+		&(fcal_val.Cal_val[24]), &(fcal_val.Cal_val[25]), &(fcal_val.Cal_val[26]), &(fcal_val.Cal_val[27]), &(fcal_val.Cal_val[28]), &(fcal_val.Cal_val[29]), &(fcal_val.Cal_val[30]), &(fcal_val.Cal_val[31]), &(fcal_val.Cal_val[32]), &(fcal_val.Cal_val[33]),	\
+		&(fcal_val.Cal_val[34]), &(fcal_val.Cal_val[35]), &(fcal_val.Cal_val[36]), &(fcal_val.Cal_val[37]), &(fcal_val.Cal_val[38]), &(fcal_val.Cal_val[39]), &(fcal_val.Cal_val[40]), &(fcal_val.Cal_val[41]), &(fcal_val.Cal_val[42]), &(fcal_val.Cal_val[43]),	\
+		&(fcal_val.Cal_val[44]), &(fcal_val.Cal_val[45]), &(fcal_val.Cal_val[46]), &(fcal_val.Cal_val[47]), &(fcal_val.Cal_val[48]), &(fcal_val.Cal_val[49]), &(fcal_val.Cal_val[50]), &(fcal_val.Cal_val[51]), &(fcal_val.Cal_val[52]), &(fcal_val.Cal_val[53]),	\
+		&(fcal_val.Cal_val[54]), &(fcal_val.Cal_val[55]), &(fcal_val.Cal_val[56]), &(fcal_val.Cal_val[57]), &(fcal_val.Cal_val[58]), &(fcal_val.Cal_val[59]), &(fcal_val.Cal_val[60]), &(fcal_val.Cal_val[61]), &(fcal_val.Cal_val[62]), &(fcal_val.Cal_val[63]),	\
+		&(fcal_val.Cal_val[64]), &(fcal_val.Cal_val[65]), &(fcal_val.Cal_val[66]), &(fcal_val.Cal_val[67]), &(fcal_val.Cal_val[68]), &(fcal_val.Cal_val[69]), &(fcal_val.Cal_val[70]), &(fcal_val.Cal_val[71]), &(fcal_val.Cal_val[72]), &(fcal_val.Cal_val[73]),	\
+		&(fcal_val.Cal_val[74]), &(fcal_val.Cal_val[75]), &(fcal_val.Cal_val[76]), &(fcal_val.Cal_val[77]), &(fcal_val.Cal_val[78]), &(fcal_val.Cal_val[79]), &(fcal_val.Cal_val[80]), &(fcal_val.Cal_val[81]), &(fcal_val.Cal_val[82]), &(fcal_val.Cal_val[83]),	\
+		&(fcal_val.Cal_val[84]), &(fcal_val.Cal_val[85]), &(fcal_val.Cal_val[86]), &(fcal_val.Cal_val[87]), &(fcal_val.Cal_val[88]), &(fcal_val.Cal_val[89]), &(fcal_val.Cal_val[90]), &(fcal_val.Cal_val[91]), &(fcal_val.Cal_val[92]), &(fcal_val.Cal_val[93]),	\
+		&(fcal_val.Cal_val[94]), &(fcal_val.Cal_val[95]), &(fcal_val.Cal_val[96]), &(fcal_val.Cal_val[97]), &(fcal_val.Cal_val[98]), &(fcal_val.Cal_val[99]), &(fcal_val.Cal_val[100]), &(fcal_val.Cal_val[101]), &(fcal_val.Cal_val[102]), &(fcal_val.Cal_val[103]),	\
+		&(fcal_val.Cal_val[104]), &(fcal_val.Cal_val[105]), &(fcal_val.Cal_val[106]), &(fcal_val.Cal_val[107]), &(fcal_val.Cal_val[108]), &(fcal_val.Cal_val[109]));	
+
+	pr_err("[MCU] %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x...%x %x %x %x, %x %x %x %x %x %x.\n", \
+		fcal_val.Cal_val[0], fcal_val.Cal_val[1], fcal_val.Cal_val[2], fcal_val.Cal_val[3], fcal_val.Cal_val[4],	\
+		fcal_val.Cal_val[5], fcal_val.Cal_val[6], fcal_val.Cal_val[7], fcal_val.Cal_val[8], fcal_val.Cal_val[9],	\
+		fcal_val.Cal_val[10], fcal_val.Cal_val[11], fcal_val.Cal_val[12], fcal_val.Cal_val[13], fcal_val.Cal_val[14],	\
+		fcal_val.Cal_val[15], fcal_val.Cal_val[16], fcal_val.Cal_val[17], fcal_val.Cal_val[18], fcal_val.Cal_val[19],	\
+		fcal_val.Cal_val[20], fcal_val.Cal_val[21], fcal_val.Cal_val[22], fcal_val.Cal_val[23],	\
+		fcal_val.Cal_val[100], fcal_val.Cal_val[101], fcal_val.Cal_val[102], fcal_val.Cal_val[103],	\
+		fcal_val.Cal_val[104], fcal_val.Cal_val[105], fcal_val.Cal_val[106], fcal_val.Cal_val[107], fcal_val.Cal_val[108], fcal_val.Cal_val[109]);
+
+	for(i=0; i<CalLength; i++)
+		wBuf[3+i] = fcal_val.Cal_val[i];
+	Zen7_MSP430FR2311_wI2CtoMCU(wBuf, sizeof(wBuf));
+	return rc;
+}
+
+static int backup_angle_raw(unsigned char index, unsigned char *wRawBuf)
+{
+	char buf[200]={0};
+	int rc;
+	char MCUBuf[10];
+	unsigned char i;
+
+	pr_err("[MCU] %s.\n", __func__);
+	/*	
+	sprintf(buf, "%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n", \
+		wRawBuf[0], wRawBuf[1], wRawBuf[2], wRawBuf[3], wRawBuf[4],	\
+		wRawBuf[5], wRawBuf[6], wRawBuf[7], wRawBuf[8], wRawBuf[9],	\
+		wRawBuf[10], wRawBuf[11], wRawBuf[12], wRawBuf[13], wRawBuf[14],	\
+		wRawBuf[15], wRawBuf[16], wRawBuf[17], wRawBuf[18], wRawBuf[19]);	
+	*/
+	for(i=0; i<RawLength; i++){
+		sprintf(MCUBuf, " %X", wRawBuf[i]);
+		strcat(buf, MCUBuf);		
+	}
+		
+	rc = file_op(MCU_BAKEUP_RAW_FILE_NAME, index*3*RawLength*sizeof(char),
+		(char *)&buf, 3*RawLength*sizeof(char), FILE_OP_WRITE);
+	if (rc<0)
+		pr_err("%s:Write file:%s err!\n", __FUNCTION__, MCU_BAKEUP_RAW_FILE_NAME);
+
+	return rc;
+}
+
+//Backup 800+120 bytes to mcu_raw.
+static void bak_raw(void){
+	unsigned char i = 0;
+	unsigned char rRawBuf[RawLength];
+	uint8_t wBuf[4] = {0xAA, 0x55, 0x80, 0x00};
+	
+	for(i=0; i<23; i++){	//20 bufferMag + 3 rawAK9970Corr.
+		//0xAA 0x55 0x80 index, let mcu prepare 20 bytes raw data.
+		wBuf[3] = i;
+		Zen7_MSP430FR2311_wI2CtoMCU(wBuf, sizeof(wBuf));
+
+		//read and write file.
+		if(MSP430_I2CRead(MSP430_READY_I2C, rRawBuf, RawLength)){
+			backup_angle_raw(i, rRawBuf);
+		}else
+			pr_err("[MCU] %s i2c raw backup (%d) read error!\n", __func__, i);
+	}
+
+	//copy file to factory folder.
+	//report_motor_event(MOTOR_COPY_MCU_FILE, 3);	// /asdf/mcu_raw --> factory.
+	pr_err("[MCU] %s done.\n", __func__);
+}
+
+//==========================================================================for User K
+//Check file is null. 0:null, 1:not null.
+static char IsFileNull(const char *filename){
+	int Isfilep;
+	mm_segment_t old_fs;
+	long size;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	
+	Isfilep = ksys_open(filename, O_RDONLY | O_CREAT | O_SYNC, 0777);
+
+	if (Isfilep < 0) {
+		ksys_close(Isfilep);
+		set_fs(old_fs);
+		pr_err("[MCU] %s open %s err! error code:%d\n", __func__, filename, Isfilep);
+		return 0;
+	}
+	else {
+		pr_err("[MCU] %s open %s success!\n", __func__, filename);
+	}
+	
+	//ksys_chown(filename, 1015, 1015);	//#define AID_SDCARD_RW 1015
+	size = ksys_lseek(Isfilep, 0, SEEK_END);
+	pr_err("[MCU] %s size:%d.\n", __func__,size);
+	ksys_close(Isfilep);
+	set_fs(old_fs);	
+	
+	if(size <= 0)		
+		return 0;
+	else
+		return 1;
+}
+
+//Read motor_fw2 110 bytes to mcu.
+static int read_usek_cal3threshlod(void)
+{
+	char buf[400]={0};
+	int rc;
+	unsigned char i;
+	uint8_t wBuf[CalLength+3] = {0xAA, 0x55, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	
+	pr_err("[MCU] %s.\n", __func__);
+	
+	for(i=0; i<CalLength; i++)
+		fcal_val_UserK.Cal_val[i] = 0;
+	
+	rc = file_op(MCU_BAKEUP_USER_FILE_NAME, CAL_DATA_OFFSET,
+		(char *)&buf, 3*CalLength*sizeof(char), FILE_OP_READ);
+	if (rc<0){
+		pr_err("%s:read file:%s err!\n", __func__, MCU_BAKEUP_USER_FILE_NAME);
+		return rc;
+	}
+
+	sscanf(buf, "%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n", \
+		&(fcal_val_UserK.Cal_val[0]), &(fcal_val_UserK.Cal_val[1]), &(fcal_val_UserK.Cal_val[2]), &(fcal_val_UserK.Cal_val[3]), &(fcal_val_UserK.Cal_val[4]),	\
+		&(fcal_val_UserK.Cal_val[5]), &(fcal_val_UserK.Cal_val[6]), &(fcal_val_UserK.Cal_val[7]), &(fcal_val_UserK.Cal_val[8]), &(fcal_val_UserK.Cal_val[9]),	\
+		&(fcal_val_UserK.Cal_val[10]), &(fcal_val_UserK.Cal_val[11]), &(fcal_val_UserK.Cal_val[12]), &(fcal_val_UserK.Cal_val[13]), &(fcal_val_UserK.Cal_val[14]),	\
+		&(fcal_val_UserK.Cal_val[15]), &(fcal_val_UserK.Cal_val[16]), &(fcal_val_UserK.Cal_val[17]), &(fcal_val_UserK.Cal_val[18]), &(fcal_val_UserK.Cal_val[19]),	\
+		&(fcal_val_UserK.Cal_val[20]), &(fcal_val_UserK.Cal_val[21]), &(fcal_val_UserK.Cal_val[22]), &(fcal_val_UserK.Cal_val[23]),	\
+		&(fcal_val_UserK.Cal_val[24]), &(fcal_val_UserK.Cal_val[25]), &(fcal_val_UserK.Cal_val[26]), &(fcal_val_UserK.Cal_val[27]), &(fcal_val_UserK.Cal_val[28]), &(fcal_val_UserK.Cal_val[29]), &(fcal_val_UserK.Cal_val[30]), &(fcal_val_UserK.Cal_val[31]), &(fcal_val_UserK.Cal_val[32]), &(fcal_val_UserK.Cal_val[33]),	\
+		&(fcal_val_UserK.Cal_val[34]), &(fcal_val_UserK.Cal_val[35]), &(fcal_val_UserK.Cal_val[36]), &(fcal_val_UserK.Cal_val[37]), &(fcal_val_UserK.Cal_val[38]), &(fcal_val_UserK.Cal_val[39]), &(fcal_val_UserK.Cal_val[40]), &(fcal_val_UserK.Cal_val[41]), &(fcal_val_UserK.Cal_val[42]), &(fcal_val_UserK.Cal_val[43]),	\
+		&(fcal_val_UserK.Cal_val[44]), &(fcal_val_UserK.Cal_val[45]), &(fcal_val_UserK.Cal_val[46]), &(fcal_val_UserK.Cal_val[47]), &(fcal_val_UserK.Cal_val[48]), &(fcal_val_UserK.Cal_val[49]), &(fcal_val_UserK.Cal_val[50]), &(fcal_val_UserK.Cal_val[51]), &(fcal_val_UserK.Cal_val[52]), &(fcal_val_UserK.Cal_val[53]),	\
+		&(fcal_val_UserK.Cal_val[54]), &(fcal_val_UserK.Cal_val[55]), &(fcal_val_UserK.Cal_val[56]), &(fcal_val_UserK.Cal_val[57]), &(fcal_val_UserK.Cal_val[58]), &(fcal_val_UserK.Cal_val[59]), &(fcal_val_UserK.Cal_val[60]), &(fcal_val_UserK.Cal_val[61]), &(fcal_val_UserK.Cal_val[62]), &(fcal_val_UserK.Cal_val[63]),	\
+		&(fcal_val_UserK.Cal_val[64]), &(fcal_val_UserK.Cal_val[65]), &(fcal_val_UserK.Cal_val[66]), &(fcal_val_UserK.Cal_val[67]), &(fcal_val_UserK.Cal_val[68]), &(fcal_val_UserK.Cal_val[69]), &(fcal_val_UserK.Cal_val[70]), &(fcal_val_UserK.Cal_val[71]), &(fcal_val_UserK.Cal_val[72]), &(fcal_val_UserK.Cal_val[73]),	\
+		&(fcal_val_UserK.Cal_val[74]), &(fcal_val_UserK.Cal_val[75]), &(fcal_val_UserK.Cal_val[76]), &(fcal_val_UserK.Cal_val[77]), &(fcal_val_UserK.Cal_val[78]), &(fcal_val_UserK.Cal_val[79]), &(fcal_val_UserK.Cal_val[80]), &(fcal_val_UserK.Cal_val[81]), &(fcal_val_UserK.Cal_val[82]), &(fcal_val_UserK.Cal_val[83]),	\
+		&(fcal_val_UserK.Cal_val[84]), &(fcal_val_UserK.Cal_val[85]), &(fcal_val_UserK.Cal_val[86]), &(fcal_val_UserK.Cal_val[87]), &(fcal_val_UserK.Cal_val[88]), &(fcal_val_UserK.Cal_val[89]), &(fcal_val_UserK.Cal_val[90]), &(fcal_val_UserK.Cal_val[91]), &(fcal_val_UserK.Cal_val[92]), &(fcal_val_UserK.Cal_val[93]),	\
+		&(fcal_val_UserK.Cal_val[94]), &(fcal_val_UserK.Cal_val[95]), &(fcal_val_UserK.Cal_val[96]), &(fcal_val_UserK.Cal_val[97]), &(fcal_val_UserK.Cal_val[98]), &(fcal_val_UserK.Cal_val[99]), &(fcal_val_UserK.Cal_val[100]), &(fcal_val_UserK.Cal_val[101]), &(fcal_val_UserK.Cal_val[102]), &(fcal_val_UserK.Cal_val[103]),	\
+		&(fcal_val_UserK.Cal_val[104]), &(fcal_val_UserK.Cal_val[105]), &(fcal_val_UserK.Cal_val[106]), &(fcal_val_UserK.Cal_val[107]), &(fcal_val_UserK.Cal_val[108]), &(fcal_val_UserK.Cal_val[109]));	
+
+	pr_err("[MCU] %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x...%x %x %x %x, %x %x %x %x %x %x.\n", \
+		fcal_val_UserK.Cal_val[0], fcal_val_UserK.Cal_val[1], fcal_val_UserK.Cal_val[2], fcal_val_UserK.Cal_val[3], fcal_val_UserK.Cal_val[4],	\
+		fcal_val_UserK.Cal_val[5], fcal_val_UserK.Cal_val[6], fcal_val_UserK.Cal_val[7], fcal_val_UserK.Cal_val[8], fcal_val_UserK.Cal_val[9],	\
+		fcal_val_UserK.Cal_val[10], fcal_val_UserK.Cal_val[11], fcal_val_UserK.Cal_val[12], fcal_val_UserK.Cal_val[13], fcal_val_UserK.Cal_val[14],	\
+		fcal_val_UserK.Cal_val[15], fcal_val_UserK.Cal_val[16], fcal_val_UserK.Cal_val[17], fcal_val_UserK.Cal_val[18], fcal_val_UserK.Cal_val[19],	\
+		fcal_val_UserK.Cal_val[20], fcal_val_UserK.Cal_val[21], fcal_val_UserK.Cal_val[22], fcal_val_UserK.Cal_val[23],	\
+		fcal_val_UserK.Cal_val[100], fcal_val_UserK.Cal_val[101], fcal_val_UserK.Cal_val[102], fcal_val_UserK.Cal_val[103],	\
+		fcal_val_UserK.Cal_val[104], fcal_val_UserK.Cal_val[105], fcal_val_UserK.Cal_val[106], fcal_val_UserK.Cal_val[107], fcal_val_UserK.Cal_val[108], fcal_val_UserK.Cal_val[109]);
+
+	for(i=0; i<CalLength; i++)
+		wBuf[3+i] = fcal_val_UserK.Cal_val[i];
+	Zen7_MSP430FR2311_wI2CtoMCU(wBuf, sizeof(wBuf));
+	return rc;
+}
+
+//Read MCU calibration data to compare with phone stored.
+static int CompareCaliData(char *filename)
+{
+	char buf[400]={0};
+	int rc;
+	unsigned char i;
+	uint8_t wBuf[CalLength+3] = {0xAA, 0x55, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	uint8_t wFlg = 0;
+		
+	for(i=0; i<CalLength; i++)
+		fcal_val_rPhone.Cal_val[i] = 0;
+	
+	rc = file_op(filename, CAL_DATA_OFFSET,
+		(char *)&buf, 3*CalLength*sizeof(char), FILE_OP_READ);
+	if (rc<0){
+		pr_err("%s:read file:%s err!\n", __func__, filename);
+		return rc;
+	}
+
+	sscanf(buf, "%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n", \
+		&(fcal_val_rPhone.Cal_val[0]), &(fcal_val_rPhone.Cal_val[1]), &(fcal_val_rPhone.Cal_val[2]), &(fcal_val_rPhone.Cal_val[3]), &(fcal_val_rPhone.Cal_val[4]),	\
+		&(fcal_val_rPhone.Cal_val[5]), &(fcal_val_rPhone.Cal_val[6]), &(fcal_val_rPhone.Cal_val[7]), &(fcal_val_rPhone.Cal_val[8]), &(fcal_val_rPhone.Cal_val[9]),	\
+		&(fcal_val_rPhone.Cal_val[10]), &(fcal_val_rPhone.Cal_val[11]), &(fcal_val_rPhone.Cal_val[12]), &(fcal_val_rPhone.Cal_val[13]), &(fcal_val_rPhone.Cal_val[14]),	\
+		&(fcal_val_rPhone.Cal_val[15]), &(fcal_val_rPhone.Cal_val[16]), &(fcal_val_rPhone.Cal_val[17]), &(fcal_val_rPhone.Cal_val[18]), &(fcal_val_rPhone.Cal_val[19]),	\
+		&(fcal_val_rPhone.Cal_val[20]), &(fcal_val_rPhone.Cal_val[21]), &(fcal_val_rPhone.Cal_val[22]), &(fcal_val_rPhone.Cal_val[23]),	\
+		&(fcal_val_rPhone.Cal_val[24]), &(fcal_val_rPhone.Cal_val[25]), &(fcal_val_rPhone.Cal_val[26]), &(fcal_val_rPhone.Cal_val[27]), &(fcal_val_rPhone.Cal_val[28]), &(fcal_val_rPhone.Cal_val[29]), &(fcal_val_rPhone.Cal_val[30]), &(fcal_val_rPhone.Cal_val[31]), &(fcal_val_rPhone.Cal_val[32]), &(fcal_val_rPhone.Cal_val[33]),	\
+		&(fcal_val_rPhone.Cal_val[34]), &(fcal_val_rPhone.Cal_val[35]), &(fcal_val_rPhone.Cal_val[36]), &(fcal_val_rPhone.Cal_val[37]), &(fcal_val_rPhone.Cal_val[38]), &(fcal_val_rPhone.Cal_val[39]), &(fcal_val_rPhone.Cal_val[40]), &(fcal_val_rPhone.Cal_val[41]), &(fcal_val_rPhone.Cal_val[42]), &(fcal_val_rPhone.Cal_val[43]),	\
+		&(fcal_val_rPhone.Cal_val[44]), &(fcal_val_rPhone.Cal_val[45]), &(fcal_val_rPhone.Cal_val[46]), &(fcal_val_rPhone.Cal_val[47]), &(fcal_val_rPhone.Cal_val[48]), &(fcal_val_rPhone.Cal_val[49]), &(fcal_val_rPhone.Cal_val[50]), &(fcal_val_rPhone.Cal_val[51]), &(fcal_val_rPhone.Cal_val[52]), &(fcal_val_rPhone.Cal_val[53]),	\
+		&(fcal_val_rPhone.Cal_val[54]), &(fcal_val_rPhone.Cal_val[55]), &(fcal_val_rPhone.Cal_val[56]), &(fcal_val_rPhone.Cal_val[57]), &(fcal_val_rPhone.Cal_val[58]), &(fcal_val_rPhone.Cal_val[59]), &(fcal_val_rPhone.Cal_val[60]), &(fcal_val_rPhone.Cal_val[61]), &(fcal_val_rPhone.Cal_val[62]), &(fcal_val_rPhone.Cal_val[63]),	\
+		&(fcal_val_rPhone.Cal_val[64]), &(fcal_val_rPhone.Cal_val[65]), &(fcal_val_rPhone.Cal_val[66]), &(fcal_val_rPhone.Cal_val[67]), &(fcal_val_rPhone.Cal_val[68]), &(fcal_val_rPhone.Cal_val[69]), &(fcal_val_rPhone.Cal_val[70]), &(fcal_val_rPhone.Cal_val[71]), &(fcal_val_rPhone.Cal_val[72]), &(fcal_val_rPhone.Cal_val[73]),	\
+		&(fcal_val_rPhone.Cal_val[74]), &(fcal_val_rPhone.Cal_val[75]), &(fcal_val_rPhone.Cal_val[76]), &(fcal_val_rPhone.Cal_val[77]), &(fcal_val_rPhone.Cal_val[78]), &(fcal_val_rPhone.Cal_val[79]), &(fcal_val_rPhone.Cal_val[80]), &(fcal_val_rPhone.Cal_val[81]), &(fcal_val_rPhone.Cal_val[82]), &(fcal_val_rPhone.Cal_val[83]),	\
+		&(fcal_val_rPhone.Cal_val[84]), &(fcal_val_rPhone.Cal_val[85]), &(fcal_val_rPhone.Cal_val[86]), &(fcal_val_rPhone.Cal_val[87]), &(fcal_val_rPhone.Cal_val[88]), &(fcal_val_rPhone.Cal_val[89]), &(fcal_val_rPhone.Cal_val[90]), &(fcal_val_rPhone.Cal_val[91]), &(fcal_val_rPhone.Cal_val[92]), &(fcal_val_rPhone.Cal_val[93]),	\
+		&(fcal_val_rPhone.Cal_val[94]), &(fcal_val_rPhone.Cal_val[95]), &(fcal_val_rPhone.Cal_val[96]), &(fcal_val_rPhone.Cal_val[97]), &(fcal_val_rPhone.Cal_val[98]), &(fcal_val_rPhone.Cal_val[99]), &(fcal_val_rPhone.Cal_val[100]), &(fcal_val_rPhone.Cal_val[101]), &(fcal_val_rPhone.Cal_val[102]), &(fcal_val_rPhone.Cal_val[103]),	\
+		&(fcal_val_rPhone.Cal_val[104]), &(fcal_val_rPhone.Cal_val[105]), &(fcal_val_rPhone.Cal_val[106]), &(fcal_val_rPhone.Cal_val[107]), &(fcal_val_rPhone.Cal_val[108]), &(fcal_val_rPhone.Cal_val[109]));	
+
+	pr_err("[MCU] %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x...%x %x %x %x, %x %x %x %x %x %x.\n", \
+		fcal_val_rPhone.Cal_val[0], fcal_val_rPhone.Cal_val[1], fcal_val_rPhone.Cal_val[2], fcal_val_rPhone.Cal_val[3], fcal_val_rPhone.Cal_val[4],	\
+		fcal_val_rPhone.Cal_val[5], fcal_val_rPhone.Cal_val[6], fcal_val_rPhone.Cal_val[7], fcal_val_rPhone.Cal_val[8], fcal_val_rPhone.Cal_val[9],	\
+		fcal_val_rPhone.Cal_val[10], fcal_val_rPhone.Cal_val[11], fcal_val_rPhone.Cal_val[12], fcal_val_rPhone.Cal_val[13], fcal_val_rPhone.Cal_val[14],	\
+		fcal_val_rPhone.Cal_val[15], fcal_val_rPhone.Cal_val[16], fcal_val_rPhone.Cal_val[17], fcal_val_rPhone.Cal_val[18], fcal_val_rPhone.Cal_val[19],	\
+		fcal_val_rPhone.Cal_val[20], fcal_val_rPhone.Cal_val[21], fcal_val_rPhone.Cal_val[22], fcal_val_rPhone.Cal_val[23],	\
+		fcal_val_rPhone.Cal_val[100], fcal_val_rPhone.Cal_val[101], fcal_val_rPhone.Cal_val[102], fcal_val_rPhone.Cal_val[103],	\
+		fcal_val_rPhone.Cal_val[104], fcal_val_rPhone.Cal_val[105], fcal_val_rPhone.Cal_val[106], fcal_val_rPhone.Cal_val[107], fcal_val_rPhone.Cal_val[108], fcal_val_rPhone.Cal_val[109]);
+
+	
+	for(i=0; i<CalLength; i++){
+		wBuf[3+i] = fcal_val_rPhone.Cal_val[i];
+		
+		if(fcal_val_rPhone.Cal_val[i] != fcal_val_rMCU.Cal_val[i]){
+			wFlg = 1;
+			pr_err("[MCU] %s i:%d, rPhone:%x, rMCU:%x.\n", __func__, i, fcal_val_rPhone.Cal_val[i], fcal_val_rMCU.Cal_val[i]);
+		}
+	}
+	
+	if(wFlg == 0){
+		pr_err("[MCU] %s no need update phone's cali data to mcu.\n", __func__);
+	}else
+		Zen7_MSP430FR2311_wI2CtoMCU(wBuf, sizeof(wBuf));
+
+	pr_err("[MCU] %s end.\n", __func__);
+	return rc;
+}
+
+
+//Reset user calibration data
+static void UserCaliReset(void){
+	int rc;
+	
+	rc = ksys_unlink(MCU_BAKEUP_USER_FILE_NAME);
+	read_mcu_cal_thed();	//read factory file to mcu.
+	pr_err("[MCU] %s done, rc:%d.\n", __func__, rc);
+}
+
+//Backup 110 bytes to mcu_bak.
+static int Backup_user_cal_thed(void)
+{
+	char buf[400]={0};
+	char MCUBuf[10];
+	unsigned char i;
+	int rc;
+
+	pr_err("[MCU] %s.\n", __func__);
+
+	for(i=0; i<CalLength; i++){
+		sprintf(MCUBuf, " %X", fcal_val_UserK.Cal_val[i]);
+		strcat(buf, MCUBuf);		
+	}
+	rc = file_op(MCU_BAKEUP_USER_FILE_NAME, CAL_DATA_OFFSET,
+		(char *)&buf, 3*CalLength*sizeof(char), FILE_OP_WRITE);
+	if (rc<0)
+		pr_err("[MCU] %s:write file:%s err!\n", __func__, MCU_BAKEUP_USER_FILE_NAME);
+	
+	return rc;
+}
+
+static void mcu_cal_work(struct work_struct *work){
+	unsigned char i;
+
+	pr_err("[MCU] %s UserKState:%d.\n", __func__, UserKState);
+
+	if(UserKState == UserK_SaveK){
+		Backup_user_cal_thed();
+		UserKState = UserK_TBD;
+		return;
+	}
+
+	if(UserKState == UserK_NoSaveK){
+		for(i=0; i<CalLength; i++)
+			fcal_val_UserK.Cal_val[i] = 0;		
+		
+		UserKState = UserK_TBD;
+
+		if(IsFileNull(MCU_BAKEUP_USER_FILE_NAME) == 1){
+			read_usek_cal3threshlod();	//read motor_fw2 file to mcu.
+		}else{
+			read_mcu_cal_thed();		//read factory file to mcu.
+		}
+		
+		return;
+	}
+
+	if(UserKState == UserK_Reset){
+		UserCaliReset();
+		UserKState = UserK_TBD;
+		return;
+	}
+	
+	if(UserKState == UserK_AbortK){
+		for(i=0; i<CalLength; i++)
+			fcal_val_UserK.Cal_val[i] = 0;	
+				
+		UserKState = UserK_TBD;
+		
+		if(IsFileNull(MCU_BAKEUP_USER_FILE_NAME) == 1){
+			read_usek_cal3threshlod();	//read motor_fw2 file to mcu.
+		}else{
+			read_mcu_cal_thed();		//read factory file to mcu.
+		}	
+		
+		return;
+	}
+}
+//=====
+
 int Zen7_MSP430FR2311_Set_ParamMode(const uint16_t* vals) {
 	unsigned char i = 0;
 	
@@ -2054,13 +3030,13 @@ static int Zen7_MSP430FR2311_wI2CtoMCU(uint8_t *buf, uint8_t len){
 uint8_t dAngle[4];
 int Zen7_MSP430FR2311_rI2CtoCPU(uint8_t cmd, uint8_t *rBuf, uint8_t len) {
 	uint8_t CmdBuf[3] = {0xAA, 0x55, 0x00};
-	uint8_t i =0;
+	//uint8_t i =0;
 	
 	CmdBuf[2] = cmd;
 	
 	MSP430FR2311_wakeup(1);
 	MSP430_I2CWriteA(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf));
-	msleep(100);	//Delay to wait MCU prepare data.
+	//msleep(3);	//Delay to wait MCU prepare data.
 	if (!MSP430_I2CRead(MSP430_READY_I2C, rBuf, len)) {
 		pr_err("[MCU] %s I2C error!", __func__);
 		MSP430FR2311_wakeup(0);
@@ -2069,9 +3045,9 @@ int Zen7_MSP430FR2311_rI2CtoCPU(uint8_t cmd, uint8_t *rBuf, uint8_t len) {
 	MSP430FR2311_wakeup(0);
 
 	pr_err("[MCU] %s", __func__);
-	for(i=0; i<len; i++){
-		pr_err("%x", rBuf[i]);
-	}
+	//for(i=0; i<len; i++){
+	//	pr_err("%x", rBuf[i]);
+	//}
 	
 	return 0;
 
@@ -2083,6 +3059,8 @@ int Zen7_MSP430FR2311_DealAngle(uint16_t        *buf, uint8_t len) {
 	int rc = 0;
 	uint8_t wBuf[7] = {0xAA, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00};
 	uint8_t i;
+	uint8_t CmdBuf[3] = {0xAA, 0x55, 0x00};
+	uint8_t rAngle[6];
 	
 	for(i=0; i<len; i++){
 		wBuf[2+i] = (unsigned char)buf[i];
@@ -2096,7 +3074,23 @@ int Zen7_MSP430FR2311_DealAngle(uint16_t        *buf, uint8_t len) {
 
 		//Read angle raw data.
 		case 0x62:
-			rc = Zen7_MSP430FR2311_rI2CtoCPU(0x62, dAngle, sizeof(dAngle));
+			//rc = Zen7_MSP430FR2311_rI2CtoCPU(0x62, dAngle, sizeof(dAngle));
+			
+			//In order to reduce printf cat angle log.
+			MSP430FR2311_wakeup(1);
+			CmdBuf[2] = 0x62;
+			MSP430_I2CWriteA_NoLog(MSP430_READY_I2C, CmdBuf, sizeof(CmdBuf));
+			//msleep(20);	//Delay to wait MCU prepare data.
+			if (!MSP430_I2CRead_NoLog(MSP430_READY_I2C, rAngle, sizeof(rAngle))){
+				pr_err("[MCU] %s I2C error!", __func__);
+				MSP430FR2311_wakeup(0);
+				rc = -1;
+			}
+			dAngle[0] = rAngle[2];
+			dAngle[1] = rAngle[3];
+			dAngle[2] = rAngle[4];
+			dAngle[3] = rAngle[5];
+			MSP430FR2311_wakeup(0);
 			break;
 		
 		//Set MCU auto report angle.
@@ -2108,6 +3102,16 @@ int Zen7_MSP430FR2311_DealAngle(uint16_t        *buf, uint8_t len) {
 		case 0x64:
 			rc = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, (2+len));
 			break;	
+
+		//Dis(1)/En(0) judge angle stop condition. echo 135 disable(1) > motor_angle.
+		case 0x87:
+			rc = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, (2+len));
+			break;
+
+		//Specified angle. echo 254 x > motor_angle.
+		case 0xFE:
+			rc = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, (2+len));
+			break;
 		
 		default:
 			pr_err("%s [MCU] param fail!\n", __func__);
@@ -2162,6 +3166,7 @@ int Zen7_MSP430FR2311_wrDrv(uint16_t        *buf, uint8_t len){
 	
 //Proc note handle for set akm param.
 uint8_t akm_temp[8];
+uint8_t akm_Ktemp[20];
 int Zen7_MSP430FR2311_wrAKM(uint16_t        *buf, uint8_t len){
 	int rc = 0;
 	uint8_t wBuf[27] = {0xAA, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};	//len 27 is cmd 0x65's length.
@@ -2192,6 +3197,11 @@ int Zen7_MSP430FR2311_wrAKM(uint16_t        *buf, uint8_t len){
 		case 0x68:
 			rc = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, (2+len));
 			break;
+
+		//Read raw_data, (BOP1Y_15_0, BOP1Z_15_0), (BOP1Y_15_0, BRP1Z_15_0), (BRP1Y_15_0, BOP1Z_15_0), (BRP1Y_15_0, BRP1Z_15_0).
+		case 0x69:
+			rc = Zen7_MSP430FR2311_rI2CtoCPU(0x69, akm_Ktemp, sizeof(akm_Ktemp));
+			break;
 		
 		default:
 			pr_err("%s [MCU] param fail!\n", __func__);
@@ -2201,6 +3211,34 @@ int Zen7_MSP430FR2311_wrAKM(uint16_t        *buf, uint8_t len){
 
 	return rc;
 }
+
+//Proc note handle for motor_k.
+uint8_t k_temp[2];
+int Zen7_MSP430FR2311_wrMotorK(uint16_t *buf, uint8_t len){
+	int rc = 0;
+	uint8_t wBuf[10] = {0xAA, 0x55, 0x86};	//len 3 is cmd 0x86's length.
+	uint8_t i;
+	
+	for(i=0; i<len; i++){
+		wBuf[2+i] = (unsigned char)buf[i];
+	}
+	
+	switch(wBuf[2]){
+
+		//Read motor_k. 0xAA 0x55 0x86 xx xx.
+		case 0x86:
+			rc = Zen7_MSP430FR2311_rI2CtoCPU(0x86, k_temp, sizeof(k_temp));
+			break;
+				
+		default:
+			pr_err("%s [MCU] param fail!\n", __func__);
+			rc = -1;
+			break;
+	}
+
+	return rc;
+}
+
 
 //Report motor event to IMS.
 #define KEY_MCU_CODE  "KEY_MCU_CODE"	/*Send SubSys UEvent+*/
@@ -2216,8 +3254,62 @@ void report_motor_event(uint8_t OpCode, uint32_t value){
 	if(kobject_uevent_env(&((mcu_misc.this_device)->kobj), KOBJ_CHANGE, envp) != 0){
 		pr_err("[MCU] kobject_uevent_env fail...\n");
 	} else {
-		pr_err("[MCU] kobject_uevent_env ok.\n");
+		//D("[MCU] kobject_uevent_env ok.\n");
 	}
 }
 
+//Init Motor stop condition
+void mStopConditionInit(void){
+	uint8_t wBuf[11] = {0xAA, 0x55, 0x85, 1, 179, 4, 0, 73, 4, 0, 73};	
+	int ret = 0;
+	
+	wBuf[3] = StopCondition[0];
+	wBuf[4] = StopCondition[1];
+	wBuf[5] = StopCondition[2];
+	wBuf[6] = StopCondition[3];
+	wBuf[7] = StopCondition[4];
+	wBuf[8] = StopCondition[5];
+	wBuf[9] = StopCondition[6];
+	wBuf[10] = StopCondition[7];	
+	ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, sizeof(wBuf));		//2header + 6bytes + 3bytes.
+	if(ret < 0)
+		pr_err("[MCU] mStopConditionInit failed.\n");
+	else
+		pr_err("[MCU] mStopConditionInit ok.\n");
 
+	#ifdef ASUS_FTM_BUILD
+		wBuf[2] = 0x87;
+		wBuf[3] = 1;	//Enable
+		ret = Zen7_MSP430FR2311_wI2CtoMCU(wBuf, 4);		//2header + 2bytes.
+		if(ret < 0)
+			pr_err("[MCU] disable judge angle failed.\n");
+		else
+			pr_err("[MCU] disable judge angle ok.\n");
+	#endif
+
+	//Compare MCU's calibration data with phone backed.
+	if(!Zen7_MSP430FR2311_rI2CtoCPU(0x70, &(fcal_val_rMCU.Cal_val[0]), CalLength)){				
+		if(IsFileNull(MCU_BAKEUP_USER_FILE_NAME) == 1){
+			CompareCaliData(MCU_BAKEUP_USER_FILE_NAME);		//read userk file to mcu.
+		}else{
+			if(IsFileNull(MCU_BAKEUP_FILE_NAME) == 1)
+				CompareCaliData(MCU_BAKEUP_FILE_NAME);			//read factory file to mcu.
+		}
+	}else
+		pr_err("[MCU] read calibration data from mcu error!\n");					
+}
+
+//========================================================Trigger WQ========================================
+void WQ_Trigger(void){
+
+	pr_err("[MCU] %s.\n", __func__);
+	if(mcu_info->mcu_wq){
+		cancel_delayed_work(&report_work);
+		queue_delayed_work(mcu_info->mcu_wq, &report_work, msecs_to_jiffies(10));
+		pr_err("[MCU] %s success.\n", __func__);
+	}	
+}
+
+unsigned char KdState(void){
+	return MCUState;
+}

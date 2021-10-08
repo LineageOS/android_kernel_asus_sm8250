@@ -361,7 +361,7 @@ static bool MSP430BSL_sendI2CPacket(tI2CBSLPacket tPacket,
     crc16 = calculateCRC16(xferBuffer + 3, tPacket.ui16Length);
     xferBuffer[tPacket.ui16Length + 3] = crc16 & 0xFF;
     xferBuffer[tPacket.ui16Length + 4] = ((crc16 >> 8) & 0xFF);
-pr_err("[MCU] offset=%d, write([0x%X]=0x%X, [0x%X]=0x%X, [0x%X]=0x%X...)", offset,xferBuffer + 4 + offset,*(offset,xferBuffer + 4 + offset), xferBuffer + 4 + offset+1, xferBuffer [4 + offset+1], xferBuffer + 4 + offset+2, xferBuffer[4 + offset+2]); 
+//D("[MCU] offset=%d, write([0x%X]=0x%X, [0x%X]=0x%X, [0x%X]=0x%X...)", offset,xferBuffer + 4 + offset,*(offset,xferBuffer + 4 + offset), xferBuffer + 4 + offset+1, xferBuffer [4 + offset+1], xferBuffer + 4 + offset+2, xferBuffer[4 + offset+2]); 
     if(!MSP430BSL_I2CWriteRead(xferBuffer, tPacket.ui16Length + 5, recBuffer, 
                             recBytes + 7))
         return false;

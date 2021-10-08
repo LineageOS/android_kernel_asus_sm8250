@@ -243,6 +243,7 @@ static int dsi_pwr_enable_vregs(struct dsi_regulator_info *regs, bool enable)
 			(void)regulator_set_load(regs->vregs[i].vreg,
 						regs->vregs[i].disable_load);
 			(void)regulator_disable(regs->vregs[i].vreg);
+
 			if (post_off_ms)
 				usleep_range((post_off_ms * 1000),
 						(post_off_ms * 1000) + 10);
