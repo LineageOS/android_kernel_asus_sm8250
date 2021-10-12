@@ -54,7 +54,6 @@ void charge_mode_enable(struct goodix_ts_core *core_data, bool en);
 int read_chip_cmd(struct goodix_ts_core *core_data, u16 cmd_addr, int buf_len, u8 *buffer);
 
 #define GLOVE                  "driver/glove"
-#define FOD                    "driver/fod_event"
 
 static int print_touch_count_max;
 static int ts_9886_fod_position[4] = {440, 640, 1960, 2140};
@@ -2555,34 +2554,9 @@ static ssize_t asus_proc_glove_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-static ssize_t asus_proc_fod_write(struct file *filp, const char *buff, size_t len, loff_t *off) {
-	char messages[256];
-	memset(messages, 0, sizeof(messages));
-
-	if (len > 256)
-		len = 256;
-	if (copy_from_user(messages, buff, len))
-		return -EFAULT;
-
-	if ((strncmp(messages, "33", 2) == 0)) {
-		if (gts_core_data->input_dev != NULL) {
-			pr_info("[FOD Event] Sending fingerprint fod wake up event = %s\n", messages);
-			input_switch_key(gts_core_data->input_dev, 33);
-		}
-	} else {
-		pr_err("[FOD Event] Received unknown event = %d\n", messages);
-	}
-
-	return len;
-}
-
 static struct file_operations asus_proc_glove_ops = {
 	.write = asus_proc_glove_write,
 	.read  = asus_proc_glove_read,
-};
-
-static struct file_operations asus_proc_fod_ops = {
-	.write = asus_proc_fod_write,
 };
 
 static ssize_t atr_queue_full(struct atr_queue *q){
@@ -4076,7 +4050,6 @@ out:
 	INIT_DELAYED_WORK(&core_data->gts_resume_work, goodix_resume_work);
 
 	proc_create(GLOVE, 0666, NULL, &asus_proc_glove_ops);
-	proc_create(FOD, 0222, NULL, &asus_proc_fod_ops);
 
 	gts_core_data = core_data;
 
