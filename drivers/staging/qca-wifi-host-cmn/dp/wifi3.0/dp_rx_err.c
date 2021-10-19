@@ -25,6 +25,7 @@
 #include "qdf_trace.h"
 #include "qdf_nbuf.h"
 #include "dp_rx_defrag.h"
+#include "dp_ipa.h"
 #ifdef FEATURE_WDS
 #include "dp_txrx_wds.h"
 #endif
@@ -293,6 +294,7 @@ dp_rx_msdus_drop(struct dp_soc *soc, hal_ring_desc_t ring_desc,
 			return rx_bufs_used;
 		}
 
+		dp_ipa_handle_rx_buf_smmu_mapping(soc, rx_desc->nbuf, false);
 		qdf_nbuf_unmap_single(soc->osdev,
 				      rx_desc->nbuf, QDF_DMA_FROM_DEVICE);
 
@@ -480,6 +482,7 @@ more_msdu_link_desc:
 		pdev = dp_get_pdev_for_lmac_id(soc, rx_desc->pool_id);
 
 		nbuf = rx_desc->nbuf;
+		dp_ipa_handle_rx_buf_smmu_mapping(soc, nbuf, false);
 		qdf_nbuf_unmap_single(soc->osdev,
 				      nbuf, QDF_DMA_FROM_DEVICE);
 
@@ -1683,6 +1686,7 @@ dp_rx_wbm_err_process(struct dp_intr *int_ctx, struct dp_soc *soc,
 		}
 
 		nbuf = rx_desc->nbuf;
+		dp_ipa_handle_rx_buf_smmu_mapping(soc, nbuf, false);
 		qdf_nbuf_unmap_single(soc->osdev, nbuf,	QDF_DMA_FROM_DEVICE);
 
 		/*
@@ -2017,6 +2021,9 @@ dp_rx_err_mpdu_pop(struct dp_soc *soc, uint32_t mac_id,
 						continue;
 					}
 
+					dp_ipa_handle_rx_buf_smmu_mapping(soc,
+									  msdu,
+									  false);
 					qdf_nbuf_unmap_single(soc->osdev, msdu,
 						QDF_DMA_FROM_DEVICE);
 

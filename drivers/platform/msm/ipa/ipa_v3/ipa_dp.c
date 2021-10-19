@@ -1592,7 +1592,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	int num_frags, f;
 	const struct ipa_gsi_ep_config *gsi_ep;
 	int data_idx;
-	unsigned int max_desc;
+	unsigned int max_desc, zero_frag = 0;
 
 	if (unlikely(!ipa3_ctx)) {
 		IPAERR("IPA3 driver was not initialized\n");
@@ -1641,6 +1641,9 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	}
 
 	num_frags = skb_shinfo(skb)->nr_frags;
+	if (num_frags)
+		IPADBG("Receiving frag pkts num_frags = %d dst_ep_idx = %d\n",
+			num_frags, dst_ep_idx);
 	/*
 	 * make sure TLV FIFO supports the needed frags.
 	 * 2 descriptors are needed for IP_PACKET_INIT and TAG_STATUS.
@@ -1718,10 +1721,20 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 		data_idx++;
 
 		for (f = 0; f < num_frags; f++) {
-			desc[data_idx + f].frag = &skb_shinfo(skb)->frags[f];
-			desc[data_idx + f].type = IPA_DATA_DESC_SKB_PAGED;
-			desc[data_idx + f].len =
-				skb_frag_size(desc[data_idx + f].frag);
+			if (skb_frag_size(&skb_shinfo(skb)->frags[f]) != 0) {
+				desc[data_idx + f].frag =
+					&skb_shinfo(skb)->frags[f];
+				desc[data_idx + f].type =
+					IPA_DATA_DESC_SKB_PAGED;
+				desc[data_idx + f].len =
+					skb_frag_size(desc[data_idx + f].frag);
+			} else {
+				IPAERR(
+				"Got zero len SKB frag pkt num frag = %d, size = %d\n",
+					num_frags,
+					skb_frag_size(&skb_shinfo(skb)->frags[f]));
+				zero_frag++;
+			}
 		}
 		/* don't free skb till frag mappings are released */
 		if (num_frags) {
@@ -1732,7 +1745,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			desc[skb_idx].callback = NULL;
 		}
 
-		if (unlikely(ipa3_send(sys, num_frags + data_idx,
+		if (unlikely(ipa3_send(sys, num_frags - zero_frag + data_idx,
 		    desc, true))) {
 			IPAERR_RL("fail to send skb %pK num_frags %u SWP\n",
 				skb, num_frags);

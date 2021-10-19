@@ -3875,20 +3875,13 @@ void set_qc_stat(union power_supply_propval *val)
 	case POWER_SUPPLY_STATUS_QUICK_CHARGING_PLUS:
 		if(cos_alert_once_flag) {
 			set = SWITCH_THERMAL_ALER;
-		}else if (asus_get_prop_batt_capacity(smbchg_dev) <= 70) {
+		}else {
 			if (asus_status == NXP)
 				set = SWITCH_NXP_QUICK_CHARGING;
 			else if (asus_status == QC)
 				set = SWITCH_QC_QUICK_CHARGING;
 			else if (asus_status == QC_PLUS)
 				set = SWITCH_QC_QUICK_CHARGING_PLUS;
-		} else {
-			if (asus_status == NXP)
-				set = SWITCH_NXP_NOT_QUICK_CHARGING;
-			else if (asus_status == QC)
-				set = SWITCH_QC_NOT_QUICK_CHARGING;
-			else if (asus_status == QC_PLUS)
-				set = SWITCH_QC_NOT_QUICK_CHARGING_PLUS;
 		}
 		asus_extcon_set_state_sync(smbchg_dev->quickchg_extcon, set);
 		break;

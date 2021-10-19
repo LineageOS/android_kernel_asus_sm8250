@@ -2550,7 +2550,7 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 				val->intval = POWER_SUPPLY_STATUS_FULL;				
 				CHG_DBG("Batt_status = %s (100%%)\n", power_supply_status[val->intval]);
 			} else {		
-				val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+				val->intval = POWER_SUPPLY_STATUS_CHARGING;
 				CHG_DBG("Batt_status = %s\n", power_supply_status[val->intval]);
 			}
 			gauge_get_prop = 0;
@@ -3074,8 +3074,15 @@ int smblib_dp_dm(struct smb_charger *chg, int val)
 		 * Pre-emptively increment pulse count to enable the setting
 		 * of FSW prior to increasing voltage.
 		 */
-		chg->pulse_cnt++;
+//ASUS_BSP +++ LiJen: WA QC3 18W MAX voltage is 9V
+		if(chg->pulse_cnt >= QC3_PULSES_FOR_9V){
+			CHG_DBG("%s Skip DP Pulse. pulse_cnt(%d)>=20\n",__func__,chg->pulse_cnt);
+			return rc;
+		}
+//ASUS_BSP ---
 
+		chg->pulse_cnt++;
+		
 		rc = smblib_hvdcp3_set_fsw(chg);
 		if (rc < 0)
 			smblib_err(chg, "Couldn't set QC3.0 Fsw rc=%d\n", rc);
