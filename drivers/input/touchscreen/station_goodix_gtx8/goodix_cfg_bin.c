@@ -618,7 +618,7 @@ int goodix_start_later_init(struct goodix_ts_core *ts_core)
 	return 0;
 }
 
-void exit_init() {
+void exit_init(void) {
   
 	ts_info("Exit goodix_init_thread");
         cfg_runing = false;

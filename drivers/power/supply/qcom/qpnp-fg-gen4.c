@@ -3098,7 +3098,6 @@ static int backup_bat_percentage(void)
 	}else if (2 == g_cycle_count_data.reload_condition){
 		bat_percent = 90;
 	}
-	sprintf(buf, "%d\n", bat_percent);
 	BAT_DBG("bat_percent=%d;reload_condition=%d\n", bat_percent, g_cycle_count_data.reload_condition);
 
 	rc = file_op(BAT_PERCENT_FILE_NAME, CYCLE_COUNT_DATA_OFFSET,
