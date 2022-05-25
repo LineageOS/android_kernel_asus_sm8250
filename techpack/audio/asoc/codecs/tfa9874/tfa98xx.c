@@ -31,12 +31,12 @@
 #include <linux/debugfs.h>
 #include <linux/version.h>
 #include <linux/input.h>
-#include "config.h"
-#include "tfa98xx.h"
-#include "tfa.h"
+#include "inc/config.h"
+#include "inc/tfa98xx.h"
+#include "inc/tfa.h"
 
 /* required for enum tfa9912_irq */
-#include "tfa98xx_tfafieldnames.h"
+#include "inc/tfa98xx_tfafieldnames.h"
 
 #define TFA98XX_VERSION	TFA98XX_API_REV_STR
 
