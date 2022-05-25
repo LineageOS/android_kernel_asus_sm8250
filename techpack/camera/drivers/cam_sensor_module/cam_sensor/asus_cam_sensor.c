@@ -1274,16 +1274,6 @@ static void compareCameraSN (uint8_t moduleGroupIndex)
 		SN_Offset = g_eeprom_group[moduleGroupIndex].moduleid_offset + 2;
 
 		memcpy(otp_data, g_eeprom_info[moduleGroupIndex].mapdata + SN_Offset, OTP_ID_LEN);
-
-		pr_info("[DIT_EEPROM] camera %s  otp_data[%d] %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", g_eeprom_group[moduleGroupIndex].physicalSensorModuleName, moduleGroupIndex,
-		otp_data[0], otp_data[1], otp_data[2], otp_data[3], otp_data[4], otp_data[5],
-		otp_data[6], otp_data[7], otp_data[8], otp_data[9], otp_data[10], otp_data[11]);
-
-		sprintf((char *)cameraidbuffer, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-		otp_data[0], otp_data[1], otp_data[2], otp_data[3],	otp_data[4], otp_data[5],
-		otp_data[6], otp_data[7], otp_data[8], otp_data[9], otp_data[10], otp_data[11]);
-
-		pr_info("cameraidbuffer = %s", cameraidbuffer);
 	}
 
 
