@@ -1,0 +1,19 @@
+/dts-v1/;
+/plugin/;
+
+#include "ZS661KS-ER-overlay.dts"
+
+/ {
+	model = "OBIWAN ER2";
+	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
+	qcom,board-id = <31 0>;
+};
+
+// ER2 default panel
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_r66451_fhd_dsc_cmd_dim_er2>;
+};
+
+&pm8150b_charger {
+	panel = <&dsi_r66451_fhd_video &dsi_r66451_fhd_dsc_cmd_dim &dsi_r66451_fhd_dsc_cmd_dim_er2>;
+};

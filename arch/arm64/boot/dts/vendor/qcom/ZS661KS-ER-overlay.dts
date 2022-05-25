@@ -1,0 +1,61 @@
+/dts-v1/;
+/plugin/;
+
+#include "ZS661KS-SR-overlay.dts"
+
+/ {
+	model = "OBIWAN ER";
+	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
+	qcom,board-id = <30 0>;
+};
+
+// Aura Sync on phone +++
+&qupv3_se10_i2c {
+	status = "ok";
+	ene8k41@40 {
+		compatible = "ene8k41";
+		reg = <0x40>;
+		ene,aura_front_en = <&pm8150_gpios 7 0x0>;
+		pinctrl-names = "active";
+		pinctrl-0 = <&aura_front_en_default>;
+	};
+};
+
+&pm8150_gpios {
+	aura_front_en {
+		aura_front_en_default: aura_front_en_default {
+			pins = "gpio7";
+			function = "normal";
+			bias-disable;
+			output-high;
+			power-source = <0>;
+		};
+	};
+};
+// Aura Sync on phone ---
+
+/* ASUS BSP Clay: Grip sensor gpio change +++ */
+&qupv3_se2_i2c {
+	snt8100fsr-i2c@2c {
+		qcom,snt-trig1-gpio = <&tlmm 26 0x0>;
+	};
+};
+/* ASUS BSP Clay: Grip sensor gpio change --- */
+&apps_rsc {
+	rpmh-regulator-smpc8 {
+		S8C: pm8150a_s8: regulator-pm8150a-s8 {
+			regulator-min-microvolt = <1350000>;
+			regulator-max-microvolt = <1400000>;
+			qcom,init-voltage = <1350000>;
+		};
+	};
+};
+
+// ASUS_BSP Deeo : Inbox AURA ML51 +++
+&qupv3_se1_i2c {
+       ms51@16 {
+               nuvoton,ms51_on = <&pm8150l_gpios 11 0x0>;
+       };
+
+};
+// ASUS_BSP Deeo : Inbox AURA ML51 ---

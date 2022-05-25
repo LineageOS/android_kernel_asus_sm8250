@@ -1,0 +1,10 @@
+/dts-v1/;
+/plugin/;
+
+#include "ZS661KS-ER2-overlay.dts"
+
+/ {
+	model = "OBIWAN PR";
+	compatible = "qcom,kona-mtp", "qcom,kona", "qcom,mtp";
+	qcom,board-id = <40 0>;
+};
