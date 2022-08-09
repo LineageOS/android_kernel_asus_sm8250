@@ -76,6 +76,7 @@ static int cam_cci_init_master(struct cci_device *cci_dev,
 	return 0;
 }
 
+#define DISABLE_ADDITIONAL_RESET
 int cam_cci_init(struct v4l2_subdev *sd,
 	struct cam_cci_ctrl *c_ctrl)
 {
@@ -119,7 +120,9 @@ int cam_cci_init(struct v4l2_subdev *sd,
 		return rc;
 	}
 
+	mutex_lock(&cci_dev->mutex_for_init);
 	if (cci_dev->ref_count++) {
+#ifndef DISABLE_ADDITIONAL_RESET
 		rc = cam_cci_init_master(cci_dev, master);
 		if (rc) {
 			CAM_ERR(CAM_CCI, "Failed to init: Master: %d: rc: %d",
@@ -129,6 +132,9 @@ int cam_cci_init(struct v4l2_subdev *sd,
 		CAM_DBG(CAM_CCI, "ref_count %d, master: %d",
 			cci_dev->ref_count, master);
 		return rc;
+#endif
+		mutex_unlock(&cci_dev->mutex_for_init);
+		return 0;
 	}
 
 	ahb_vote.type = CAM_VOTE_ABSOLUTE;
@@ -186,7 +192,7 @@ int cam_cci_init(struct v4l2_subdev *sd,
 			base + CCI_I2C_M1_RD_THRESHOLD_ADDR);
 
 	cci_dev->cci_state = CCI_STATE_ENABLED;
-
+	mutex_unlock(&cci_dev->mutex_for_init);
 	return 0;
 
 reset_complete_failed:
@@ -194,7 +200,7 @@ reset_complete_failed:
 platform_enable_failed:
 	cci_dev->ref_count--;
 	cam_cpas_stop(cci_dev->cpas_handle);
-
+	mutex_unlock(&cci_dev->mutex_for_init);
 	return rc;
 }
 
@@ -233,6 +239,7 @@ static void cam_cci_init_cci_params(struct cci_device *new_cci_dev)
 		}
 	}
 	spin_lock_init(&new_cci_dev->lock_status);
+	mutex_init(&new_cci_dev->mutex_for_init);
 }
 
 static void cam_cci_init_default_clk_params(struct cci_device *cci_dev,
@@ -429,6 +436,7 @@ int cam_cci_soc_release(struct cci_device *cci_dev,
 	if (rc) {
 		CAM_ERR(CAM_CCI, "platform resources disable failed, rc=%d",
 			rc);
+		mutex_unlock(&cci_dev->mutex_for_init);
 		return rc;
 	}
 
@@ -436,6 +444,6 @@ int cam_cci_soc_release(struct cci_device *cci_dev,
 	cci_dev->cycles_per_us = 0;
 
 	cam_cpas_stop(cci_dev->cpas_handle);
-
+	mutex_unlock(&cci_dev->mutex_for_init);
 	return rc;
 }

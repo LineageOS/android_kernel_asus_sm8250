@@ -15,7 +15,14 @@
 #include "cam_packet_util.h"
 
 #define MAX_READ_SIZE  0x7FFFF
+#define MAX_LEGAL_EEPROM_NUMBER  8
 
+extern void eeprom_dump_create(struct cam_eeprom_ctrl_t * e_ctrl,uint8_t eeprom_module_group_index); //ASUS_BSP Zhengwei "porting eeprom"
+extern uint16_t get_camera_sensor_id(uint32_t camera_id);
+extern int get_camera_id_for_submodule(enum sensor_sub_module sub_module, uint32_t index, uint32_t* camera_id);
+extern bool check_eeprom_module_in_table(struct cam_eeprom_ctrl_t * e_ctrl,uint8_t *eeprom_module_group_index);
+extern void set_eeprom_module_loaded(struct cam_eeprom_ctrl_t * e_ctrl,bool value);
+extern void cam_eeprom_read_from_otp(struct cam_eeprom_ctrl_t * e_ctrl, int camera_id);
 /**
  * cam_eeprom_read_memory() - read map data into buffer
  * @e_ctrl:     eeprom control struct
@@ -34,7 +41,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 	struct cam_eeprom_memory_map_t    *emap = block->map;
 	struct cam_eeprom_soc_private     *eb_info = NULL;
 	uint8_t                           *memptr = block->mapdata;
-
+	uint32_t                           i;
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "e_ctrl is NULL");
 		return -EINVAL;
@@ -115,6 +122,9 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 				return rc;
 			}
 			memptr += emap[j].mem.valid_size;
+		}
+		for (i = 0; i < 0x1f; i++) {
+			CAM_DBG(CAM_EEPROM, "read data[%d] 0x%x", i, e_ctrl->cal_data.mapdata[i]);
 		}
 
 		if (emap[j].pageen.valid_size) {
@@ -243,16 +253,17 @@ static int cam_eeprom_match_id(struct cam_eeprom_ctrl_t *e_ctrl)
 	struct camera_io_master *client = &e_ctrl->io_master_info;
 	uint8_t                  id[2];
 
-	rc = cam_spi_query_id(client, 0, CAMERA_SENSOR_I2C_TYPE_WORD,
-		&id[0], 2);
+       rc = cam_spi_query_id(client, 0, CAMERA_SENSOR_I2C_TYPE_WORD, &id[0], 2);
 	if (rc)
 		return rc;
+
 	CAM_DBG(CAM_EEPROM, "read 0x%x 0x%x, check 0x%x 0x%x",
 		id[0], id[1], client->spi_client->mfr_id0,
 		client->spi_client->device_id0);
-	if (id[0] != client->spi_client->mfr_id0
-		|| id[1] != client->spi_client->device_id0)
+
+       if (id[0] != client->spi_client->mfr_id0 || id[1] != client->spi_client->device_id0)
 		return -ENODEV;
+
 	return 0;
 }
 
@@ -1205,6 +1216,8 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	struct cam_eeprom_soc_private  *soc_private =
 		(struct cam_eeprom_soc_private *)e_ctrl->soc_info.soc_private;
 	struct cam_sensor_power_ctrl_t *power_info = &soc_private->power_info;
+	uint32_t camera_id;
+	uint8_t eeprom_module_group_index;
 
 	ioctl_ctrl = (struct cam_control *)arg;
 
@@ -1256,8 +1269,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 			vfree(e_ctrl->cal_data.map);
 			e_ctrl->cal_data.num_data = 0;
 			e_ctrl->cal_data.num_map = 0;
-			CAM_DBG(CAM_EEPROM,
-				"Returning the data using kernel probe");
+			CAM_DBG(CAM_EEPROM, "[eeprom_debug] Returning the data using kernel probe");
 			break;
 		}
 		rc = cam_eeprom_init_pkt_parser(e_ctrl, csl_packet);
@@ -1284,23 +1296,65 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 			}
 		}
 
-		rc = cam_eeprom_power_up(e_ctrl,
-			&soc_private->power_info);
-		if (rc) {
-			CAM_ERR(CAM_EEPROM, "failed rc %d", rc);
-			goto memdata_free;
+		if(get_camera_id_for_submodule(SUB_MODULE_EEPROM, e_ctrl->soc_info.index, &camera_id) != 0)
+		{
+			pr_err("can not find related camera id for eeprom index %d, use its index as camera id",e_ctrl->soc_info.index);
+			camera_id = e_ctrl->soc_info.index;
 		}
 
-		e_ctrl->cam_eeprom_state = CAM_EEPROM_CONFIG;
-		rc = cam_eeprom_read_memory(e_ctrl, &e_ctrl->cal_data);
-		if (rc) {
-			CAM_ERR(CAM_EEPROM,
-				"read_eeprom_memory failed");
-			goto power_down;
+		pr_err("[eeprom_debug] eeprom soc index  %d   camera_id %d", e_ctrl->soc_info.index, camera_id);
+
+		if (e_ctrl->soc_info.index < MAX_LEGAL_EEPROM_NUMBER) //normal read eeprom
+		{
+			rc = cam_eeprom_power_up(e_ctrl,
+				&soc_private->power_info);
+			if (rc) {
+				CAM_ERR(CAM_EEPROM, "failed rc %d", rc);
+				goto memdata_free;
+			}
+			CAM_DBG(CAM_EEPROM, "[eeprom_debug] cam_eeprom_power_up success");
+
+			e_ctrl->cam_eeprom_state = CAM_EEPROM_CONFIG;
+
+			rc = cam_eeprom_read_memory(e_ctrl, &e_ctrl->cal_data);
+			if (rc) {
+				CAM_ERR(CAM_EEPROM,
+					"read_eeprom_memory failed");
+				goto power_down;
+			}
+			CAM_DBG(CAM_EEPROM,"[eeprom_debug] EEPROM INIT done");
+
+			if(check_eeprom_module_in_table(e_ctrl,&eeprom_module_group_index))
+			{
+				eeprom_dump_create(e_ctrl,eeprom_module_group_index);//ASUS_BSP Zhengwei "porting eeprom"
+			}
+
+			rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet);
+			rc = cam_eeprom_power_down(e_ctrl);
+
+		}else //it is use fake eeprom and read otp data to eeprom data.
+		{
+			// NO EEPROM module, Skip eeprom power up/down and read eeprom
+
+			CAM_DBG(CAM_EEPROM, "[eeprom_debug] OTP only, Skip eeprom power up/down and read eeprom");
+
+			e_ctrl->cam_eeprom_state = CAM_EEPROM_CONFIG;
+
+
+			cam_eeprom_read_from_otp(e_ctrl, camera_id);
+
+
+			CAM_DBG(CAM_EEPROM,"[eeprom_debug] EEPROM INIT done");
+
+			if(check_eeprom_module_in_table(e_ctrl,&eeprom_module_group_index))
+			{
+				eeprom_dump_create(e_ctrl,eeprom_module_group_index);//ASUS_BSP Zhengwei "porting eeprom"
+			}
+
+			rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet);
+
 		}
 
-		rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet);
-		rc = cam_eeprom_power_down(e_ctrl);
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 		vfree(e_ctrl->cal_data.mapdata);
 		vfree(e_ctrl->cal_data.map);

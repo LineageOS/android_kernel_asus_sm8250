@@ -11,7 +11,8 @@
 #include <cam_req_mgr_util.h>
 #include "cam_sensor_soc.h"
 #include "cam_soc_util.h"
-
+#undef CAM_DBG 
+#define CAM_DBG CAM_ERR
 int32_t cam_sensor_get_sub_module_index(struct device_node *of_node,
 	struct cam_sensor_board_info *s_info)
 {

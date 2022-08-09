@@ -13,3 +13,4 @@ ccflags-y += -I$(srctree)/techpack/camera/drivers/cam_smmu
 ccflags-y += -I$(srctree)/techpack/camera/drivers/cam_utils
 
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_flash_dev.o cam_flash_core.o cam_flash_soc.o
+#obj-$(CONFIG_SPECTRA_CAMERA) += asus_flash.o
