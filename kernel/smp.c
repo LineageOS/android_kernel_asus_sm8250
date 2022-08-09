@@ -23,6 +23,8 @@
 
 #include "smpboot.h"
 
+extern bool g_Charger_mode;
+
 enum {
 	CSD_FLAG_LOCK		= 0x01,
 	CSD_FLAG_SYNCHRONOUS	= 0x02,
@@ -600,6 +602,10 @@ void __init smp_init(void)
 	cpuhp_threads_init();
 
 	pr_info("Bringing up secondary CPUs ...\n");
+
+	if (g_Charger_mode) {
+		setup_max_cpus = 6;
+	}
 
 	/* FIXME: This should be done in userspace --RR */
 	for_each_present_cpu(cpu) {

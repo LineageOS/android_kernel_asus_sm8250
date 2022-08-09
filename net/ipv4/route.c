@@ -2023,7 +2023,10 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	fl4.daddr = daddr;
 	fl4.saddr = saddr;
 	fl4.flowi4_uid = sock_net_uid(net, NULL);
-
+	//ASUS_BSP+++
+        pr_debug("[ROUTE-DBG] Rx: iif=%d, oif=%d, mark=0x%x, uid=%d, saddr=%pI4, daddr=%pI4",
+			fl4.flowi4_iif, fl4.flowi4_oif, fl4.flowi4_mark, fl4.flowi4_uid, &fl4.saddr, &fl4.daddr);
+	//ASUS_BSP---
 	if (fib4_rules_early_flow_dissect(net, skb, &fl4, &_flkeys)) {
 		flkeys = &_flkeys;
 	} else {
@@ -2389,6 +2392,13 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	struct rtable *rth;
 	int err;
 
+	//ASUS_BSP+++
+	__be32 saddr = fl4->saddr;
+	__be32 daddr = fl4->daddr;
+	if (fl4 != NULL) {
+		pr_debug("[ROUTE-DBG] Tx: iif=%d, oif=%d, mark=0x%x, uid=%d, saddr=%pI4, daddr=%pI4", fl4->flowi4_iif, fl4->flowi4_oif, fl4->flowi4_mark, fl4->flowi4_uid, &saddr, &daddr);
+	}
+	//ASUS_BSP---
 	if (fl4->saddr) {
 		if (ipv4_is_multicast(fl4->saddr) ||
 		    ipv4_is_lbcast(fl4->saddr) ||

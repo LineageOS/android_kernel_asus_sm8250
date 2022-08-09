@@ -2613,6 +2613,7 @@ int32_t npu_host_unload_network(struct npu_client *client,
 	unload_cmd->async = false;
 	npu_queue_network_cmd(network, unload_cmd);
 
+retry:
 	/* NPU_IPC_CMD_UNLOAD will go onto IPC_QUEUE_APPS_EXEC */
 	ret = npu_send_network_cmd(npu_dev, network, &unload_packet,
 		unload_cmd);
@@ -2621,22 +2622,23 @@ int32_t npu_host_unload_network(struct npu_client *client,
 		NPU_ERR("NPU_IPC_CMD_UNLOAD sent failed: %d\n", ret);
 		/*
 		 * If another command is running on this network,
-		 * don't free_network now.
+		 * retry after 500ms.
 		 */
-		if (ret == -EBUSY) {
+		if ((ret == -EBUSY) && (retry_cnt > 0)) {
 			NPU_ERR("Network is running, retry later\n");
 			npu_dequeue_network_cmd(network, unload_cmd);
 			npu_free_network_cmd(host_ctx, unload_cmd);
-			network_put(network);
 			mutex_unlock(&host_ctx->lock);
-			return ret;
+			retry_cnt--;
+			msleep(500);
+			mutex_lock(&host_ctx->lock);
+			goto retry;
 		}
 		goto free_unload_cmd;
 	}
 
 	mutex_unlock(&host_ctx->lock);
 
-retry:
 	ret = wait_for_completion_timeout(
 		&unload_cmd->cmd_done,
 		(host_ctx->fw_dbg_mode & FW_DBG_MODE_INC_TIMEOUT) ?

@@ -280,11 +280,12 @@ int fib_rules_lookup(struct fib_rules_ops *ops, struct flowi *fl,
 {
 	struct fib_rule *rule;
 	int err;
-
+	int num = 0;
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 jumped:
+		num++;
 		if (!fib_rule_match(rule, ops, fl, flags, arg))
 			continue;
 
@@ -310,6 +311,8 @@ jumped:
 			if ((arg->flags & FIB_LOOKUP_NOREF) ||
 			    likely(refcount_inc_not_zero(&rule->refcnt))) {
 				arg->rule = rule;
+				pr_debug("[ROUTE-DBG] Matching rule %d, pref=%d, table=%d",
+						num, arg->rule->pref, arg->rule->table);
 				goto out;
 			}
 			break;

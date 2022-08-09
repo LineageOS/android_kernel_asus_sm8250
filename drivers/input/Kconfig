@@ -25,6 +25,20 @@ config INPUT
 
 if INPUT
 
+config SENSORS_HALL
+	bool "Hall sensor"
+	default n
+	---help---
+	 Say y here if you want to use this hall sensor driver, it
+	 is like a switch. For example, lid.
+
+config SENSORS_HALL2
+	bool "Hall sensor2"
+	default n
+	---help---
+	 Say y here if you want to use this hall sensor driver, it
+	 can get magnetic data form xyz-axis.
+
 config INPUT_LEDS
 	tristate "Export input device LEDs in sysfs"
 	depends on LEDS_CLASS
@@ -197,7 +211,37 @@ config INPUT_KEYCOMBO
 	---help---
 	  Say Y here if you want to take action when some keys are pressed;
 
+config INPUT_HALLSENSOR
+	tristate "Hall Sensor"
+	default y
+	depends on INPUT
+	---help---
+	  Say Y here if you want to sense when magnetic object is approached.
+
+	  More information is available:
+	  <file:Documentation/devicetree/bindings/input/hall_sensor.txt>
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called hallsensor.
+
+config INPUT_HALLSENSOR2
+	tristate "Hall Sensor 2"
+	default y
+	depends on INPUT
+	---help---
+	  Say Y here if you want to sense when magnetic object is approached.
+
+	  More information is available:
+	  <file:Documentation/devicetree/bindings/input/hall_sensor.txt>
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called hallsensor.
+
 comment "Input Device Drivers"
+
+source "drivers/input/fingerprint/Kconfig"
+
+source "drivers/input/fingerprint3626/Kconfig"
 
 source "drivers/input/keyboard/Kconfig"
 

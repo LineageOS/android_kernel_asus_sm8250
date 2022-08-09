@@ -93,6 +93,13 @@ int usbpd_send_svdm(struct usbpd *pd, u16 svid, u8 cmd,
 		enum usbpd_svdm_cmd_type cmd_type, int obj_pos,
 		const u32 *vdos, int num_vdos);
 
+#ifdef CONFIG_USBPD_PHY_QCOM
+/*
+ * Request new PDO
+ */
+int usbpd_request_pdo(struct usbpd *pd, u32 pdo, u32 uv, u32 ua);
+#endif
+
 /*
  * Get current status of CC pin orientation.
  *

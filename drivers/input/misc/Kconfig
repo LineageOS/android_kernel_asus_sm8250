@@ -184,7 +184,22 @@ config INPUT_QPNP_POWER_ON
 	  reporting the change in status of the KPDPWR_N line (connected to the
 	  power-key) as well as reset features.
 
+config PON_EVT_LOG
+	bool "PON Event LOG"
+	depends on INPUT_QPNP_POWER_ON
+	help
+          PON ASUS Event Log
+
 config INPUT_QTI_HAPTICS
+	tristate "Haptics support for QTI PMIC"
+	depends on MFD_SPMI_PMIC
+	help
+	  This option enables device driver support for the haptics peripheral
+	  found on Qualcomm Technologies, Inc. PMICs.  The haptics peripheral
+	  is capable of driving both LRA and ERM vibrators.  This module provides
+	  haptic feedback for user actions such as a long press on the touch screen.
+
+config INPUT_ASUS_HAPTICS
 	tristate "Haptics support for QTI PMIC"
 	depends on MFD_SPMI_PMIC
 	help

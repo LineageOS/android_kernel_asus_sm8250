@@ -553,7 +553,7 @@ int pd_phy_write(u16 hdr, const u8 *data, size_t data_len, enum pd_sop_type sop)
 		pdphy->tx_status != -EINPROGRESS,
 		ms_to_ktime(RECEIVER_RESPONSE_TIME));
 	if (ret) {
-		dev_err(pdphy->dev, "%s: failed ret %d\n", __func__, ret);
+		dev_err(pdphy->dev, "%s: failed ret %d tx_status=%d\n", __func__, ret, pdphy->tx_status);
 		return ret;
 	}
 

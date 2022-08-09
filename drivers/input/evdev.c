@@ -28,6 +28,20 @@
 #include <linux/cdev.h>
 #include "input-compat.h"
 
+// ASUS_BSP +++ Touch
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_GTX8
+extern u32 GoodixTSTimeStamp;
+extern bool GoodixTSEnTimestamp;
+extern bool GoodixTSEnTimestampDebug;
+extern bool GoodixTSEnInputTimestampDebug;
+
+#define TOUCH_MAX_POINT 30
+
+#define tptstamp_info(fmt, arg...)	pr_info("[TS_TimeStamp] "fmt"\n", ##arg)
+#define inputstamp_info(fmt, arg...)	pr_info("[Input_TimeStamp] "fmt"\n", ##arg)
+#endif
+// ASUS_BSP --- Touch
+
 struct evdev {
 	int open;
 	struct input_handle handle;
@@ -253,6 +267,31 @@ static void evdev_pass_values(struct evdev_client *client,
 	struct input_event event;
 	struct timespec64 ts;
 	bool wakeup = false;
+// ASUS_BSP +++ Touch
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_GTX8
+#if 0
+	static u32 GoodixPreTSTimeStamp = 0;
+	u32 TimeStampDiff = 0;
+	static struct timespec temp_t, prev_t;
+	u32 TimeStampDiffInt = 0;
+	u32 TimeStampDiffFloat = 0;
+#endif
+	static bool touch_press = false;
+	static struct input_event pre_event; 
+	static bool skip_update_ts = true;
+	static bool first_sync = false;
+	static bool touch_up_flag = false;
+	static bool first_sys_time = true;
+	static int skip_update_ts_count = 0;
+
+	static int PreCode[TOUCH_MAX_POINT][5] = {0};
+	static int PreKey[2] = {0};
+	static int slot_record = 0;
+	int i = 0, j = 0;
+	int pre_type = 0;
+	static struct input_event ori_event; 
+#endif
+// ASUS_BSP --- Touch
 
 	if (client->revoked)
 		return;
@@ -261,8 +300,32 @@ static void evdev_pass_values(struct evdev_client *client,
 	event.input_event_sec = ts.tv_sec;
 	event.input_event_usec = ts.tv_nsec / NSEC_PER_USEC;
 
+	if(!strcmp(evdev->handle.dev->name, "goodix_ts") && strcmp(evdev->handle.dev->name, "goodix_ts,pen")) {
+		ori_event.input_event_sec = event.input_event_sec;
+		ori_event.input_event_usec = event.input_event_usec;
+	}
+
 	/* Interrupts are disabled, just acquire the lock. */
 	spin_lock(&client->buffer_lock);
+
+// ASUS_BSP +++ Touch
+	if(!strcmp(evdev->handle.dev->name, "goodix_ts") && strcmp(evdev->handle.dev->name, "goodix_ts,pen")) {
+		if (GoodixTSEnInputTimestampDebug == true) {
+			inputstamp_info("[System][%d]  %d - %ld", __LINE__, event.input_event_sec, event.input_event_usec);
+		}
+		if((touch_press == true) && (first_sys_time == false)) {
+			if(abs(event.input_event_sec - pre_event.input_event_sec) > 100000) {
+				if (GoodixTSEnInputTimestampDebug == true) {
+					inputstamp_info("[System]  %d - %ld", event.input_event_sec, event.input_event_usec);
+				}
+				pre_event.input_event_sec = event.input_event_sec;
+				pre_event.input_event_usec = event.input_event_usec;
+				first_sys_time = true;
+			}
+		}
+	}
+
+// ASUS_BSP --- Touch
 
 	for (v = vals; v != vals + count; v++) {
 		if (__evdev_is_filtered(client, v->type, v->code))
@@ -275,7 +338,296 @@ static void evdev_pass_values(struct evdev_client *client,
 
 			wakeup = true;
 		}
+		
+// ASUS_BSP +++ Touch
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_GTX8
+#if 0
+		// EV_KEY = 1 / BTN_TOUCH = 330 / 1 Down : 0 UP
+		if(!strcmp(evdev->handle.dev->name, "goodix_ts") && strcmp(evdev->handle.dev->name, "goodix_ts,pen")) {
+			if((v->type == EV_KEY) && (v->code == BTN_TOUCH)) {
+				if(v->value == 1) { //Down
+					GoodixPreTSTimeStamp = GoodixTSTimeStamp;
+					temp_t.tv_sec= ts.tv_sec;
+					temp_t.tv_nsec= ts.tv_nsec;
+					touch_press = true;
+					if (GoodixTSEnTimestampDebug == true) {
+						tptstamp_info("[Start] System time : %d %ld\n", temp_t.tv_sec, temp_t.tv_nsec);
+					}
+				} else { // UP
+					TimeStampDiff = GoodixTSTimeStamp - GoodixPreTSTimeStamp;
+					event.input_event_usec = TimeStampDiff + ((temp_t.tv_nsec) / NSEC_PER_USEC);
+					TimeStampDiffInt = event.input_event_usec / 1000000;
+					TimeStampDiffFloat = event.input_event_usec - ( TimeStampDiffInt * 1000000);
+					
+					event.input_event_sec = temp_t.tv_sec + TimeStampDiffInt;
+					event.input_event_usec = TimeStampDiffFloat;
+					touch_press = false;
+					if (GoodixTSEnTimestampDebug == true) {
+						tptstamp_info("[End] DIFF : %d IC time : %d %ld\n", TimeStampDiff, event.input_event_sec, event.input_event_usec);
+					}
+				}
+			}
+			if (((v->type == EV_ABS) || (v->type == EV_SYN)) && (touch_press == true)) {
+				TimeStampDiff = GoodixTSTimeStamp - GoodixPreTSTimeStamp;
+				event.input_event_usec = TimeStampDiff + ((temp_t.tv_nsec) / NSEC_PER_USEC);
+				TimeStampDiffInt = event.input_event_usec / 1000000;
+				TimeStampDiffFloat = event.input_event_usec - ( TimeStampDiffInt * 1000000);
 
+				event.input_event_sec = temp_t.tv_sec + TimeStampDiffInt;
+				event.input_event_usec = TimeStampDiffFloat;
+				if (GoodixTSEnTimestampDebug == true) {
+					tptstamp_info("[Move] DIFF : %d IC time : %d %ld\n", TimeStampDiff, event.input_event_sec, event.input_event_usec);
+				}
+			}
+		}
+#else // Version >= FW(06.00.00.05) + CFG(7)
+		if(!strcmp(evdev->handle.dev->name, "goodix_ts") && strcmp(evdev->handle.dev->name, "goodix_ts,pen")) {
+			//tptstamp_info("[System]  %d - %ld", event.input_event_sec, event.input_event_usec);
+			if (GoodixTSEnTimestamp == true) {
+				if (ori_event.input_event_sec < 1000000000 ) {
+					if(v->type == EV_KEY) {
+						// BTN touch
+						if(v->code == BTN_TOUCH) { 
+							if(v->value == 1) { //Down
+								inputstamp_info("[EV_KEY] %d", __LINE__);
+								// check large num
+								if(touch_press == false) {
+									pre_event.input_event_sec = event.input_event_sec;
+									pre_event.input_event_usec = event.input_event_usec;
+									touch_press = true;
+									first_sync = true;
+									skip_update_ts_count = 0;
+								} else {
+									event.input_event_sec = pre_event.input_event_sec;
+									event.input_event_usec = pre_event.input_event_usec;
+								}
+
+								inputstamp_info("[Start] System time : %d %ld\n", pre_event.input_event_sec, pre_event.input_event_usec);
+								
+							} else { // UP
+								if (GoodixTSEnTimestampDebug == true) {
+									tptstamp_info("[End] System time : %d %ld\n", event.input_event_sec, event.input_event_usec);
+								}
+								event.input_event_sec = pre_event.input_event_sec;
+								event.input_event_usec = GoodixTSTimeStamp + pre_event.input_event_usec;
+
+								if(event.input_event_usec >= 1000000) {
+									event.input_event_sec = event.input_event_sec + 1;
+									event.input_event_usec = event.input_event_usec - 1000000;
+								}
+
+								if (GoodixTSEnTimestampDebug == true) {
+									tptstamp_info("[End] DIFF: %d IC time : %d %ld\n", GoodixTSTimeStamp, event.input_event_sec, event.input_event_usec);
+								}
+								first_sync = true;
+
+								for (i = 0; i < TOUCH_MAX_POINT; i++)
+									for (j = 0; j <= 4; j++)
+										PreCode[i][j] = 0;
+
+								touch_up_flag = true;
+							}
+						}
+					}
+					if (touch_press == true) {
+						if (v->type == EV_SYN) {
+							if (GoodixTSEnTimestampDebug == true) {
+								tptstamp_info("[SYN]");
+								tptstamp_info("[SYN] System time : %d %ld\n", event.input_event_sec, event.input_event_usec);
+							}
+							// EV_SYN A
+							// EV_SYN A
+							// EV_SYN B
+							// EV_SYN B
+							if (pre_type != EV_SYN) {
+								event.input_event_sec = pre_event.input_event_sec;
+								event.input_event_usec = pre_event.input_event_usec;
+							}
+							skip_update_ts = true;
+							first_sync = false;
+							skip_update_ts_count = 0;
+							slot_record = 0;
+							if (GoodixTSEnTimestampDebug == true) {
+								tptstamp_info("[ABS] DIFF : %d IC time : %d %ld\n", GoodixTSTimeStamp, pre_event.input_event_sec, pre_event.input_event_usec);
+							}
+							// process touch up sync
+							if (touch_up_flag == true) {
+								touch_press = false;
+								touch_up_flag = false;
+								first_sys_time = true;
+							}
+						}
+						if (v->type == EV_ABS) {
+							if(first_sync == true) {
+								if (GoodixTSEnTimestampDebug == true) {
+									tptstamp_info("[SYN] first sync");
+								}
+								// record first X/Y/M/P/ID
+
+								if (v->code == ABS_MT_SLOT)
+									slot_record = v->value;
+								if (v->code == ABS_MT_POSITION_X)
+									PreCode[slot_record][0] = v->value;
+								if (v->code == ABS_MT_POSITION_Y)
+									PreCode[slot_record][1] = v->value;
+								if (v->code == ABS_MT_TOUCH_MAJOR)
+									PreCode[slot_record][2] = v->value;
+								if (v->code == ABS_MT_PRESSURE)
+									PreCode[slot_record][3] = v->value;
+								if (v->code == ABS_MT_TRACKING_ID)
+									PreCode[slot_record][4] = v->value;
+
+								event.input_event_sec = pre_event.input_event_sec;
+								event.input_event_usec = pre_event.input_event_usec;
+							} else {
+								if (GoodixTSEnTimestampDebug == true) {
+									tptstamp_info("[SYN] other sync");
+								}
+								// compare X/Y/M/P/ID
+								if (v->code == ABS_MT_SLOT)
+									slot_record = v->value;
+								if ((v->code == ABS_MT_POSITION_X) && (v->value != PreCode[slot_record][0])) {
+									PreCode[slot_record][0] = v->value;
+									skip_update_ts = false;
+								}
+								if ((v->code == ABS_MT_POSITION_Y) && (v->value != PreCode[slot_record][1])) {
+									PreCode[slot_record][1] = v->value;
+									skip_update_ts = false;
+								}
+								if ((v->code == ABS_MT_TOUCH_MAJOR) && (v->value != PreCode[slot_record][2])) {
+									PreCode[slot_record][2] = v->value;
+									skip_update_ts = false;
+								}
+								if ((v->code == ABS_MT_PRESSURE) && (v->value != PreCode[slot_record][3])) {
+									PreCode[slot_record][3] = v->value;
+									skip_update_ts = false;
+								}
+								if ((v->code == ABS_MT_TRACKING_ID) && (v->value != PreCode[slot_record][4])) {
+									PreCode[slot_record][4] = v->value;
+									skip_update_ts = false;
+								}
+
+								if (skip_update_ts == false){
+									if (GoodixTSEnTimestampDebug == true) {
+										tptstamp_info("[SYN] update");
+									}
+									skip_update_ts_count++;
+									if (skip_update_ts_count >= 2) {
+										if (GoodixTSEnTimestampDebug == true) {
+											tptstamp_info("[SYN] count %d", skip_update_ts_count);
+										}
+										event.input_event_sec = pre_event.input_event_sec;
+										event.input_event_usec = pre_event.input_event_usec;
+									} else {
+										if (GoodixTSEnTimestampDebug == true) {
+											tptstamp_info("[ABS] System time : %d %ld\n", event.input_event_sec, event.input_event_usec);
+											tptstamp_info("[SYN] update timestamp");
+										}
+										event.input_event_sec = pre_event.input_event_sec;
+										event.input_event_usec = GoodixTSTimeStamp + pre_event.input_event_usec;
+
+										if(event.input_event_usec >= 1000000) {
+											event.input_event_sec = event.input_event_sec + 1;
+											event.input_event_usec = event.input_event_usec - 1000000;
+										}
+
+										pre_event.input_event_sec = event.input_event_sec;
+										pre_event.input_event_usec = event.input_event_usec;
+										skip_update_ts = true;
+									}
+								} else {
+									if (GoodixTSEnTimestampDebug == true) {
+										tptstamp_info("[SYN] skip update ts");
+									}
+									event.input_event_sec = pre_event.input_event_sec;
+									event.input_event_usec = pre_event.input_event_usec;
+								}
+							}
+						}
+						if((v->code == KEY_F) || (v->code == KEY_U) || (v->code == KEY_L) || (v->code == KEY_O)){
+							if((PreKey[0] == v->code) && (PreKey[1] == v->value)) {
+								//inputstamp_info("[EV_KEY] %d", __LINE__);
+								event.input_event_sec = pre_event.input_event_sec;
+								event.input_event_usec = pre_event.input_event_usec;
+							} else {
+								PreKey[0] = v->code;
+								PreKey[1] = v->value;
+								if(v->value == 1) { // Down
+									if (first_sync == true) {
+										//inputstamp_info("[EV_KEY] %d", __LINE__);
+										event.input_event_sec = pre_event.input_event_sec;
+										event.input_event_usec = pre_event.input_event_usec;
+									} else {
+										//inputstamp_info("[EV_KEY] %d", __LINE__);
+										event.input_event_sec = pre_event.input_event_sec;
+										event.input_event_usec = GoodixTSTimeStamp + pre_event.input_event_usec;
+
+										if(event.input_event_usec >= 1000000) {
+											event.input_event_sec = event.input_event_sec + 1;
+											event.input_event_usec = event.input_event_usec - 1000000;
+										}
+										pre_event.input_event_sec = event.input_event_sec;
+										pre_event.input_event_usec = event.input_event_usec;
+									}
+
+								} else { // UP
+									//inputstamp_info("[EV_KEY] %d", __LINE__);
+									event.input_event_sec = pre_event.input_event_sec;
+									event.input_event_usec = pre_event.input_event_usec + 90;
+									pre_event.input_event_sec = event.input_event_sec;
+									pre_event.input_event_usec = event.input_event_usec;
+								}
+							}
+						}
+					}
+				}
+				pre_type = v->type;
+			} else {
+				event.input_event_sec = ori_event.input_event_sec;
+				event.input_event_usec = ori_event.input_event_usec;
+			}
+			
+			if (GoodixTSEnInputTimestampDebug == true) {
+				if (v->type == EV_SYN) {
+					inputstamp_info("[EV_SYN][%d][%d] - %d s %ld us", v->code, v->value, event.input_event_sec, event.input_event_usec);
+					inputstamp_info("----------------------------------------");
+					//inputstamp_info("SLOT X Y M P sync");
+				} else if (v->type == EV_KEY) {
+					if (v->code == KEY_F) {
+						inputstamp_info("[EV_KEY][F][%d]", v->value);
+					} else if (v->code == KEY_U) {
+						inputstamp_info("[EV_KEY][U][%d]", v->value);
+					} else if (v->code == KEY_L) {
+						inputstamp_info("[EV_KEY][L][%d]", v->value);
+					} else if (v->code == KEY_O) {
+						inputstamp_info("[EV_KEY][O][%d]", v->value);
+					} else {
+						inputstamp_info("[EV_KEY][%d][%d]", v->code, v->value);
+					}
+				} else if (event.type == EV_ABS) {
+					if (v->code == ABS_MT_POSITION_X)
+						inputstamp_info("[EV_ABS][X][%x]", v->value);
+					else if (v->code == ABS_MT_POSITION_Y)
+						inputstamp_info("[EV_ABS][Y][%x]", v->value);
+					else if (v->code == ABS_MT_PRESSURE)
+						inputstamp_info("[EV_ABS][P][%x]", v->value);
+					else if (v->code == ABS_MT_TOUCH_MAJOR)
+						inputstamp_info("[EV_ABS][MAJOR][%x]", v->value);
+					else if (v->code == ABS_MT_SLOT) {
+						inputstamp_info("===================");
+						inputstamp_info("[EV_ABS][SLOT][%d]", v->value);
+					} else if (v->code == ABS_MT_TRACKING_ID)
+						inputstamp_info("[EV_ABS][ID][%d]", v->value);
+					else
+						inputstamp_info("[EV_ABS][%d][%d]", v->code);
+				} else if ( v->type == EV_SND) {
+					inputstamp_info("[EV_SND][%d][%d]", v->code, v->value);
+				}
+			}
+		}
+#endif
+#endif
+// ASUS_BSP --- Touch
 		event.type = v->type;
 		event.code = v->code;
 		event.value = v->value;

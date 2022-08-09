@@ -1,0 +1,20 @@
+config AURA_SYNC_INBOX
+	tristate "aura_sync_inbox"
+    bool "aura_sync_inbox"
+    default m
+	help
+		Enable aura_sync_inbox kernel module
+
+config AURA_SYNC_STATION
+	tristate "aura_sync_station"
+    bool "aura_sync_station"
+    default m
+	help
+		Enable aura_sync_station kernel module
+
+config AURA_SYNC_POGO
+    tristate "aura_sync_station"
+    bool "aura_sync_station"
+    default m
+	help
+		Enable aura_sync_station kernel module

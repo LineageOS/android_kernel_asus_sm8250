@@ -78,6 +78,19 @@ struct cnss_clk_info {
 	u32 enabled;
 };
 
+/* ASUS_BSP+++ "add for the antenna switch power (LDO13A)" */
+#ifdef ASUS_ZS661KS_PROJECT
+struct antenna_switch_vreg {
+	struct regulator *reg;
+	const char *name;
+	u32 min_v;
+	u32 max_v;
+	u32 load_ua;
+	bool enabled;
+};
+#endif
+/* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
+
 struct cnss_pinctrl_info {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *bootstrap_active;
@@ -348,6 +361,11 @@ struct cnss_plat_data {
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;
 	struct list_head clk_list;
+	/* ASUS_BSP+++ "add for the antenna switch power (LDO13A)" */
+#ifdef ASUS_ZS661KS_PROJECT
+	struct antenna_switch_vreg *vreg_antenna;
+#endif
+	/* ASUS_BSP--- "add for the antenna switch power (LDO13A)" */
 	struct cnss_pinctrl_info pinctrl_info;
 	struct cnss_subsys_info subsys_info;
 	struct cnss_ramdump_info ramdump_info;
@@ -484,4 +502,10 @@ int cnss_pci_update_qtime_sync_period(struct device *dev,
 				      unsigned int qtime_sync_period);
 int cnss_get_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 
+/* ASUS_BSP+++ "add for the antenna switch" */
+#ifdef ASUS_ZS661KS_PROJECT
+int antenna_switch_enable_vreg(struct cnss_plat_data *plat_priv);
+int antenna_switch_disable_vreg(struct cnss_plat_data *plat_priv);
+#endif
+/* ASUS_BSP--- "add for the antenna switch" */
 #endif /* _CNSS_MAIN_H */

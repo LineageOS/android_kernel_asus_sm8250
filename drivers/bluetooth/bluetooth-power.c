@@ -29,7 +29,6 @@
 
 #if defined CONFIG_BT_SLIM_QCA6390 || defined CONFIG_BTFM_SLIM_WCN3990
 #include "btfm_slim.h"
-#include "btfm_slim_slave.h"
 #endif
 #include <linux/fs.h>
 
@@ -570,6 +569,7 @@ static int bluetooth_power(int on)
 			bt_power_src_status[BT_VDD_RFA2_LDO] =
 				regulator_get_voltage(reg);
 		}
+#ifndef ASUS_ZS661KS_PROJECT
 		if (bt_power_pdata->bt_vdd_asd) {
 			bt_power_src_status[BT_VDD_ASD_LDO] =
 				DEFAULT_INVALID_VALUE;
@@ -582,6 +582,7 @@ static int bluetooth_power(int on)
 			bt_power_src_status[BT_VDD_ASD_LDO] =
 				regulator_get_voltage(reg);
 		}
+#endif
 		if (bt_power_pdata->bt_chip_pwd) {
 			rc = bt_configure_vreg(bt_power_pdata->bt_chip_pwd);
 			if (rc < 0) {
@@ -624,9 +625,11 @@ clk_fail:
 		if (bt_power_pdata->bt_chip_pwd)
 			bt_vreg_disable(bt_power_pdata->bt_chip_pwd);
 chip_pwd_fail:
+#ifndef ASUS_ZS661KS_PROJECT
 		if (bt_power_pdata->bt_vdd_asd)
 			bt_vreg_disable(bt_power_pdata->bt_vdd_asd);
 vdd_asd_fail:
+#endif
 		if (bt_power_pdata->bt_vdd_rfa2)
 			bt_vreg_disable(bt_power_pdata->bt_vdd_rfa2);
 vdd_rfa2_fail:
@@ -959,9 +962,11 @@ static int bt_power_populate_dt_pinfo(struct platform_device *pdev)
 		if (rc < 0)
 			goto err;
 
+#ifndef ASUS_ZS661KS_PROJECT
 		rc = bt_dt_parse_vreg_info(&pdev->dev,
 					&bt_power_pdata->bt_vdd_asd,
 					"qca,bt-vdd-asd");
+#endif
 		if (rc < 0)
 			goto err;
 
@@ -1069,18 +1074,6 @@ int get_chipset_version(void)
 	return soc_id;
 }
 
-int bt_disable_asd(void)
-{
-	int rc = 0;
-	if (bt_power_pdata->bt_vdd_asd) {
-		BT_PWR_INFO("Disabling ASD regulator");
-		rc = bt_vreg_disable(bt_power_pdata->bt_vdd_asd);
-	} else {
-		BT_PWR_INFO("ASD regulator is not configured");
-	}
-	return rc;
-}
-
 static void  set_pwr_srcs_status(int ldo_index,
 				struct bt_power_vreg_data *handle)
 {
@@ -1147,13 +1140,6 @@ static long bt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		BT_PWR_ERR("unified Current SOC Version : %x", chipset_version);
 		if (chipset_version) {
 			soc_id = chipset_version;
-			if (soc_id == QCA_HSP_SOC_ID_0100 ||
-				soc_id == QCA_HSP_SOC_ID_0110 ||
-				soc_id == QCA_HSP_SOC_ID_0200 ||
-				soc_id == QCA_HSP_SOC_ID_0210 ||
-				soc_id == QCA_HSP_SOC_ID_1211) {
-				ret = bt_disable_asd();
-			}
 		} else {
 			BT_PWR_ERR("got invalid soc version");
 			soc_id = 0;
@@ -1199,8 +1185,10 @@ static long bt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			bt_power_pdata->bt_vdd_rfa1);
 		set_pwr_srcs_status(BT_VDD_RFA2_LDO_CURRENT,
 			bt_power_pdata->bt_vdd_rfa2);
+#ifndef ASUS_ZS661KS_PROJECT
 		set_pwr_srcs_status(BT_VDD_ASD_LDO_CURRENT,
 			bt_power_pdata->bt_vdd_asd);
+#endif
 		set_pwr_srcs_status(BT_VDD_IO_LDO_CURRENT,
 			bt_power_pdata->bt_vdd_io);
 		set_pwr_srcs_status(BT_VDD_XTAL_LDO_CURRENT,

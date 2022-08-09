@@ -63,6 +63,11 @@ obj-$(CONFIG_IOMMU_SUPPORT)	+= iommu/
 # gpu/ comes after char for AGP vs DRM startup and after iommu
 obj-y				+= gpu/
 
+#Zen7 camera moto driver.
+ifeq ($(ASUS_BUILD_PROJECT),ZS670KS)
+obj-y				+= msp/
+endif
+
 obj-$(CONFIG_CONNECTOR)		+= connector/
 
 # i810fb and intelfb depend on char/agp/
@@ -192,3 +197,28 @@ obj-$(CONFIG_UNISYS_VISORBUS)	+= visorbus/
 obj-$(CONFIG_SIOX)		+= siox/
 obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
+
+obj-$(CONFIG_AW8697_HAPTIC) += motor/aw8697_haptic/
+
+# ASUS_BSP: AURA SYNC driver
+ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+obj-y				+= aura_sync/
+endif
+
+#Tuxera
+ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+	ifeq ($(CONFIG_TUXERA_USERDEBUG),y)
+		obj-y				+= tuxera/zs661ks/exfat/userdebug/
+		obj-y				+= tuxera/zs661ks/ntfs/userdebug/
+	else
+		obj-y				+= tuxera/zs661ks/exfat/user/
+		obj-y				+= tuxera/zs661ks/ntfs/user/
+	endif
+endif
+
+ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+obj-y				+= ec_hid_driver/
+obj-y				+= gamepad_hid_driver/
+obj-y				+= dt_power/
+obj-y				+= fan/
+endif

@@ -1,0 +1,67 @@
+#
+# Goodix touchscreen driver configuration
+#
+menuconfig TOUCHSCREEN_GOODIX_GTX8_STATION
+	bool "Goodix GTx8 touchscreen"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have a Goodix GTx8 touch controller
+	  to your system.
+
+	  If unsure, say N.
+
+if TOUCHSCREEN_GOODIX_GTX8_STATION
+
+config TOUCHSCREEN_GOODIX_GTX8_UPDATE_STATION
+	tristate "Goodix GTx8 firmware update module"
+	default n
+	help
+	  Say Y here to enable support for doing firmware update.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+
+config TOUCHSCREEN_GOODIX_GTX8_GESTURE_STATION
+	tristate "Goodix GTx8 gesture wakeup feature"
+	default n
+	help
+	  Say Y here to enable support for gesture wakeup feature..
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+
+config TOUCHSCREEN_GOODIX_GTX8_TOOLS_STATION
+	tristate "Goodix touch tools support"
+	default n
+	help
+	  Say Y here to enable debug tools.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+ 
+config TOUCHSCREEN_GOODIX_GTX8_SUPPORT
+	tristate "Goodix touch support station"
+	default n
+	help
+	  Say Y here to enable drm panel suspend/resume notify.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+
+config TOUCHSCREEN_GOODIX_DRM_NOTIFY
+	tristate "Goodix touch support drm panel suspend/resume notify"
+	default n
+	help
+	  Say Y here to enable drm panel suspend/resume notify.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+	  
+endif
+

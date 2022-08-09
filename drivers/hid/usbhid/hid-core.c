@@ -79,6 +79,9 @@ static int hid_submit_out(struct hid_device *hid);
 static int hid_submit_ctrl(struct hid_device *hid);
 static void hid_cancel_delayed_stuff(struct usbhid_device *usbhid);
 
+static unsigned long resume_time = 0;
+static unsigned long diff_time = 0;
+
 /* Start up the input URB */
 static int hid_start_in(struct hid_device *hid)
 {
@@ -267,6 +270,7 @@ static int usbhid_restart_ctrl_queue(struct usbhid_device *usbhid)
 	return kicked;
 }
 
+extern bool block_hid_input;
 /*
  * Input interrupt completion handler.
  */
@@ -276,6 +280,16 @@ static void hid_irq_in(struct urb *urb)
 	struct hid_device	*hid = urb->context;
 	struct usbhid_device	*usbhid = hid->driver_data;
 	int			status;
+	u8 *data = urb->transfer_buffer;
+	bool skip = false;
+
+	if ( (hid->vendor == 0x0CF2) && (hid->product == 0x7750) ){
+		diff_time = (jiffies_64 - resume_time);
+		if ( jiffies_to_msecs(abs(diff_time)) < 100 ){
+			printk("[EC_HID][0x%x:0x%x] %u ms in debounce time 100 ms\n", hid->vendor, hid->product, diff_time);
+			skip = true;
+		}
+	}
 
 	switch (urb->status) {
 	case 0:			/* success */
@@ -284,9 +298,27 @@ static void hid_irq_in(struct urb *urb)
 			break;
 		usbhid_mark_busy(usbhid);
 		if (!test_bit(HID_RESUME_RUNNING, &usbhid->iofl)) {
-			hid_input_report(urb->context, HID_INPUT_REPORT,
-					 urb->transfer_buffer,
-					 urb->actual_length, 1);
+			// Skip ENE HID keyboard if block_hid_input set true
+			//if ( block_hid_input && (hid->vendor == 0x0CF2) && (hid->product == 0x7750)) {
+			//	printk("[EC_HID][0x%x:0x%x] Disable HID keyboard!!! 0x%x\n", hid->vendor, hid->product, block_hid_input);
+			//}else {
+				if ( (hid->vendor == 0x0CF2) && (hid->product == 0x7750) ){
+					if ( data[3] == 0x81 )
+						printk("[EC_HID] Station Vol DOWN press!!\n");
+					else if ( data[3] == 0x80 )
+						printk("[EC_HID] Station Vol UP press!!\n");
+					else if ( data[3] == 0x00 )
+						printk("[EC_HID] Station button release\n");
+				}
+
+				if(!skip)
+					hid_input_report(urb->context, HID_INPUT_REPORT,
+							urb->transfer_buffer,
+							urb->actual_length, 1);
+				else
+					printk("[EC_HID][0x%x:0x%x] skip input event\n", hid->vendor, hid->product);
+			//}
+
 			/*
 			 * autosuspend refused while keys are pressed
 			 * because most keyboards don't wake up when
@@ -905,6 +937,45 @@ static int usbhid_get_raw_report(struct hid_device *hid,
 	return ret;
 }
 
+//ASUS_BSP : Add for gamepad vendor protocol ++
+int asus_usbhid_set_raw_report(struct hid_device *hid, unsigned int reportnum,
+				 __u8 *buf, size_t count, unsigned char rtype)
+{
+	struct usbhid_device *usbhid = hid->driver_data;
+	struct usb_device *dev = hid_to_usb_dev(hid);
+	struct usb_interface *intf = usbhid->intf;
+	struct usb_host_interface *interface = intf->cur_altsetting;
+	int ret, skipped_report_id = 0;
+
+	/* Byte 0 is the report number. Report data starts at byte 1.*/
+	if ((rtype == HID_OUTPUT_REPORT) &&
+	    (hid->quirks & HID_QUIRK_SKIP_OUTPUT_REPORT_ID))
+		buf[0] = 0;
+	else
+		buf[0] = reportnum;
+
+	if (buf[0] == 0x0) {
+		/* Don't send the Report ID */
+		buf++;
+		count--;
+		skipped_report_id = 1;
+	}
+
+	ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+			HID_REQ_SET_REPORT,
+			USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+			((rtype - 1) << 8) | reportnum,
+			interface->desc.bInterfaceNumber, buf, count,
+			USB_CTRL_SET_TIMEOUT);
+	/* count also the report id, if this was a numbered report. */
+	if (ret > 0 && skipped_report_id)
+		ret++;
+
+	return ret;
+}
+EXPORT_SYMBOL(asus_usbhid_set_raw_report);
+//ASUS_BSP : Add for gamepad vendor protocol --
+
 static int usbhid_set_raw_report(struct hid_device *hid, unsigned int reportnum,
 				 __u8 *buf, size_t count, unsigned char rtype)
 {
@@ -1330,6 +1401,7 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 	size_t len;
 	int ret;
 
+	hid_info(intf, "[USB] usbhid_probe\n");
 	dbg_hid("HID probe called for ifnum %d\n",
 			intf->altsetting->desc.bInterfaceNumber);
 
@@ -1414,6 +1486,17 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 		goto err_free;
 	}
 
+	/* enable suspend/resume support for HID devices. */
+	if ((le16_to_cpu(dev->descriptor.idVendor) == 0x0BDA) &&
+	 ((le16_to_cpu(dev->descriptor.idProduct) == 0x480F)
+	||(le16_to_cpu(dev->descriptor.idProduct) == 0x4A41)
+	||(le16_to_cpu(dev->descriptor.idProduct) == 0x4A43)
+	||(le16_to_cpu(dev->descriptor.idProduct) == 0x4A45)
+	||(le16_to_cpu(dev->descriptor.idProduct) == 0x48F0))) {
+		hid_info(intf, "[USB] POGO HID enable autosuspend\n");
+		usb_enable_autosuspend(dev);
+	}
+
 	return 0;
 err_free:
 	kfree(usbhid);
@@ -1427,6 +1510,7 @@ static void usbhid_disconnect(struct usb_interface *intf)
 	struct hid_device *hid = usb_get_intfdata(intf);
 	struct usbhid_device *usbhid;
 
+	hid_info(intf, "[USB] usbhid_disconnect\n");
 	if (WARN_ON(!hid))
 		return;
 
@@ -1607,6 +1691,7 @@ static int hid_suspend(struct usb_interface *intf, pm_message_t message)
 		goto failed;
 	}
 	dev_dbg(&intf->dev, "suspend\n");
+	printk("[USB_PM] hid_suspend, dev=%s\n", dev_name(&intf->dev));
 	return status;
 
  failed:
@@ -1619,8 +1704,14 @@ static int hid_resume(struct usb_interface *intf)
 	struct hid_device *hid = usb_get_intfdata (intf);
 	int status;
 
+	if ((hid->vendor == 0x0CF2) && (hid->product == 0x7750)){
+		resume_time = jiffies_64;
+		//printk("[EC_HID] hid_resume : resume_time = %u\n", resume_time);
+	}
+
 	status = hid_resume_common(hid, true);
 	dev_dbg(&intf->dev, "resume status %d\n", status);
+	printk("[USB_PM] hid_resume, dev=%s\n", dev_name(&intf->dev));
 	return 0;
 }
 

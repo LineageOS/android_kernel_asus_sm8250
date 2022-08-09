@@ -893,6 +893,11 @@ struct drm_connector {
 	 */
 	bool ycbcr_420_allowed;
 
+/* ASUS BSP Display +++ */
+	bool under_60hz_allowed;
+	bool wide_aspect_allowed;
+/* ASUS BSP Display --- */
+
 	/**
 	 * @registered: Is this connector exposed (registered) with userspace?
 	 * Protected by @mutex.
