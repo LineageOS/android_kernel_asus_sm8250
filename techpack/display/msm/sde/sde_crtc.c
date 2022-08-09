@@ -3747,6 +3747,7 @@ static int _sde_crtc_vblank_enable_no_lock(
 	return 0;
 }
 
+extern int asus_current_fps;
 /**
  * sde_crtc_duplicate_state - state duplicate hook
  * @crtc: Pointer to drm crtc structure
@@ -3780,6 +3781,10 @@ static struct drm_crtc_state *sde_crtc_duplicate_state(struct drm_crtc *crtc)
 
 	/* duplicate base helper */
 	__drm_atomic_helper_crtc_duplicate_state(crtc, &cstate->base);
+
+	// ASUS_BSP: update refresh rate to current refresh rate
+	if (asus_current_fps > 0)
+		cstate->base.mode.vrefresh = asus_current_fps;
 
 	return &cstate->base;
 }
