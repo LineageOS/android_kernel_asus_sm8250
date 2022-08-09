@@ -44,6 +44,30 @@
 							217, void *)
 #define AUDIO_SET_RTAC_AFE_CAL		_IOWR(CAL_IOCTL_MAGIC, \
 							218, void *)
+							/* ASUS_BSP +++ AudioWizard ringtone mode */
+#define AUDIO_SET_AUDIOWIZARD_FORCE_PRESET	_IOWR(CAL_IOCTL_MAGIC, \
+							221, void *)
+#define SW_AUDIOWIZARD_RINGTONE		0x0b
+/* ASUS_BSP --- */
+//ASUS_BSP +++
+#define AUDIO_SET_AUDIORECORD_MIC_USING	_IOWR(CAL_IOCTL_MAGIC, \
+							223, void *)
+
+#define SW_AUDIORECORD_START 0x0c
+#define SW_AUDIORECORD_STOP 0x0e
+/* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
+#define AUDIO_SET_ACTIVEINPUT_PID	_IOWR(CAL_IOCTL_MAGIC, \
+							232, void *)
+/* ASUS_BSP --- */
+//ASUS_BSP ---
+/* ASUS_BSP +++ EU/nonEU */
+#define AUDIO_SET_EU_NONEU		_IOWR(CAL_IOCTL_MAGIC, \
+							235, void *)
+/* ASUS_BSP --- EU/nonEU */
+/* ASUS_BSP +++ Set PWM for recording */
+#define AUDIO_SET_PWM_MODE		_IOWR(CAL_IOCTL_MAGIC, \
+							236, void *)
+/* ASUS_BSP --- Set PWM for recording */
 enum {
 	CVP_VOC_RX_TOPOLOGY_CAL_TYPE = 0,
 	CVP_VOC_TX_TOPOLOGY_CAL_TYPE,
@@ -106,6 +130,21 @@ enum {
 	ADM_LSM_AUDPROC_PERSISTENT_CAL_TYPE,
 	ADM_AUDPROC_PERSISTENT_CAL_TYPE,
 	AFE_FB_SPKR_PROT_V4_EX_VI_CAL_TYPE,
+/* ASUS_BSP +++ AudioWizard hifi & ringtone mode */
+	AUDIOWIZARD_FORCE_PRESET_TYPE,
+	/* ASUS_BSP --- */
+	//ASUS_BSP +++
+    AUDIORECORD_MIC_USING_TYPE,
+/* ASUS_BSP +++ Add warning uevent for input occupied issue ( TT1290090 ) */
+	AUDIO_SET_ACTIVEINPUT_PID_TYPE,
+	/* ASUS_BSP --- */
+    //ASUS_BSP ---
+	/* ASUS_BSP +++ EU/nonEU */
+	AUDIO_SET_EU_NONEU_TYPE,
+	/* ASUS_BSP --- EU/nonEU */
+	/* ASUS_BSP +++ Set PWM for recording */
+	AUDIO_SET_PWM_MODE_TYPE,
+	/* ASUS_BSP --- Set PWM for recording */
 	MAX_CAL_TYPES,
 };
 
