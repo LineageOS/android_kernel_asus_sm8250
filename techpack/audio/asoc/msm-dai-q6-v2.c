@@ -45,6 +45,11 @@
 				    SNDRV_PCM_FMTBIT_S24_LE | \
 				    SNDRV_PCM_FMTBIT_S32_LE)
 
+#ifdef CONFIG_SND_SOC_TFA9874
+#define AFE_PORT_ID_TFADSP_RX                                  (AFE_PORT_ID_PRIMARY_MI2S_RX)
+#define AFE_PORT_ID_TFADSP_TX                                  (AFE_PORT_ID_PRIMARY_MI2S_TX)
+#endif
+
 static int msm_mi2s_get_port_id(u32 mi2s_id, int stream, u16 *port_id);
 
 enum {
@@ -5514,6 +5519,17 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 	struct msm_dai_q6_dai_data *dai_data = &mi2s_dai_config->mi2s_dai_data;
 	struct afe_param_id_i2s_cfg *i2s = &dai_data->port_config.i2s;
 
+//for nxp AMP +++
+#ifdef CONFIG_SND_SOC_TFA9874
+	u16 port_id = 0;
+	if (msm_mi2s_get_port_id(dai->id, substream->stream,
+		&port_id) != 0) {
+		dev_err(dai->dev, "%s: Invalid Port ID 0x%x\n",
+			__func__, port_id);
+	}
+#endif
+//for nxp AMP ---
+
 	dai_data->channels = params_channels(params);
 	switch (dai_data->channels) {
 	case 15:
@@ -5681,6 +5697,14 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_FORMAT_S24_3LE:
 		dai_data->port_config.i2s.bit_width = 24;
 		dai_data->bitwidth = 24;
+//for nxp AMP+++
+#ifdef CONFIG_SND_SOC_TFA9874
+	if (AFE_PORT_ID_TFADSP_TX == port_id) {
+		   dai_data->port_config.i2s.bit_width = 32;
+		   dai_data->bitwidth = 32;
+	}
+#endif
+//for nxp AMP---
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
 		dai_data->port_config.i2s.bit_width = 32;
@@ -5703,10 +5727,15 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 	    mi2s_dai_data->tx_dai.mi2s_dai_data.status_mask) &&
 	    test_bit(STATUS_PORT_STARTED,
 	    mi2s_dai_data->tx_dai.mi2s_dai_data.hwfree_status))) {
+#ifdef CONFIG_SND_SOC_TFA9874
+		if (mi2s_dai_data->tx_dai.mi2s_dai_data.rate !=
+		    mi2s_dai_data->rx_dai.mi2s_dai_data.rate) {
+#else
 		if ((mi2s_dai_data->tx_dai.mi2s_dai_data.rate !=
 		    mi2s_dai_data->rx_dai.mi2s_dai_data.rate) ||
 		   (mi2s_dai_data->rx_dai.mi2s_dai_data.bitwidth !=
 		    mi2s_dai_data->tx_dai.mi2s_dai_data.bitwidth)) {
+#endif //for nxp AMP
 			dev_err(dai->dev, "%s: Error mismatch in HW params\n"
 				"Tx sample_rate = %u bit_width = %hu\n"
 				"Rx sample_rate = %u bit_width = %hu\n"

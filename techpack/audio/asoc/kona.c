@@ -40,6 +40,24 @@
 #include "codecs/bolero/wsa-macro.h"
 #include "kona-port-config.h"
 
+#ifdef CONFIG_SND_SOC_TFA9874
+struct tfa98xx_dai_name {
+    const char *name;
+    const char *dai_name;
+};
+
+static struct tfa98xx_dai_name tfa98xx_dai_names[] = {
+       {
+               .name = "tfa98xx.5-0034",//for receiver AMP
+               .dai_name = "tfa98xx-aif-5-34",
+       },
+       {
+               .name = "tfa98xx.5-0035",//for speaker AMP
+               .dai_name = "tfa98xx-aif-5-35",
+       },
+};
+#endif
+
 #define DRV_NAME "kona-asoc-snd"
 #define __CHIPSET__ "KONA "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -481,19 +499,35 @@ static struct dev_config aux_pcm_tx_cfg[] = {
 
 /* Default configuration of MI2S channels */
 static struct dev_config mi2s_rx_cfg[] = {
+#ifdef CONFIG_SND_SOC_TFA9874
+	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S24_LE, 2},//for nxp AMP to Tequila
+#else
 	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+#endif
 	[SEC_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[TERT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+#ifdef ASUS_ZS661KS_PROJECT
+	[QUAT_MI2S] = {SAMPLING_RATE_192KHZ, SNDRV_PCM_FORMAT_S32_LE, 2},
+#else
 	[QUAT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
+#endif
 	[QUIN_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 	[SEN_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 2},
 };
 
 static struct dev_config mi2s_tx_cfg[] = {
+#ifdef CONFIG_SND_SOC_TFA9874
+	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S24_LE, 2},//for nxp AMP to Tequila
+#else
 	[PRIM_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
+#endif
 	[SEC_MI2S]  = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[TERT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
+#ifdef ASUS_ZS661KS_PROJECT
+	[QUAT_MI2S] = {SAMPLING_RATE_192KHZ, SNDRV_PCM_FORMAT_S32_LE, 1},
+#else
 	[QUAT_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
+#endif
 	[QUIN_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 	[SEN_MI2S] = {SAMPLING_RATE_48KHZ, SNDRV_PCM_FORMAT_S16_LE, 1},
 };
@@ -778,6 +812,7 @@ static SOC_ENUM_SINGLE_EXT_DECL(sen_mi2s_tx_sample_rate, mi2s_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(mi2s_rx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(mi2s_tx_format, bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(prim_mi2s_rx_chs, mi2s_ch_text);
+static SOC_ENUM_SINGLE_EXT_DECL(pri_mi2s_rx_chs, mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(sec_mi2s_rx_chs, mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tert_mi2s_rx_chs, mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(quat_mi2s_rx_chs, mi2s_ch_text);
@@ -4053,6 +4088,8 @@ static const struct snd_kcontrol_new msm_mi2s_snd_controls[] = {
 			msm_mi2s_tx_format_get, msm_mi2s_tx_format_put),
 	SOC_ENUM_EXT("PRIM_MI2S_RX Channels", prim_mi2s_rx_chs,
 			msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
+    SOC_ENUM_EXT("PRI_MI2S_RX Channels", pri_mi2s_rx_chs,
+			msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
 	SOC_ENUM_EXT("SEC_MI2S_RX Channels", sec_mi2s_rx_chs,
 			msm_mi2s_rx_ch_get, msm_mi2s_rx_ch_put),
 	SOC_ENUM_EXT("TERT_MI2S_RX Channels", tert_mi2s_rx_chs,
@@ -6295,22 +6332,25 @@ static struct snd_soc_dai_link msm_common_dai_links[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
-};
-
-static struct snd_soc_dai_link msm_bolero_fe_dai_links[] = {
+	//for nxp AMP+++
+#ifdef CONFIG_SND_SOC_TFA9874
 	{/* hw:x,33 */
-		.name = LPASS_BE_WSA_CDC_DMA_TX_0,
-		.stream_name = "WSA CDC DMA0 Capture",
-		.cpu_dai_name = "msm-dai-cdc-dma-dev.45057",
+		.name = "Primary MI2S_TX Hostless",
+		.stream_name = "Primary MI2S_TX Hostless Capture",
+		.cpu_dai_name = "PRI_MI2S_TX_HOSTLESS",
 		.platform_name = "msm-pcm-hostless",
-		.codec_name = "bolero_codec",
-		.codec_dai_name = "wsa_macro_vifeedback",
-		.id = MSM_BACKEND_DAI_WSA_CDC_DMA_TX_0,
-		.be_hw_params_fixup = msm_be_hw_params_fixup,
-		.ignore_suspend = 1,
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+		SND_SOC_DPCM_TRIGGER_POST},
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
-		.ops = &msm_cdc_dma_be_ops,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
 	},
+#endif
+	//for nxp AMP---
 };
 
 static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
@@ -6406,6 +6446,62 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.ignore_suspend = 1,
 		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
 		.ops = &msm_cdc_dma_be_ops,
+	},
+	{/* hw:x,40 */
+		.name = "Compress10",
+		.stream_name = "Compress10",
+		.cpu_dai_name = "MultiMedia18",
+		.platform_name = "msm-compress-dsp",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA18,
+	},
+	{/* hw:x,41 */
+		.name = "Compress11",
+		.stream_name = "Compress11",
+		.cpu_dai_name = "MultiMedia19",
+		.platform_name = "msm-compress-dsp",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA19,
+	},
+	{/* hw:x,42 */
+		.name = "Compress12",
+		.stream_name = "Compress12",
+		.cpu_dai_name = "MultiMedia28",
+		.platform_name = "msm-compress-dsp",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA28,
+	},
+	{/* hw:x,43 */
+		.name = "Compress13",
+		.stream_name = "Compress13",
+		.cpu_dai_name = "MultiMedia29",
+		.platform_name = "msm-compress-dsp",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+		.ignore_suspend = 1,
+		.id = MSM_FRONTEND_DAI_MULTIMEDIA29,
 	},
 };
 
@@ -6855,14 +6951,51 @@ static struct snd_soc_dai_link ext_disp_be_dai_link[] = {
 	},
 };
 
+//for nxp AMP+++
+#ifdef CONFIG_SND_SOC_TFA9874
+static struct snd_soc_dai_link_component tfa98xx_codecs[] = {
+       {
+               .name = "tfa98xx.5-0034",//for receiver AMP
+               .of_node = NULL,
+               .dai_name = "tfa98xx-aif-7-34",
+       },
+       {
+               .name = "tfa98xx.5-0035",//for speaker AMP
+               .of_node = NULL,
+               .dai_name = "tfa98xx-aif-7-35",
+       },
+};
+#endif
+//for nxp AMP---
+
+/* ASUS_BSP +++ For Inbox I2S audio codec */
+static struct snd_soc_dai_link_component rt5683_codecs[] = {
+        {
+                .name = "rt5683.2-001a",
+                .of_node = NULL,
+                .dai_name = "rt5683-aif1-2-1a",
+        },
+        {
+                .name = "rt5683.2-001a",
+                .of_node = NULL,
+                .dai_name = "rt5683-aif2-2-1a",
+        },
+};
+/* ASUS_BSP --- */
+
 static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
 		.stream_name = "Primary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.0",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_SND_SOC_TFA9874
+		.codecs = tfa98xx_codecs,//for nxp AMP Tequila
+		.num_codecs = 2,//for nxp AMP Tequila
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_PRI_MI2S_RX,
@@ -6876,8 +7009,13 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Primary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.0",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_SND_SOC_TFA9874
+		.codecs = tfa98xx_codecs,//for nxp AMP Tequila
+		.num_codecs = 2,//for nxp AMP Tequila
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_PRI_MI2S_TX,
@@ -6948,8 +7086,12 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
+		/* ASUS_BSP +++ For Inbox I2S audio codec */
+		.codecs = rt5683_codecs,
+		.num_codecs = 2,
+		/*.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+		ASUS_BSP --- */
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
@@ -6963,8 +7105,12 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Quaternary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.3",
 		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
+		/* ASUS_BSP +++ For Inbox I2S audio codec */
+		.codecs = rt5683_codecs,
+		.num_codecs = 2,
+		/*.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
+		ASUS_BSP --- */
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
@@ -7210,7 +7356,7 @@ static struct snd_soc_dai_link msm_auxpcm_be_dai_links[] = {
 		.ignore_suspend = 1,
 	},
 };
-
+#ifndef ASUS_ZS661KS_PROJECT
 static struct snd_soc_dai_link msm_wsa_cdc_dma_be_dai_links[] = {
 	/* WSA CDC DMA Backend DAI Links */
 	{
@@ -7259,7 +7405,7 @@ static struct snd_soc_dai_link msm_wsa_cdc_dma_be_dai_links[] = {
 		.ops = &msm_cdc_dma_be_ops,
 	},
 };
-
+#endif
 static struct snd_soc_dai_link msm_rx_tx_cdc_dma_be_dai_links[] = {
 	/* RX CDC DMA Backend DAI Links */
 	{
@@ -7367,6 +7513,7 @@ static struct snd_soc_dai_link msm_va_cdc_dma_be_dai_links[] = {
 		.codec_dai_name = "va_macro_tx1",
 		.no_pcm = 1,
 		.dpcm_capture = 1,
+		.init = &msm_int_audrx_init,
 		.id = MSM_BACKEND_DAI_VA_CDC_DMA_TX_0,
 		.be_hw_params_fixup = msm_be_hw_params_fixup,
 		.ignore_suspend = 1,
@@ -7421,12 +7568,13 @@ static struct snd_soc_dai_link msm_afe_rxtx_lb_be_dai_link[] = {
 
 static struct snd_soc_dai_link msm_kona_dai_links[
 			ARRAY_SIZE(msm_common_dai_links) +
-			ARRAY_SIZE(msm_bolero_fe_dai_links) +
 			ARRAY_SIZE(msm_common_misc_fe_dai_links) +
 			ARRAY_SIZE(msm_common_be_dai_links) +
 			ARRAY_SIZE(msm_mi2s_be_dai_links) +
 			ARRAY_SIZE(msm_auxpcm_be_dai_links) +
+#ifndef ASUS_ZS661KS_PROJECT
 			ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links) +
+#endif
 			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links) +
 			ARRAY_SIZE(ext_disp_be_dai_link) +
@@ -7637,6 +7785,7 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	u32 auxpcm_audio_intf = 0;
 	u32 val = 0;
 	u32 wcn_btfm_intf = 0;
+
 	const struct of_device_id *match;
 
 	match = of_match_node(kona_asoc_machine_of_match, dev->of_node);
@@ -7655,12 +7804,6 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		total_links += ARRAY_SIZE(msm_common_dai_links);
 
 		memcpy(msm_kona_dai_links + total_links,
-		       msm_bolero_fe_dai_links,
-		       sizeof(msm_bolero_fe_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_bolero_fe_dai_links);
-
-		memcpy(msm_kona_dai_links + total_links,
 		       msm_common_misc_fe_dai_links,
 		       sizeof(msm_common_misc_fe_dai_links));
 		total_links += ARRAY_SIZE(msm_common_misc_fe_dai_links);
@@ -7669,12 +7812,6 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		       msm_common_be_dai_links,
 		       sizeof(msm_common_be_dai_links));
 		total_links += ARRAY_SIZE(msm_common_be_dai_links);
-
-		memcpy(msm_kona_dai_links + total_links,
-		       msm_wsa_cdc_dma_be_dai_links,
-		       sizeof(msm_wsa_cdc_dma_be_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
 
 		memcpy(msm_kona_dai_links + total_links,
 		       msm_rx_tx_cdc_dma_be_dai_links,
@@ -7695,6 +7832,13 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 				__func__);
 		} else {
 			if (mi2s_audio_intf) {
+#ifdef CONFIG_SND_SOC_TFA9874
+                pr_info("%s: modify tfa98xx dai name from %s to %s\n", __func__, tfa98xx_codecs[0].name, tfa98xx_dai_names[0].name);
+                tfa98xx_codecs[0].name = tfa98xx_dai_names[0].name;
+                tfa98xx_codecs[0].dai_name = tfa98xx_dai_names[0].dai_name;
+                tfa98xx_codecs[1].name = tfa98xx_dai_names[1].name;
+                tfa98xx_codecs[1].dai_name = tfa98xx_dai_names[1].dai_name;
+#endif
 				memcpy(msm_kona_dai_links + total_links,
 					msm_mi2s_be_dai_links,
 					sizeof(msm_mi2s_be_dai_links));
@@ -8087,14 +8231,14 @@ codec_aux_dev:
 				   "qcom,codec-max-aux-devs",
 				   &codec_max_aux_devs);
 	if (ret) {
-		dev_err(&pdev->dev,
+		dev_info(&pdev->dev,
 			 "%s: codec-max-aux-devs property missing in DT %s, ret = %d\n",
 			 __func__, pdev->dev.of_node->full_name, ret);
 		codec_max_aux_devs = 0;
 		goto aux_dev_register;
 	}
 	if (codec_max_aux_devs == 0) {
-		dev_dbg(&pdev->dev,
+		dev_warn(&pdev->dev,
 			 "%s: Max aux codec devices is 0 for this target?\n",
 			 __func__);
 		goto aux_dev_register;
@@ -8476,6 +8620,52 @@ static void parse_cps_configuration(struct platform_device *pdev,
 	}
 }
 
+#ifdef CONFIG_SND_SOC_TFA9874
+int register_receiver_dai_name(struct device *dev, int i2cbus, int addr){
+    char buf[50];
+    char *str;
+    snprintf(buf, 50, "tfa98xx.%x-00%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 receiver name =  %s\n", __func__, str);
+    tfa98xx_dai_names[0].name = str;
+
+    snprintf(buf, 50, "tfa98xx-aif-%x-%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 receiver dai_name =  %s\n", __func__, str);
+    tfa98xx_dai_names[0].dai_name = str;
+    return 0;
+}
+EXPORT_SYMBOL(register_receiver_dai_name);
+
+int register_speaker_dai_name(struct device *dev, int i2cbus, int addr){
+    char buf[50];
+    char *str;
+    snprintf(buf, 50, "tfa98xx.%x-00%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 speaker name =  %s\n", __func__, str);
+    tfa98xx_dai_names[1].name = str;
+
+    snprintf(buf, 50, "tfa98xx-aif-%x-%x", i2cbus, addr);
+    str = devm_kzalloc(dev, strlen(buf) + 1, GFP_KERNEL);
+	if (!str)
+		return -EINVAL;
+	memcpy(str, buf, strlen(buf));
+    pr_info("%s: register TFA9874 speaker dai_name =  %s\n", __func__, str);
+    tfa98xx_dai_names[1].dai_name = str;
+    return 0;
+}
+EXPORT_SYMBOL(register_speaker_dai_name);
+#endif
+
 static int msm_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = NULL;
@@ -8531,13 +8721,18 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	}
 
 	ret = msm_init_aux_dev(pdev, card);
-	if (ret)
+	if (ret) {
+		dev_info(&pdev->dev, "%s: msm_init_aux_dev failed (%d)\n", __func__, ret);
 		goto err;
+	}
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
-		if (codec_reg_done)
+		if (codec_reg_done) {
+		   dev_err(&pdev->dev, "%s: devm_snd_soc_register_card failed (%d)\n",
+				   __func__, ret);
 			ret = -EINVAL;
+		}
 		goto err;
 	} else if (ret) {
 		dev_err(&pdev->dev, "%s: snd_soc_register_card failed (%d)\n",

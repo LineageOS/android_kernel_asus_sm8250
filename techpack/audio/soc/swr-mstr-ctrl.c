@@ -2114,9 +2114,9 @@ handle_irq:
 			}
 			break;
 		case SWRM_INTERRUPT_STATUS_MASTER_CLASH_DET:
-			dev_err_ratelimited(swrm->dev,
-					"%s: SWR bus clsh detected\n",
-					__func__);
+			//dev_err_ratelimited(swrm->dev,
+			//		"%s: SWR bus clsh detected\n",
+			//		__func__);
 			swrm->intr_mask &=
 				~SWRM_INTERRUPT_STATUS_MASTER_CLASH_DET;
 			swr_master_write(swrm,
