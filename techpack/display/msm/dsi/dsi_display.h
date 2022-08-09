@@ -276,6 +276,10 @@ struct dsi_display {
 	struct workqueue_struct *dma_cmd_workq;
 };
 
+static struct dsi_display* g_display;
+
+int dsi_display_asus_dfps(struct dsi_display *display);
+
 int dsi_display_dev_probe(struct platform_device *pdev);
 int dsi_display_dev_remove(struct platform_device *pdev);
 

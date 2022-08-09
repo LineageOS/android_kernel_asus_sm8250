@@ -24,6 +24,9 @@
 
 #define MULTIPLE_CONN_DETECTED(x) (x > 1)
 
+extern int asus_current_fps;
+extern bool need_change_fps;
+
 struct msm_commit {
 	struct drm_device *dev;
 	struct drm_atomic_state *state;
@@ -399,6 +402,11 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 
 		if (!new_conn_state->best_encoder)
 			continue;
+
+		if (need_change_fps) {
+			drm_bridge_asus_dfps(connector->state->best_encoder->bridge);
+			need_change_fps = false;
+		}
 
 		if (!new_conn_state->crtc->state->active ||
 				!drm_atomic_crtc_needs_modeset(

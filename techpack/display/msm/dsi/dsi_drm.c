@@ -28,6 +28,31 @@ static struct dsi_display_mode_priv_info default_priv_info = {
 	.dsc_enabled = false,
 };
 
+extern bool asus_display_in_normal_off(void);
+
+static void dsi_bridge_asus_dfps(struct drm_bridge *bridge)
+{
+	int rc = 0;
+	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+
+	if (!bridge) {
+		pr_err("Invalid params\n");
+		return;
+	}
+
+	if (asus_display_in_normal_off()) {
+		pr_err("[Display] skip dfps in display off.\n");
+		return;
+	}
+
+	rc = dsi_display_asus_dfps(c_bridge->display);
+	if (rc) {
+		pr_err("[%d] failed to perform a fps set, rc=%d\n",
+			c_bridge->id, rc);
+		return;
+	}
+}
+
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
 {
@@ -536,6 +561,7 @@ static const struct drm_bridge_funcs dsi_bridge_ops = {
 	.disable      = dsi_bridge_disable,
 	.post_disable = dsi_bridge_post_disable,
 	.mode_set     = dsi_bridge_mode_set,
+	.asus_dfps    = dsi_bridge_asus_dfps,  /* ASUS BSP Display +++ */
 };
 
 int dsi_conn_set_info_blob(struct drm_connector *connector,
