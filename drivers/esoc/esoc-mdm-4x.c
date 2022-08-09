@@ -377,6 +377,7 @@ static void mdm_get_restart_reason(struct work_struct *work)
 		if (!ret) {
 			esoc_mdm_log("restart reason is %s\n", sfr_buf);
 			dev_err(dev, "mdm restart reason is %s\n", sfr_buf);
+			subsys_save_reason("modem", sfr_buf);/*AS-K ASUS SSR and Debug - Save SSR reason+*/
 			break;
 		}
 		msleep(SFR_RETRY_INTERVAL);

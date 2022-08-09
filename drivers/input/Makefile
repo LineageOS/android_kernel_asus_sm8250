@@ -30,4 +30,16 @@ obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
 obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
 obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o
 
+ifeq ($(ASUS_BUILD_PROJECT),ZS661KS)
+obj-$(CONFIG_INPUT_HALLSENSOR)	+= lid.o
+obj-$(CONFIG_INPUT_HALLSENSOR2)	+= lid_2.o
+else
+obj-$(CONFIG_SENSORS_HALL)	+= hall_sensor.o
+obj-$(CONFIG_SENSORS_HALL2)	+= hall_sensor2.o
+endif
+
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
+
+obj-$(CONFIG_GOODIX3626_FINGERPRINT) += fingerprint3626/
+
+obj-$(CONFIG_GOODIX_FINGERPRINT) += fingerprint/

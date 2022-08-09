@@ -139,6 +139,10 @@ static const int clk_freq_hz[NUM_PWM_CLK] = {1024, 32768, 19200000};
 static const int clk_prediv[NUM_CLK_PREDIV] = {1, 3, 5, 6};
 static const int pwm_exponent[NUM_PWM_EXP] = {0, 1, 2, 3, 4, 5, 6, 7};
 
+#ifdef ZS670KS
+extern bool led_sync;
+#endif
+
 struct lpg_ramp_config {
 	u16			step_ms;
 	u8			pause_hi_count;
@@ -245,6 +249,40 @@ static int qpnp_lpg_masked_write(struct qpnp_lpg_channel *lpg,
 	return rc;
 }
 
+#ifdef ZS670KS
+static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
+{
+	int rc;
+
+	mutex_lock(&lut->chip->bus_lock);
+	//rc = regmap_write(lut->chip->regmap, lut->reg_base + addr, val);
+
+	//Due to green led(0x02) and red led(0x01) can not breath synchronize,
+	//we set val to 0x03 (red and green) while orange led breathing.
+	//We use blue led(0x04) breath node as flag, if set blue led breath node first
+	//then green and red led can breath synchronize by setting 0x03.
+
+	if (led_sync) {
+		if (addr == REG_LPG_LUT_RAMP_CONTROL && val == 0x01) {
+			val = 0x03;
+		}
+		else if (addr == REG_LPG_LUT_RAMP_CONTROL && val == 0x02) {
+			rc = 0;
+			goto exit;
+		}
+	}
+
+	rc = regmap_write(lut->chip->regmap, lut->reg_base + addr, val);
+
+	if (rc < 0)
+		dev_err(lut->chip->dev, "Write addr 0x%x with value %d failed, rc=%d\n",
+				lut->reg_base + addr, val, rc);
+exit:
+	mutex_unlock(&lut->chip->bus_lock);
+
+	return rc;
+}
+#else
 static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
 {
 	int rc;
@@ -258,6 +296,7 @@ static int qpnp_lut_write(struct qpnp_lpg_lut *lut, u16 addr, u8 val)
 
 	return rc;
 }
+#endif
 
 static int qpnp_lut_masked_write(struct qpnp_lpg_lut *lut,
 				u16 addr, u8 mask, u8 val)

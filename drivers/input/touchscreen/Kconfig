@@ -11,6 +11,16 @@ menuconfig INPUT_TOUCHSCREEN
 
 if INPUT_TOUCHSCREEN
 
+source "drivers/input/touchscreen/focaltech_touch_3518U/Kconfig"
+
+config TOUCHSCREEN_FTS
+	bool "Focaltech Touchscreens"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have Focaltech touch panel.
+	  If unsure, say N.
+
 config TOUCHSCREEN_PROPERTIES
 	def_tristate INPUT
 	depends on INPUT
@@ -1336,6 +1346,8 @@ config TOUCHSCREEN_SYNAPTICS_DSX
 	  module will be called synaptics_dsx.
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+source "drivers/input/touchscreen/goodix_gtx8/Kconfig"
+source "drivers/input/touchscreen/station_goodix_gtx8/Kconfig"
 
 config TOUCHSCREEN_SYNAPTICS_TCM
 	bool "Synaptics TCM Touchscreen Driver"

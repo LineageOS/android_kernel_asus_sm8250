@@ -31,6 +31,10 @@
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
 #include <dt-bindings/input/gpio-keys.h>
+#include <linux/input/qpnp-power-on.h>
+bool volume_key_wake_en = 0; /* /sys/module/gpio_keys/parameters/volume_key_wake_en, default is N */
+module_param(volume_key_wake_en, bool, 0644);
+MODULE_PARM_DESC(volume_key_wake_en, "Enable/Disable volume key wakeup");
 
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
@@ -359,6 +363,16 @@ static const struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
+unsigned int vol_up_press = 0;
+extern unsigned int vol_down_press_count;
+unsigned int b_press = 0;
+
+// Touch
+extern unsigned int vol_down_press;
+unsigned int vol_up_press_count = 0;
+extern void setting_touch_print_count(int count);
+extern bool enable_touch_debug;
+
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
 	const struct gpio_keys_button *button = bdata->button;
@@ -372,12 +386,57 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 			"failed to get gpio state: %d\n", state);
 		return;
 	}
-
+	if(type == EV_KEY) {
+		if(button->code == 115) {
+			if (vol_down_press) {
+				if (state > 0)
+					vol_up_press_count++;
+				printk("[GTP]vol_up_press_count = %d\r\n",vol_up_press_count);
+				if (vol_up_press_count == 10) {
+					if(enable_touch_debug == true) {
+						printk("[GTP] change touch print count(1)\n");
+						setting_touch_print_count(1);
+					} else {
+						printk("[GTP] Please enable logcat service\n");
+						vol_up_press_count = 0;
+					}
+				}
+			} else {
+				printk("[keypad][gpio_keys.c] keycode=%d, state=%s\n", button->code, state?"press":"release");
+				if (state > 0) {
+					if (enable_touch_debug == true) {
+						vol_up_press = 1;
+					}
+				}
+				else {
+					vol_up_press = 0;
+					if(vol_down_press_count != 0) {
+						printk("[keypad][gpio_keys.c] vol down (keycode=114) count = %d\n", vol_down_press_count);
+						vol_down_press_count = 0;
+					}
+				}
+			}
+		} else {
+			pr_info("[keypad] %s: keycode=%d, state=%s\n",
+					__func__, button->code, state?"press":"release");
+		}
+	}
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
 		input_event(input, type, *bdata->code, state);
+		if(state) {
+			if(button->code == 114)
+				b_press |= 0x01;
+			if(button->code == 115)
+				b_press |= 0x02;
+		}else {
+			if(button->code == 114)
+				b_press &= ~(0x01);
+			if(button->code == 115)
+				b_press &= ~(0x02);
+		}
 	}
 	input_sync(input);
 }
@@ -936,10 +995,19 @@ gpio_keys_enable_wakeup(struct gpio_keys_drvdata *ddata)
 
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
 		bdata = &ddata->data[i];
-		if (bdata->button->wakeup) {
-			error = gpio_keys_button_enable_wakeup(bdata);
-			if (error)
-				goto err_out;
+		if (bdata->button->code == 115) {
+			if (volume_key_wake_en) {
+				error = gpio_keys_button_enable_wakeup(bdata);
+				if (error)
+					goto err_out;
+				asus_enable_resin_irq_wake(1);
+			}
+		} else {
+			if (bdata->button->wakeup) {
+				error = gpio_keys_button_enable_wakeup(bdata);
+				if (error)
+					goto err_out;
+			}
 		}
 		bdata->suspended = true;
 	}
@@ -966,8 +1034,12 @@ gpio_keys_disable_wakeup(struct gpio_keys_drvdata *ddata)
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
 		bdata = &ddata->data[i];
 		bdata->suspended = false;
-		if (irqd_is_wakeup_set(irq_get_irq_data(bdata->irq)))
+		if (irqd_is_wakeup_set(irq_get_irq_data(bdata->irq))) {
 			gpio_keys_button_disable_wakeup(bdata);
+
+			if(volume_key_wake_en && bdata->button->code == 115)
+				asus_enable_resin_irq_wake(0);
+		}
 	}
 }
 

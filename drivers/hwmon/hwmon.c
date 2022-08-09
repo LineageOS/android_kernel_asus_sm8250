@@ -570,6 +570,7 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 	struct hwmon_device *hwdev;
 	struct device *hdev;
 	int i, j, err, id;
+	bool fan = false; //ASUS_BSP Deeo : For Inbox_Fan flag
 
 	/* Complain about invalid characters in hwmon name attribute */
 	if (name && (!strlen(name) || strpbrk(name, "-* \t\n")))
@@ -577,9 +578,22 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 			 "hwmon: '%s' is not a valid name attribute, please fix\n",
 			 name);
 
-	id = ida_simple_get(&hwmon_ida, 0, 0, GFP_KERNEL);
-	if (id < 0)
-		return ERR_PTR(id);
+	//ASUS_BSP Deeo : For Inbox_Fan flag +++
+	if(name != NULL){
+		if(!strcmp(name, "Inbox_Fan")){
+			id = -1;
+			fan = true;
+			printk("[HWMON] do not ida_simple_get, fan %d, id %d\n", fan, id);
+		}
+	}
+
+	if(!fan){	// Not Inbox_Fan
+		id = ida_simple_get(&hwmon_ida, 0, 0, GFP_KERNEL);
+		if (id < 0)
+			return ERR_PTR(id);
+	}
+	//ASUS_BSP Deeo : For Inbox_Fan flag ---
+
 
 	hwdev = kzalloc(sizeof(*hwdev), GFP_KERNEL);
 	if (hwdev == NULL) {
@@ -629,7 +643,16 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 	hdev->of_node = dev ? dev->of_node : NULL;
 	hwdev->chip = chip;
 	dev_set_drvdata(hdev, drvdata);
-	dev_set_name(hdev, HWMON_ID_FORMAT, id);
+
+    //ASUS_BSP Deeo : Force set Inbox_Fan path +++
+    if(fan){
+        dev_set_name(hdev, hwdev->name);
+    }else {   //Not InBox Fan
+        dev_set_name(hdev, HWMON_ID_FORMAT, id);
+    }
+    //printk("[HWMON] dev_name is %s\n", dev_name(hdev));
+    //ASUS_BSP Deeo : Force set Inbox_Fan path ---
+
 	err = device_register(hdev);
 	if (err)
 		goto free_hwmon;
@@ -749,6 +772,13 @@ EXPORT_SYMBOL_GPL(hwmon_device_register);
 void hwmon_device_unregister(struct device *dev)
 {
 	int id;
+
+	//ASUS_BSP Deeo : Check Inbox_Fan for unregister right path
+       if (!strcmp(dev_name(dev), "Inbox_Fan")){
+               printk("[HWMON] unregister Inbox_Fan\n");
+               device_unregister(dev);
+               return;
+       }
 
 	if (likely(sscanf(dev_name(dev), HWMON_ID_FORMAT, &id) == 1)) {
 		device_unregister(dev);

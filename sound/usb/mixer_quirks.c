@@ -47,6 +47,7 @@
 #include "mixer_us16x08.h"
 #include "helper.h"
 
+static int glb_eu_type = 0;
 struct std_mono_table {
 	unsigned int unitid, control, cmask;
 	int val_type;
@@ -1823,6 +1824,137 @@ static int dell_dock_mixer_init(struct usb_mixer_interface *mixer)
 	return 0;
 }
 
+#define SND_ASUS_EU_SET 0x72
+#define SND_ASUS_EU_IDX 0x01
+#define SND_ASUS_NONE_EU_IDX 0x02
+#define SND_ASUS_ROG3ZF7_IDX 0x03
+
+static int snd_asus_eu_rw_value(struct snd_usb_audio *chip,
+			      unsigned int item, unsigned short idx,
+			      unsigned int *value)
+{
+	struct usb_device *dev = chip->dev;
+	int err = 0;
+	unsigned char requesttype = 0;
+	unsigned int pipe = 0;
+
+	err = snd_usb_lock_shutdown(chip);
+	if (err < 0)
+		return err;
+
+	if (item == SND_ASUS_EU_SET) {
+		requesttype = USB_DIR_OUT | USB_TYPE_VENDOR;
+		pipe = usb_sndctrlpipe(dev, 0);
+	} else
+		pr_err("%s: Unknown item.\n",__func__);
+
+	err = snd_usb_ctl_msg(dev, pipe,
+			      item,
+			      requesttype,
+			      0x06, idx, NULL, 0);
+	snd_usb_unlock_shutdown(chip);
+	if (err < 0)
+		dev_err(&dev->dev,
+			"unable to issue vendor request %d (ret = %d)",
+			item, err);
+
+	return err;
+}
+
+static int snd_asus_eu_get(struct snd_kcontrol *kctl,
+			    struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.enumerated.item[0] = glb_eu_type;
+	return 0;
+}
+
+static int snd_asus_eu_put(struct snd_kcontrol *kctl,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct usb_mixer_elem_list *list = snd_kcontrol_chip(kctl);
+	struct snd_usb_audio *chip = list->mixer->chip;
+	int err, new_val;
+	unsigned short idx;
+
+	new_val = ucontrol->value.enumerated.item[0];
+	if (new_val > 1)
+		return -EINVAL;
+
+	if (new_val){
+		idx = SND_ASUS_ROG3ZF7_IDX;
+		pr_info("%s: idx:0x%x,new_val:%d\n",__func__,idx,new_val);
+
+		err = snd_asus_eu_rw_value(chip,
+			SND_ASUS_EU_SET, idx, &new_val);
+		if (err < 0)
+			return err;
+	}
+
+	glb_eu_type = new_val;
+	ucontrol->value.enumerated.item[0] = new_val;
+	return 0;
+}
+
+static int snd_asus_eu_set(struct snd_usb_audio *chip,
+			int eu_val)
+{
+	int err;
+	unsigned short idx;
+
+	if (eu_val > 1 || eu_val < 0)
+		return -EINVAL;
+
+	if (eu_val) {
+		idx = SND_ASUS_ROG3ZF7_IDX;
+		pr_info("%s: idx:0x%x,eu_val:%d\n",__func__,idx,eu_val);
+
+		err = snd_asus_eu_rw_value(chip,
+			SND_ASUS_EU_SET, idx, &eu_val);
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+
+static int snd_asus_eu_info(struct snd_kcontrol *kcontrol,
+			     struct snd_ctl_elem_info *uinfo)
+{
+	static const char * const texts[] = {
+		"EU", "None-EU"};
+
+	return snd_ctl_enum_info(uinfo, 1, ARRAY_SIZE(texts), texts);
+}
+
+static struct snd_kcontrol_new snd_eu_controls[] = {
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+#if 0
+		.name = "EU Control Type",
+#else
+		.name = "ROG3 ZF7 ID Type",
+#endif
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.info = snd_asus_eu_info,
+		.get = snd_asus_eu_get,
+		.put = snd_asus_eu_put,
+	},
+};
+
+static int snd_eu_controls_create(struct usb_mixer_interface *mixer)
+{
+	int err = 0, i;
+
+	for (i = 0; i < ARRAY_SIZE(snd_eu_controls); i++) {
+		err = add_single_ctl_with_resume(mixer, 0, NULL,
+			&snd_eu_controls[i],	 NULL);
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+
 int snd_usb_mixer_apply_create_quirk(struct usb_mixer_interface *mixer)
 {
 	int err = 0;
@@ -1910,6 +2042,13 @@ int snd_usb_mixer_apply_create_quirk(struct usb_mixer_interface *mixer)
 	case USB_ID(0x0bda, 0x4014): /* Dell WD15 dock */
 		err = dell_dock_mixer_init(mixer);
 		break;
+	case USB_ID(0x0bda, 0x4baf): /* Asus Dongle */
+		err = snd_eu_controls_create(mixer);
+		if (!err) {
+			/* It needs to set 1V no matter EU or nonEU for dongle */
+			err = snd_asus_eu_set(mixer->chip, 1);
+		}
+		break;
 	}
 
 	return err;
@@ -1987,6 +2126,22 @@ static void snd_dragonfly_quirk_db_scale(struct usb_mixer_interface *mixer,
 		kctl->vd[0].access &= ~SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK;
 	}
 }
+
+/* ASUS_BSP +++ */
+/**
+ * set_asus_eu_type -
+ * 	Set EU/nonEU by country code
+ *
+ * @set_asus_eu_type:
+ * 	param: 	0: EU
+ *		1: None-EU
+ */
+void set_asus_eu_type(int eu_type)
+{
+	glb_eu_type = eu_type;
+}
+EXPORT_SYMBOL(set_asus_eu_type);
+/* ASUS_BSP --- */
 
 void snd_usb_mixer_fu_apply_quirk(struct usb_mixer_interface *mixer,
 				  struct usb_mixer_elem_info *cval, int unitid,

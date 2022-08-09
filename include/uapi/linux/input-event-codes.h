@@ -274,6 +274,11 @@
 #define KEY_F23			193
 #define KEY_F24			194
 
+#define GPBTN_M1			0xc4
+#define GPBTN_M2			0xc5
+#define GPBTN_M3			0xc6
+#define GPBTN_M4			0xc7
+
 #define KEY_PLAYCD		200
 #define KEY_PAUSECD		201
 #define KEY_PROG3		202

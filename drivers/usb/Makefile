@@ -69,3 +69,4 @@ obj-$(CONFIG_TYPEC)		+= typec/
 obj-$(CONFIG_USB_ROLE_SWITCH)	+= roles/
 
 obj-$(CONFIG_USB_PD)		+= pd/
+obj-$(CONFIG_TCPC_CLASS)	+= pd_rt1715/

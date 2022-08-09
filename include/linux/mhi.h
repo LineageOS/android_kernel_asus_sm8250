@@ -855,6 +855,12 @@ enum mhi_ee mhi_get_exec_env(struct mhi_controller *mhi_cntrl);
 enum mhi_dev_state mhi_get_mhi_state(struct mhi_controller *mhi_cntrl);
 
 /**
+ * mhi_get_exec_env - Return execution environment of the device
+ * @mhi_cntrl: MHI controller
+ */
+enum mhi_ee mhi_get_exec_env(struct mhi_controller *mhi_cntrl);
+
+/**
  * mhi_set_mhi_state - Set device state
  * @mhi_cntrl: MHI controller
  * @state: state to set

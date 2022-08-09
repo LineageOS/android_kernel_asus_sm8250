@@ -121,6 +121,56 @@ static ssize_t msm_rpmh_master_stats_print_data(char *prvbuf, ssize_t length,
 			accumulated_duration);
 }
 
+static void asus_msm_rpmh_master_stats_print_data(struct msm_rpmh_master_stats *record,
+				const char *name)
+{
+	uint64_t accumulated_duration = record->accumulated_duration;
+	/*
+	 * If a master is in sleep when reading the sleep stats from SMEM
+	 * adjust the accumulated sleep duration to show actual sleep time.
+	 * This ensures that the displayed stats are real when used for
+	 * the purpose of computing battery utilization.
+	 */
+	if (record->last_entered > record->last_exited)
+		accumulated_duration +=
+				(arch_counter_get_cntvct()
+				- record->last_entered);
+
+	printk("%s Version:0x%x  "
+			"Sleep Count:0x%x  "
+			"Sleep Last Entered At:0x%llx  "
+			"Sleep Last Exited At:0x%llx  "
+			"Sleep Accumulated Duration:0x%llx\n",
+			name, record->version_id, record->counts,
+			record->last_entered, record->last_exited,
+			accumulated_duration);
+}
+
+static void asus_msm_rpmh_master_stats_show(void)
+{
+	int i = 0;
+	size_t size = 0;
+	struct msm_rpmh_master_stats *record = NULL;
+
+	mutex_lock(&rpmh_stats_mutex);
+
+	/* First Read APSS master stats */
+
+	asus_msm_rpmh_master_stats_print_data(&apss_master_stats, "APSS");
+
+	/* Read SMEM data written by other masters */
+
+	for (i = 0; i < ARRAY_SIZE(rpmh_masters); i++) {
+		record = (struct msm_rpmh_master_stats *) qcom_smem_get(
+					rpmh_masters[i].pid,
+					rpmh_masters[i].smem_id, &size);
+		if (!IS_ERR_OR_NULL(record) )
+			asus_msm_rpmh_master_stats_print_data(record,rpmh_masters[i].master_name);
+	}
+
+	mutex_unlock(&rpmh_stats_mutex);
+}
+
 static ssize_t msm_rpmh_master_stats_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *buf)
 {
@@ -264,12 +314,27 @@ static const struct of_device_id rpmh_master_table[] = {
 	{},
 };
 
+extern bool need_dump_rpmh_master_stat;
+static int asus_rpmh_master_stats_resume (struct device *dev)
+{
+	if(need_dump_rpmh_master_stat)
+	{
+		asus_msm_rpmh_master_stats_show();
+	}
+	return 0;
+}
+
+static const struct dev_pm_ops asus_rpmh_master_stats_pm_ops = {
+	.resume = asus_rpmh_master_stats_resume,
+};
+
 static struct platform_driver msm_rpmh_master_stats_driver = {
 	.probe	= msm_rpmh_master_stats_probe,
 	.remove = msm_rpmh_master_stats_remove,
 	.driver = {
 		.name = "msm_rpmh_master_stats",
 		.of_match_table = rpmh_master_table,
+		.pm = &asus_rpmh_master_stats_pm_ops,
 	},
 };
 

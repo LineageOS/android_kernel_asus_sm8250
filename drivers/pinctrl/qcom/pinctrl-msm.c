@@ -572,7 +572,16 @@ static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 	unsigned i;
 
 	for (i = 0; i < chip->ngpio; i++, gpio++)
+//ASUS_SZ_BSP 2019/11/26 Cassie: skip gpios used by TZ+++
+#if defined(ZS670KS) || defined(ASUS_ZS661KS_PROJECT)
+		if (i == 28 || i == 29 || i == 30 || i == 31 || i == 6 || i ==40 || i == 41 || i ==42 ||i ==43)
+			continue;
+		else
+			msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
+#else
+//ASUS_SZ_BSP 2019/11/26 Cassie: skip gpios used by TZ---
 		msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
+#endif
 }
 
 #else

@@ -53,6 +53,13 @@ static struct thermal_governor *def_governor;
 
 static struct workqueue_struct *thermal_passive_wq;
 
+#ifdef ASUS_ZS661KS_PROJECT
+/* Clay add virtual temp */
+int G_virtual_therm_temp = 0;
+int G_virtual_therm_temp_prev = 25000;
+int G_skin_therm_temp = 0;
+int G_skin_msm_therm_temp = 0;
+#endif
 /*
  * Governor section: set of functions to handle thermal governors
  *
@@ -322,7 +329,7 @@ static void monitor_thermal_zone(struct thermal_zone_device *tz)
 				tz, tz->polling_delay);
 	else
 		thermal_zone_device_set_polling(NULL, tz, 0);
-
+	
 	mutex_unlock(&tz->lock);
 }
 
@@ -445,6 +452,17 @@ static void store_temperature(struct thermal_zone_device *tz, int temp)
 	tz->temperature = temp;
 	mutex_unlock(&tz->lock);
 
+
+#ifdef ASUS_ZS661KS_PROJECT
+	//if (tz->id==77) /* skin-therm */
+	if (!strcmp(tz->type, "skin-therm-usr"))
+		G_skin_therm_temp = temp;
+	
+	//if (tz->id==80) /* skin-msm-therm */
+	if (!strcmp(tz->type, "skin-msm-therm-usr"))
+		G_skin_msm_therm_temp = temp;
+#endif
+	
 	trace_thermal_temperature(tz);
 	if (tz->last_temperature == THERMAL_TEMP_INVALID ||
 		tz->last_temperature == THERMAL_TEMP_INVALID_LOW)
@@ -509,7 +527,11 @@ void thermal_zone_device_update(struct thermal_zone_device *tz,
 				enum thermal_notify_event event)
 {
 	int count;
-
+#ifdef ASUS_ZS661KS_PROJECT
+	if(strcmp(tz->type, "bms") ==0 || strcmp(tz->type, "battery") == 0 || strcmp(tz->type, "wireless") == 0){
+		return;
+	}
+#endif
 	if (atomic_read(&in_suspend) && (!tz->ops->is_wakeable ||
 		!(tz->ops->is_wakeable(tz))))
 		return;

@@ -283,6 +283,7 @@ static void free_fw_priv(struct fw_priv *fw_priv)
 static char fw_path_para[256];
 static const char * const fw_path[] = {
 	fw_path_para,
+	"/data/vendor/BBY",
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
@@ -307,6 +308,28 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv)
 	enum kernel_read_file_id id = READING_FIRMWARE;
 	size_t msize = INT_MAX;
 
+#ifdef ASUS_ZS661KS_PROJECT
+	/* ASUS BSP : For Change ADSP FW loading path to vendor/firmware +++*/
+	char fw_name[5];
+	bool is_ADSP_readed = false;
+	/* ASUS BSP ---*/
+#endif //ASUS_ZS661KS_PROJECT
+
+
+#ifdef ZS670KS
+    char fw_name[5];
+    bool is_adsp_readed = false;
+    if(!strncmp(fw_priv->fw_name, "tfa98xx.cnt", 11)){
+		dev_err(device, "%s() skip for fw_name (%s)\n", __func__, fw_priv->fw_name);
+		return -2;
+	}
+#endif  //ZS670KS
+#ifdef ASUS_ZS661KS_PROJECT
+	if (!strncmp(fw_priv->fw_name, "hdcp", 4)) {
+		dev_dbg(device, "%s() skip for fw_name (%s)\n", __func__, fw_priv->fw_name);
+		return -2;
+	}
+#endif //ASUS_ZS661KS_PROJECT
 	/* Already populated data member means we're loading into a buffer */
 	if (fw_priv->data) {
 		id = READING_FIRMWARE_PREALLOC_BUFFER;
@@ -328,6 +351,96 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv)
 			rc = -ENAMETOOLONG;
 			break;
 		}
+		
+#ifdef ASUS_ZS661KS_PROJECT
+		/* ASUS BSP : For Change ADSP FW loading path to vendor/firmware */
+		snprintf(fw_name, 5, "%s", fw_priv->fw_name);
+		if (!strcmp(fw_name, "adsp")  &&  is_ADSP_readed == false ) {
+			if (!strcmp(fw_priv->fw_name, "adsp.mdt"))    {
+				/******************************************************
+				 *  ZS661KS_8250_PRJ_ID = 0x0(CN) & 0x1(WW)
+				 ******************************************************/
+				if ( g_ASUS_prjID == 0x0 || g_ASUS_prjID == 0x1 )
+					dev_err(device, "[ADSP] This ZS661KS project is : SM8250(0x%x) \n", g_ASUS_prjID);
+				else
+					dev_err(device, "[ADSP] Unknown project(0x%x) \n", g_ASUS_prjID);
+			}
+
+			is_ADSP_readed = true;
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware/q6_ZS661KS_sm8250_image", fw_priv->fw_name);
+			dev_err(device, "[ADSP] Try to load firmware : %s \n", path);
+
+		}
+		/* ASUS BSP ---*/
+#endif //ASUS_ZS661KS_PROJECT
+
+#ifdef ASUS_ZS661KS_PROJECT   
+		/* ASUS BSP : For Change Sensor Core FW loading path */
+                if (!strncmp(fw_priv->fw_name, "cdsp", 4)) {
+                        snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", fw_priv->fw_name);
+                        dev_err(device, "[CDSP] Try to load firmware : %s \n", path);
+                }
+		/* ASUS BSP ---*/
+#endif
+#ifdef ASUS_ZS661KS_PROJECT
+		/* Jiunhau +++ */
+		if (!strncmp(fw_priv->fw_name, "goodix", 6)) {
+				snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", fw_priv->fw_name);
+				dev_err(device, "[goodix] Try to load firmware : %s \n", path);
+		}
+		/* Jiunhau ---*/
+#endif //ZS661KS
+
+	#ifdef CONFIG_AW8697_HAPTIC
+		/*  AW8697 firmware file loading */
+                if (!strncmp(fw_priv->fw_name, "aw8697", 6) || !strncmp(fw_priv->fw_name, "awinic", 6)) {
+                        snprintf(path, PATH_MAX, "%s/%s", "/system/vendor/firmware/awinic", fw_priv->fw_name);
+                        dev_err(device, "[AW8697] Try to load firmware : %s \n", path);
+                }
+        /*  ROG2 firmware file loading */
+                if (!strncmp(fw_priv->fw_name, "rog2", 4)) {
+                        snprintf(path, PATH_MAX, "%s/%s", "/system/vendor/firmware/rog2_haptic", fw_priv->fw_name);
+                        dev_err(device, "[AW8697] Try to load firmware : %s \n", path);
+                }
+	#endif
+		/* BSP_WIFI +++ */
+		if (!strncmp(fw_priv->fw_name, "qca6390/bdwlan", 14)) {
+#ifdef ASUS_ZS661KS_PROJECT
+				/******************************************************
+				 *  ZS661KS_8250_PRJ_ID = 0x0(CN) & 0x1(WW)
+				 ******************************************************/
+				if ( g_ASUS_prjID == 0x0 ) {
+					snprintf(path, PATH_MAX, "%s", "/vendor/firmware/CNbdwlan.e17");
+				}
+				else {
+					snprintf(path, PATH_MAX, "%s", "/vendor/firmware/bdwlan.e17");
+				}
+#endif
+#ifdef ZS670KS
+				snprintf(path, PATH_MAX, "%s", "/vendor/firmware/bdwlan.elf");
+#endif
+				dev_err(device, "[wlan] Try to load firmware : %s \n", path);
+		}
+		if (!strncmp(fw_priv->fw_name, "qca6390/amss20", 14)) {
+				snprintf(path, PATH_MAX, "%s", "/vendor/firmware/amss20.bin");
+				dev_err(device, "[wlan] Try to load firmware : %s \n", path);
+		}
+		if (!strncmp(fw_priv->fw_name, "qca6390/regdb", 13)) {
+				snprintf(path, PATH_MAX, "%s", "/vendor/firmware/regdb.bin");
+				dev_err(device, "[wlan] Try to load firmware : %s \n", path);
+		}
+		if (!strncmp(fw_priv->fw_name, "qca6390/m3.bin", 14)) {
+				snprintf(path, PATH_MAX, "%s", "/vendor/firmware/m3.bin");
+				dev_err(device, "[wlan] Try to load firmware : %s \n", path);
+		}
+		/* BSP_WIFI ---*/
+
+                /* ASUS BSP : For Change Sensor Core FW loading path */
+                if (!strncmp(fw_priv->fw_name, "slpi", 4)) {
+                        snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", fw_priv->fw_name);
+                        dev_err(device, "[SLPI] Try to load firmware : %s \n", path);
+                }
+                /* ASUS BSP ---*/
 
 		fw_priv->size = 0;
 		rc = kernel_read_file_from_path(path, &fw_priv->data, &size,

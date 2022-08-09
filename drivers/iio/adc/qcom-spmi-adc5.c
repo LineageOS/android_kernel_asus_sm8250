@@ -921,8 +921,13 @@ static const struct adc_channels adc_chans_pmic5[ADC_MAX_CHANNEL] = {
 						SCALE_HW_CALIB_CUR)
 	[ADC_AMUX_THM2]			= ADC_CHAN_TEMP("amux_thm2", 1,
 					SCALE_HW_CALIB_PM5_SMB_TEMP)
+#ifdef ASUS_ZS661KS_PROJECT
+	[ADC_AMUX_THM3]			= ADC_CHAN_VOLT("amux_thm3", 1,
+					SCALE_HW_CALIB_DEFAULT)
+#else
 	[ADC_AMUX_THM3]			= ADC_CHAN_TEMP("amux_thm3", 1,
 					SCALE_HW_CALIB_PM5_SMB_TEMP)
+#endif
 	[ADC_GPIO1_PU2]	= ADC_CHAN_TEMP("gpio1_pu2", 1,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC_GPIO2_PU2]	= ADC_CHAN_TEMP("gpio2_pu2", 1,
@@ -931,6 +936,12 @@ static const struct adc_channels adc_chans_pmic5[ADC_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC_GPIO4_PU2]	= ADC_CHAN_TEMP("gpio4_pu2", 1,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
+	[ADC_GPIO4]	= ADC_CHAN_VOLT("gpio4", 1,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC_GPIO2] = ADC_CHAN_VOLT("asus_pogo_vadc", 1,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC_GPIO1]	= ADC_CHAN_VOLT("gpio1", 1,
+					SCALE_HW_CALIB_DEFAULT)
 };
 
 static const struct adc_channels adc7_chans_pmic[ADC_MAX_CHANNEL] = {
