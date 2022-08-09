@@ -247,6 +247,7 @@ static int cam_eeprom_i2c_driver_probe(struct i2c_client *client,
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
 	e_ctrl->open_cnt = 0;
 
+	CAM_ERR(CAM_EEPROM, "[eeprom_debug] cam_eeprom_i2c_driver_probe, rc=%d", rc);
 	return rc;
 free_soc:
 	kfree(soc_private);
@@ -392,6 +393,7 @@ static int cam_eeprom_spi_driver_probe(struct spi_device *spi)
 		(spi->mode & SPI_CS_HIGH) ? 1 : 0);
 	CAM_DBG(CAM_EEPROM, "max_speed[%u]", spi->max_speed_hz);
 
+	CAM_ERR(CAM_EEPROM, "[eeprom_debug] cam_eeprom_spi_driver_probe, setup");
 	return cam_eeprom_spi_setup(spi);
 }
 
@@ -501,6 +503,7 @@ static int32_t cam_eeprom_platform_driver_probe(
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
 	e_ctrl->open_cnt = 0;
 
+	CAM_ERR(CAM_EEPROM, "[eeprom_debug] cam_eeprom_platform_driver_probe, rc=%d", rc);
 	return rc;
 free_soc:
 	kfree(soc_private);

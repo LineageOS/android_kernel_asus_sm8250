@@ -15,5 +15,10 @@ int cam_flash_apply_request(struct cam_req_mgr_apply_request *apply);
 int cam_flash_process_evt(struct cam_req_mgr_link_evt_data *event_data);
 int cam_flash_flush_request(struct cam_req_mgr_flush_request *flush);
 
+//ASUS_BSP +++ Shianliang add low battery checking
+struct cam_flash_ctrl;
+int cam_flash_battery_low(int enable);
+void cam_flash_copy_fctrl(struct cam_flash_ctrl *fctrl);
+//ASUS_BSP --- Shianliang add low battery checking
 
 #endif /*_CAM_FLASH_CORE_H_*/

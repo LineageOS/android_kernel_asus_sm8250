@@ -86,6 +86,7 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			goto release_mutex;
 		}
 		fctrl->flash_state = CAM_FLASH_STATE_ACQUIRE;
+		cam_flash_copy_fctrl(fctrl); ////ASUS_BSP Shianliang add low battery checking		
 		break;
 	}
 	case CAM_RELEASE_DEV: {

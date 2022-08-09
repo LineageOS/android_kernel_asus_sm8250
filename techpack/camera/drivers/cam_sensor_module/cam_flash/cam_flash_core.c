@@ -10,6 +10,12 @@
 #include "cam_res_mgr_api.h"
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
+//ASUS_BSP +++ Shianliang add low battery checking
+static int asus_bat_low = 0;
+static int asus_flash_state = 0;
+static struct cam_flash_ctrl *asus_fctrl;
+//ASUS_BSP --- Shianliang add low battery checking
+
 
 static int cam_flash_set_gpio(struct cam_flash_ctrl *fctrl,
 	bool enable)
@@ -509,7 +515,12 @@ static int cam_flash_ops(struct cam_flash_ctrl *flash_ctrl,
 		CAM_ERR(CAM_FLASH, "Fctrl or Data NULL");
 		return -EINVAL;
 	}
-
+//ASUS_BSP +++ Shianliang add low battery checking
+	if(asus_bat_low) {
+		CAM_DBG(CAM_FLASH, "asus_bat_low: %d",asus_bat_low);
+		return 0;
+	}
+//ASUS_BSP --- Shianliang add low battery checking
 	soc_private = (struct cam_flash_private_soc *)
 		flash_ctrl->soc_info.soc_private;
 
@@ -563,6 +574,8 @@ static int cam_flash_ops(struct cam_flash_ctrl *flash_ctrl,
 			flash_ctrl->switch_trigger,
 			(enum led_brightness)LED_SWITCH_ON);
 
+	asus_flash_state = 1; //ASUS_BSP +++ Shianliang add low battery checking
+
 	return 0;
 }
 
@@ -572,7 +585,9 @@ int cam_flash_off(struct cam_flash_ctrl *flash_ctrl)
 		CAM_ERR(CAM_FLASH, "Flash control Null");
 		return -EINVAL;
 	}
-	CAM_DBG(CAM_FLASH, "Flash OFF Triggered");
+
+	CAM_DBG(CAM_FLASH, "LED_Flash flash_off"); //ASUS_BSP +++ Shianliang add low battery checking
+
 	if (flash_ctrl->switch_trigger)
 		cam_res_mgr_led_trigger_event(flash_ctrl->switch_trigger,
 			(enum led_brightness)LED_SWITCH_OFF);
@@ -582,6 +597,9 @@ int cam_flash_off(struct cam_flash_ctrl *flash_ctrl)
 		cam_flash_set_gpio(flash_ctrl, false);
 
 	flash_ctrl->flash_state = CAM_FLASH_STATE_START;
+
+	asus_flash_state = 0; //ASUS_BSP +++ Shianliang add low battery checking
+
 	return 0;
 }
 
@@ -1893,6 +1911,8 @@ int cam_flash_release_dev(struct cam_flash_ctrl *fctrl)
 		fctrl->last_flush_req = 0;
 	}
 
+	asus_flash_state = 0; //ASUS_BSP +++ Shianliang add low battery checking
+
 	return rc;
 }
 
@@ -1942,3 +1962,27 @@ int cam_flash_apply_request(struct cam_req_mgr_apply_request *apply)
 
 	return rc;
 }
+//ASUS_BSP +++ Shianliang add low battery checking
+int cam_flash_battery_low(int enable)
+{
+	asus_bat_low = enable;
+
+	if(asus_fctrl == NULL)
+		return -EINVAL;
+
+	mutex_lock(&asus_fctrl->flash_mutex);
+	if(asus_flash_state && enable)
+		cam_flash_off(asus_fctrl);
+	mutex_unlock(&asus_fctrl->flash_mutex);
+
+	CAM_DBG(CAM_FLASH, "enable:%d flash_state:%d",
+		asus_bat_low,asus_flash_state);
+	return 0;
+}
+
+void cam_flash_copy_fctrl(struct cam_flash_ctrl * fctrl)
+{
+	if(fctrl)
+		asus_fctrl = fctrl;
+}
+//ASUS_BSP --- Shianliang add low battery checking
