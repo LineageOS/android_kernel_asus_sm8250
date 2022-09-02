@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "2f0dc371_ad20c9af",
+        "filename": "fs/namei.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 167,
+      "author": {
+        "id": 11883
+      },
+      "writtenOn": "2022-09-02T18:36:39Z",
+      "side": 1,
+      "message": "kill those bits as well, it hurts me to think that\u0027s still the case.",
+      "revId": "adba4099d29fa62516c74f7ee71b277117a25825",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
