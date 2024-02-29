@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "593252b6_2f8f5d54",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 33532
+      },
+      "writtenOn": "2024-02-29T07:01:47Z",
+      "side": 1,
+      "message": "Will removing wakelock affect the push of application messages?",
+      "revId": "d8f94fc275994377029018ac4ea00a46337caaa0",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
